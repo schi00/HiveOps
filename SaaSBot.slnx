@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SaaSBot.Agents/SaaSBot.Agents.csproj" />
+    <Project Path="src/SaaSBot.Api/SaaSBot.Api.csproj" />
+    <Project Path="src/SaaSBot.Application/SaaSBot.Application.csproj" />
+    <Project Path="src/SaaSBot.Domain/SaaSBot.Domain.csproj" />
+    <Project Path="src/SaaSBot.Infrastructure/SaaSBot.Infrastructure.csproj" />
+    <Project Path="src/SaaSBot.Workers/SaaSBot.Workers.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SaaSBot.IntegrationTests/SaaSBot.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

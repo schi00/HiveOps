@@ -1,0 +1,64 @@
+# Build output
+bin/
+obj/
+out/
+artifacts/
+publish/
+BenchmarkDotNet.Artifacts/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# Logs and diagnostics
+*.log
+*.tmp
+*.temp
+*.cache
+*.pid
+
+# Test artifacts
+TestResults/
+*.trx
+coverage/
+coverage.*
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+
+# Dotnet tooling
+.dotnet/
+
+# Databases / local data
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# Local overrides
+appsettings.Local.json
+appsettings.*.local.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local environment/config secrets
+.env
+.env.*
+secrets.json
+
+# Worklogs and temp config
+Worklogs/
+temp_config.txt

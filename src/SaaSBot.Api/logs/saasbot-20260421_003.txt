@@ -1,0 +1,148 @@
+2026-04-21 17:32:56.384 -03:00 [INF] User profile is available. Using 'C:\Users\eschiffini\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+2026-04-21 17:32:56.464 -03:00 [WRN] You do not have a valid license key for the Lucky Penny software MediatR. This is allowed for development and testing scenarios. If you are running in production you are required to have a licensed version. Please visit https://luckypennysoftware.com to obtain a valid license.
+2026-04-21 17:32:56.511 -03:00 [INF] CatalogIngestionWorker started.
+2026-04-21 17:32:57.250 -03:00 [WRN] The property 'Product.Embedding' is a collection or enumeration type with a value converter but with no value comparer. Set a value comparer to ensure the collection/enumeration elements are compared correctly.
+2026-04-21 17:32:57.640 -03:00 [INF] Executed DbCommand (9ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT 1
+2026-04-21 17:32:58.030 -03:00 [INF] Executed DbCommand (20ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = N'admin00'
+2026-04-21 17:32:58.227 -03:00 [INF] Executed DbCommand (6ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [t].[Id], [t].[ApiKey], [t].[ConfigJson], [t].[CreatedAt], [t].[Industry], [t].[IsActive], [t].[Name], [t].[WhatsAppNumber]
+FROM [Tenants] AS [t]
+2026-04-21 17:32:58.427 -03:00 [INF] Executed DbCommand (32ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[TenantId], (
+    SELECT TOP(1) [p0].[Category]
+    FROM [Products] AS [p0]
+    WHERE [p].[TenantId] = [p0].[TenantId]
+    GROUP BY [p0].[Category]
+    ORDER BY COUNT(*) DESC) AS [Category]
+FROM [Products] AS [p]
+GROUP BY [p].[TenantId]
+2026-04-21 17:32:58.485 -03:00 [INF] Executed DbCommand (6ms) [Parameters=[@__username_0='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = @__username_0
+2026-04-21 17:32:58.631 -03:00 [INF] Executed DbCommand (10ms) [Parameters=[@__username_0='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = @__username_0
+2026-04-21 17:32:58.647 -03:00 [INF] Executed DbCommand (1ms) [Parameters=[@__username_0='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = @__username_0
+2026-04-21 17:32:58.776 -03:00 [INF] Executed DbCommand (22ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTimeOffset)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [AppUsers] SET [UpdatedAt] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-21 17:32:58.796 -03:00 [INF] Auth bootstrap completed.
+2026-04-21 17:32:58.809 -03:00 [INF] Message queue service started
+2026-04-21 17:32:58.867 -03:00 [ERR] Hosting failed to start
+System.IO.IOException: Failed to bind to address http://127.0.0.1:5197: address already in use.
+ ---> Microsoft.AspNetCore.Connections.AddressInUseException: Solo se permite un uso de cada dirección de socket (protocolo/dirección de red/puerto)
+ ---> System.Net.Sockets.SocketException (10048): Solo se permite un uso de cada dirección de socket (protocolo/dirección de red/puerto)
+   at System.Net.Sockets.Socket.UpdateStatusAfterSocketErrorAndThrowException(SocketError error, Boolean disconnectOnFailure, String callerName)
+   at System.Net.Sockets.Socket.DoBind(EndPoint endPointSnapshot, SocketAddress socketAddress)
+   at System.Net.Sockets.Socket.Bind(EndPoint localEP)
+   at Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketTransportOptions.CreateDefaultBoundListenSocket(EndPoint endpoint)
+   at Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketConnectionListener.Bind()
+   --- End of inner exception stack trace ---
+   at Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketConnectionListener.Bind()
+   at Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketTransportFactory.BindAsync(EndPoint endpoint, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.BindAsync(EndPoint endPoint, ConnectionDelegate connectionDelegate, EndpointConfig endpointConfig, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.<>c__DisplayClass28_0`1.<<StartAsync>g__OnBind|0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.AddressBinder.BindEndpointAsync(ListenOptions endpoint, AddressBindContext context, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.AddressBinder.BindEndpointAsync(ListenOptions endpoint, AddressBindContext context, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Server.Kestrel.Core.LocalhostListenOptions.BindAsync(AddressBindContext context, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.AddressBinder.AddressesStrategy.BindAsync(AddressBindContext context, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.BindAsync(CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.StartAsync[TContext](IHttpApplication`1 application, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Hosting.GenericWebHostService.StartAsync(CancellationToken cancellationToken)
+   at Microsoft.Extensions.Hosting.Internal.Host.<StartAsync>b__14_1(IHostedService service, CancellationToken token)
+   at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)
+2026-04-21 17:32:58.910 -03:00 [INF] CatalogIngestionWorker stopping due to host cancellation.
+2026-04-21 17:33:42.346 [INF] User profile is available. Using 'C:\Users\eschiffini\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+2026-04-21 17:33:42.426 [WRN] You do not have a valid license key for the Lucky Penny software MediatR. This is allowed for development and testing scenarios. If you are running in production you are required to have a licensed version. Please visit https://luckypennysoftware.com to obtain a valid license.
+2026-04-21 17:33:42.460 [INF] CatalogIngestionWorker started.
+2026-04-21 17:33:43.415 [WRN] The property 'Product.Embedding' is a collection or enumeration type with a value converter but with no value comparer. Set a value comparer to ensure the collection/enumeration elements are compared correctly.
+2026-04-21 17:33:43.876 [INF] Executed DbCommand (10ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT 1
+2026-04-21 17:33:44.388 [INF] Executed DbCommand (23ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = N'admin00'
+2026-04-21 17:33:44.561 [INF] Executed DbCommand (8ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [t].[Id], [t].[ApiKey], [t].[ConfigJson], [t].[CreatedAt], [t].[Industry], [t].[IsActive], [t].[Name], [t].[WhatsAppNumber]
+FROM [Tenants] AS [t]
+2026-04-21 17:33:44.754 [INF] Executed DbCommand (24ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[TenantId], (
+    SELECT TOP(1) [p0].[Category]
+    FROM [Products] AS [p0]
+    WHERE [p].[TenantId] = [p0].[TenantId]
+    GROUP BY [p0].[Category]
+    ORDER BY COUNT(*) DESC) AS [Category]
+FROM [Products] AS [p]
+GROUP BY [p].[TenantId]
+2026-04-21 17:33:44.815 [INF] Executed DbCommand (7ms) [Parameters=[@__username_0='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = @__username_0
+2026-04-21 17:33:44.971 [INF] Executed DbCommand (5ms) [Parameters=[@__username_0='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = @__username_0
+2026-04-21 17:33:44.988 [INF] Executed DbCommand (4ms) [Parameters=[@__username_0='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = @__username_0
+2026-04-21 17:33:45.152 [INF] Executed DbCommand (9ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTimeOffset)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [AppUsers] SET [UpdatedAt] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-21 17:33:45.170 [INF] Auth bootstrap completed.
+2026-04-21 17:33:45.182 [INF] Message queue service started
+2026-04-21 17:33:45.229 [INF] Now listening on: http://localhost:5197
+2026-04-21 17:33:45.233 [INF] Application started. Press Ctrl+C to shut down.
+2026-04-21 17:33:45.237 [INF] Hosting environment: Development
+2026-04-21 17:33:45.241 [INF] Content root path: C:\Users\eschiffini\source\repos\SaaSBot\src\SaaSBot.Api
+2026-04-21 17:34:11.815 [INF] Request starting HTTP/1.1 GET http://localhost:5197/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=lazydev&hub.challenge=test123 - null null
+2026-04-21 17:34:11.862 [INF] Webhook inbound GET /webhook/whatsapp
+2026-04-21 17:34:11.902 [INF] Executing endpoint 'SaaSBot.Api.Controllers.WebhookController.VerifyWhatsAppWebhook (SaaSBot.Api)'
+2026-04-21 17:34:11.920 [INF] Route matched with {action = "VerifyWhatsAppWebhook", controller = "Webhook"}. Executing controller action with signature Microsoft.AspNetCore.Mvc.IActionResult VerifyWhatsAppWebhook(System.String, System.String, System.String) on controller SaaSBot.Api.Controllers.WebhookController (SaaSBot.Api).
+2026-04-21 17:34:11.940 [INF] Executing ObjectResult, writing value of type 'Microsoft.AspNetCore.Mvc.ProblemDetails'.
+2026-04-21 17:34:11.963 [INF] Executed action SaaSBot.Api.Controllers.WebhookController.VerifyWhatsAppWebhook (SaaSBot.Api) in 36.5595ms
+2026-04-21 17:34:11.969 [INF] Executed endpoint 'SaaSBot.Api.Controllers.WebhookController.VerifyWhatsAppWebhook (SaaSBot.Api)'
+2026-04-21 17:34:11.972 [INF] Webhook outbound 401 GET /webhook/whatsapp
+2026-04-21 17:34:11.977 [INF] HTTP GET /webhook/whatsapp responded 401 in 116.6883 ms
+2026-04-21 17:34:11.981 [INF] Request finished HTTP/1.1 GET http://localhost:5197/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=lazydev&hub.challenge=test123 - 401 null application/problem+json; charset=utf-8 168.0494ms
+2026-04-21 17:34:44.063 [INF] Request starting HTTP/1.1 GET http://localhost:5197/dashboard/ - null null
+2026-04-21 17:34:44.101 [INF] Sending file. Request path: '/dashboard/index.html'. Physical path: 'C:\Users\eschiffini\source\repos\SaaSBot\src\SaaSBot.Api\wwwroot\dashboard\index.html'
+2026-04-21 17:34:44.107 [INF] HTTP GET /dashboard/index.html responded 200 in 32.8175 ms
+2026-04-21 17:34:44.116 [INF] Request finished HTTP/1.1 GET http://localhost:5197/dashboard/index.html - 200 103658 text/html 52.7344ms
+2026-04-21 17:34:52.879 [INF] Request starting HTTP/1.1 GET http://localhost:5197/favicon.ico - null null
+2026-04-21 17:34:52.905 [WRN] Request from ::1 rejected: no valid tenant credentials
+2026-04-21 17:34:52.908 [INF] HTTP GET /favicon.ico responded 401 in 19.1900 ms
+2026-04-21 17:34:52.913 [INF] Request finished HTTP/1.1 GET http://localhost:5197/favicon.ico - 401 null null 34.3043ms
+2026-04-21 17:34:57.142 [INF] Request starting HTTP/1.1 POST http://localhost:5197/api/auth/login - application/json 34
+2026-04-21 17:34:57.152 [INF] Executing endpoint 'SaaSBot.Api.Controllers.AuthController.Login (SaaSBot.Api)'
+2026-04-21 17:34:57.163 [INF] Route matched with {action = "Login", controller = "Auth"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] Login(SaaSBot.Api.Controllers.LoginRequest, System.Threading.CancellationToken) on controller SaaSBot.Api.Controllers.AuthController (SaaSBot.Api).
+2026-04-21 17:34:57.193 [INF] Executing BadRequestObjectResult, writing value of type 'Microsoft.AspNetCore.Mvc.ValidationProblemDetails'.
+2026-04-21 17:34:57.204 [INF] Executed action SaaSBot.Api.Controllers.AuthController.Login (SaaSBot.Api) in 34.7125ms
+2026-04-21 17:34:57.207 [INF] Executed endpoint 'SaaSBot.Api.Controllers.AuthController.Login (SaaSBot.Api)'
+2026-04-21 17:34:57.210 [INF] HTTP POST /api/auth/login responded 400 in 61.2640 ms
+2026-04-21 17:34:57.215 [INF] Request finished HTTP/1.1 POST http://localhost:5197/api/auth/login - 400 null application/problem+json; charset=utf-8 73.2366ms
+2026-04-21 17:34:59.967 [INF] Request starting HTTP/1.1 POST http://localhost:5197/api/auth/login - application/json 2
+2026-04-21 17:34:59.977 [INF] Executing endpoint 'SaaSBot.Api.Controllers.AuthController.Login (SaaSBot.Api)'
+2026-04-21 17:34:59.981 [INF] Route matched with {action = "Login", controller = "Auth"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] Login(SaaSBot.Api.Controllers.LoginRequest, System.Threading.CancellationToken) on controller SaaSBot.Api.Controllers.AuthController (SaaSBot.Api).
+2026-04-21 17:34:59.987 [INF] Executing BadRequestObjectResult, writing value of type 'Microsoft.AspNetCore.Mvc.ValidationProblemDetails'.
+2026-04-21 17:34:59.990 [INF] Executed action SaaSBot.Api.Controllers.AuthController.Login (SaaSBot.Api) in 4.7044ms
+2026-04-21 17:34:59.993 [INF] Executed endpoint 'SaaSBot.Api.Controllers.AuthController.Login (SaaSBot.Api)'
+2026-04-21 17:34:59.995 [INF] HTTP POST /api/auth/login responded 400 in 20.4128 ms
+2026-04-21 17:34:59.998 [INF] Request finished HTTP/1.1 POST http://localhost:5197/api/auth/login - 400 null application/problem+json; charset=utf-8 30.9716ms

@@ -1,0 +1,68 @@
+2026-04-21 17:32:56.384 [INF] User profile is available. Using 'C:\Users\eschiffini\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+2026-04-21 17:32:56.464 [WRN] You do not have a valid license key for the Lucky Penny software MediatR. This is allowed for development and testing scenarios. If you are running in production you are required to have a licensed version. Please visit https://luckypennysoftware.com to obtain a valid license.
+2026-04-21 17:32:56.511 [INF] CatalogIngestionWorker started.
+2026-04-21 17:32:57.250 [WRN] The property 'Product.Embedding' is a collection or enumeration type with a value converter but with no value comparer. Set a value comparer to ensure the collection/enumeration elements are compared correctly.
+2026-04-21 17:32:57.640 [INF] Executed DbCommand (9ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT 1
+2026-04-21 17:32:58.030 [INF] Executed DbCommand (20ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = N'admin00'
+2026-04-21 17:32:58.227 [INF] Executed DbCommand (6ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [t].[Id], [t].[ApiKey], [t].[ConfigJson], [t].[CreatedAt], [t].[Industry], [t].[IsActive], [t].[Name], [t].[WhatsAppNumber]
+FROM [Tenants] AS [t]
+2026-04-21 17:32:58.427 [INF] Executed DbCommand (32ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[TenantId], (
+    SELECT TOP(1) [p0].[Category]
+    FROM [Products] AS [p0]
+    WHERE [p].[TenantId] = [p0].[TenantId]
+    GROUP BY [p0].[Category]
+    ORDER BY COUNT(*) DESC) AS [Category]
+FROM [Products] AS [p]
+GROUP BY [p].[TenantId]
+2026-04-21 17:32:58.485 [INF] Executed DbCommand (6ms) [Parameters=[@__username_0='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = @__username_0
+2026-04-21 17:32:58.631 [INF] Executed DbCommand (10ms) [Parameters=[@__username_0='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = @__username_0
+2026-04-21 17:32:58.647 [INF] Executed DbCommand (1ms) [Parameters=[@__username_0='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = @__username_0
+2026-04-21 17:32:58.776 [INF] Executed DbCommand (22ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTimeOffset)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [AppUsers] SET [UpdatedAt] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-21 17:32:58.796 [INF] Auth bootstrap completed.
+2026-04-21 17:32:58.809 [INF] Message queue service started
+2026-04-21 17:32:58.867 [ERR] Hosting failed to start
+System.IO.IOException: Failed to bind to address http://127.0.0.1:5197: address already in use.
+ ---> Microsoft.AspNetCore.Connections.AddressInUseException: Solo se permite un uso de cada dirección de socket (protocolo/dirección de red/puerto)
+ ---> System.Net.Sockets.SocketException (10048): Solo se permite un uso de cada dirección de socket (protocolo/dirección de red/puerto)
+   at System.Net.Sockets.Socket.UpdateStatusAfterSocketErrorAndThrowException(SocketError error, Boolean disconnectOnFailure, String callerName)
+   at System.Net.Sockets.Socket.DoBind(EndPoint endPointSnapshot, SocketAddress socketAddress)
+   at System.Net.Sockets.Socket.Bind(EndPoint localEP)
+   at Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketTransportOptions.CreateDefaultBoundListenSocket(EndPoint endpoint)
+   at Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketConnectionListener.Bind()
+   --- End of inner exception stack trace ---
+   at Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketConnectionListener.Bind()
+   at Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.SocketTransportFactory.BindAsync(EndPoint endpoint, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.TransportManager.BindAsync(EndPoint endPoint, ConnectionDelegate connectionDelegate, EndpointConfig endpointConfig, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.<>c__DisplayClass28_0`1.<<StartAsync>g__OnBind|0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.AddressBinder.BindEndpointAsync(ListenOptions endpoint, AddressBindContext context, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.AddressBinder.BindEndpointAsync(ListenOptions endpoint, AddressBindContext context, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Server.Kestrel.Core.LocalhostListenOptions.BindAsync(AddressBindContext context, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.AddressBinder.AddressesStrategy.BindAsync(AddressBindContext context, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.BindAsync(CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.StartAsync[TContext](IHttpApplication`1 application, CancellationToken cancellationToken)
+   at Microsoft.AspNetCore.Hosting.GenericWebHostService.StartAsync(CancellationToken cancellationToken)
+   at Microsoft.Extensions.Hosting.Internal.Host.<StartAsync>b__14_1(IHostedService service, CancellationToken token)
+   at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)
+2026-04-21 17:32:58.910 [INF] CatalogIngestionWorker stopping due to host cancellation.

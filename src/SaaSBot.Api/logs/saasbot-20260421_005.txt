@@ -1,0 +1,46 @@
+2026-04-21 17:35:30.079 -03:00 [INF] User profile is available. Using 'C:\Users\eschiffini\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+2026-04-21 17:35:30.146 -03:00 [WRN] You do not have a valid license key for the Lucky Penny software MediatR. This is allowed for development and testing scenarios. If you are running in production you are required to have a licensed version. Please visit https://luckypennysoftware.com to obtain a valid license.
+2026-04-21 17:35:30.178 -03:00 [INF] CatalogIngestionWorker started.
+2026-04-21 17:35:30.800 -03:00 [WRN] The property 'Product.Embedding' is a collection or enumeration type with a value converter but with no value comparer. Set a value comparer to ensure the collection/enumeration elements are compared correctly.
+2026-04-21 17:35:31.250 -03:00 [INF] Executed DbCommand (6ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT 1
+2026-04-21 17:35:31.654 -03:00 [INF] Executed DbCommand (15ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = N'admin00'
+2026-04-21 17:35:31.817 -03:00 [INF] Executed DbCommand (4ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [t].[Id], [t].[ApiKey], [t].[ConfigJson], [t].[CreatedAt], [t].[Industry], [t].[IsActive], [t].[Name], [t].[WhatsAppNumber]
+FROM [Tenants] AS [t]
+2026-04-21 17:35:31.946 -03:00 [INF] Executed DbCommand (17ms) [Parameters=[], CommandType='"Text"', CommandTimeout='30']
+SELECT [p].[TenantId], (
+    SELECT TOP(1) [p0].[Category]
+    FROM [Products] AS [p0]
+    WHERE [p].[TenantId] = [p0].[TenantId]
+    GROUP BY [p0].[Category]
+    ORDER BY COUNT(*) DESC) AS [Category]
+FROM [Products] AS [p]
+GROUP BY [p].[TenantId]
+2026-04-21 17:35:31.986 -03:00 [INF] Executed DbCommand (6ms) [Parameters=[@__username_0='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = @__username_0
+2026-04-21 17:35:32.121 -03:00 [INF] Executed DbCommand (6ms) [Parameters=[@__username_0='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = @__username_0
+2026-04-21 17:35:32.139 -03:00 [INF] Executed DbCommand (8ms) [Parameters=[@__username_0='?' (Size = 100)], CommandType='"Text"', CommandTimeout='30']
+SELECT TOP(1) [a].[Id], [a].[CreatedAt], [a].[Email], [a].[IsActive], [a].[PasswordHash], [a].[PasswordResetTokenExpiresAt], [a].[PasswordResetTokenHash], [a].[Role], [a].[TenantId], [a].[UpdatedAt], [a].[Username]
+FROM [AppUsers] AS [a]
+WHERE [a].[Username] = @__username_0
+2026-04-21 17:35:32.284 -03:00 [INF] Executed DbCommand (8ms) [Parameters=[@p1='?' (DbType = Guid), @p0='?' (DbType = DateTimeOffset)], CommandType='"Text"', CommandTimeout='30']
+SET IMPLICIT_TRANSACTIONS OFF;
+SET NOCOUNT ON;
+UPDATE [AppUsers] SET [UpdatedAt] = @p0
+OUTPUT 1
+WHERE [Id] = @p1;
+2026-04-21 17:35:32.305 -03:00 [INF] Auth bootstrap completed.
+2026-04-21 17:35:32.314 -03:00 [INF] Message queue service started
+2026-04-21 17:35:32.365 -03:00 [INF] Now listening on: http://localhost:5197
+2026-04-21 17:35:32.375 -03:00 [INF] Application started. Press Ctrl+C to shut down.
+2026-04-21 17:35:32.384 -03:00 [INF] Hosting environment: Development
+2026-04-21 17:35:32.399 -03:00 [INF] Content root path: C:\Users\eschiffini\source\repos\SaaSBot\src\SaaSBot.Api
