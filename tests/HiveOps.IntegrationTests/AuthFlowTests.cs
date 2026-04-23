@@ -28,9 +28,8 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
         me.Role.Should().Be("Tenant");
         me.TenantName.Should().Be("Alpha");
 
-        var summary = await client.GetFromJsonAsync<DashboardSummaryDto>("/api/dashboard/summary");
-        summary.Should().NotBeNull();
-        summary!.TotalSales.Should().Be(150);
+        var supportSummaryResponse = await client.GetAsync("/api/support/summary");
+        supportSummaryResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
@@ -151,53 +150,6 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
     }
 
     [Fact]
-    public async Task Admin_Should_List_And_Replace_Catalog_Attribute_Definitions()
-    {
-        using var client = _factory.CreateClient(new() { HandleCookies = true });
-
-        var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new { username = "admin00", password = "123456" });
-        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var tenants = await client.GetFromJsonAsync<List<AdminTenantDto>>("/api/admin/tenants");
-        tenants.Should().NotBeNull();
-        var tenantId = tenants!.First().Id;
-
-        var initial = await client.GetFromJsonAsync<List<CatalogAttributeDefinitionDto>>($"/api/admin/tenants/{tenantId}/catalog/attributes");
-        initial.Should().NotBeNull();
-
-        var payload = new List<CatalogAttributeDefinitionDto>
-        {
-            new("color", "Color", "text", true, true, 0),
-            new("material", "Material", "text", true, true, 1),
-            new("temporada", "Temporada", "text", false, true, 2)
-        };
-
-        var save = await client.PutAsJsonAsync($"/api/admin/tenants/{tenantId}/catalog/attributes", payload);
-        save.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var afterSave = await client.GetFromJsonAsync<List<CatalogAttributeDefinitionDto>>($"/api/admin/tenants/{tenantId}/catalog/attributes");
-        afterSave.Should().NotBeNull();
-        afterSave!.Should().HaveCount(3);
-        afterSave.Should().Contain(x => x.AttributeKey == "color" && x.DisplayName == "Color" && x.IsFilterable);
-        afterSave.Should().Contain(x => x.AttributeKey == "temporada" && !x.IsFilterable && x.IsSearchable);
-
-        var replacePayload = new List<CatalogAttributeDefinitionDto>
-        {
-            new("color", "Color principal", "text", true, true, 0)
-        };
-
-        var replace = await client.PutAsJsonAsync($"/api/admin/tenants/{tenantId}/catalog/attributes", replacePayload);
-        replace.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var afterReplace = await client.GetFromJsonAsync<List<CatalogAttributeDefinitionDto>>($"/api/admin/tenants/{tenantId}/catalog/attributes");
-        afterReplace.Should().NotBeNull();
-        afterReplace!.Should().HaveCount(1);
-        var firstAttribute = afterReplace![0];
-        firstAttribute.AttributeKey.Should().Be("color");
-        firstAttribute.DisplayName.Should().Be("Color principal");
-    }
-
-    [Fact]
     public async Task Admin_Should_Create_Update_And_Delete_Tenant_User()
     {
         using var client = _factory.CreateClient(new() { HandleCookies = true });
@@ -269,13 +221,6 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
     private sealed record AuthMeDto(bool Authenticated, string? Role, Guid? TenantId, string? TenantName, string? DisplayName);
     private sealed record AdminTenantDto(Guid Id, string Name, string? WhatsAppNumber, bool IsActive, DateTimeOffset CreatedAt);
     private sealed record TenantSettingsEnvelope(Guid Id, string Name, TenantAdminSettings Settings);
-    private sealed record CatalogAttributeDefinitionDto(
-        string AttributeKey,
-        string DisplayName,
-        string DataType,
-        bool IsFilterable,
-        bool IsSearchable,
-        int SortOrder);
 
     private sealed record TenantUserDto(
         Guid Id,

@@ -43,4 +43,26 @@ public sealed class SupervisionNotificationService : ISupervisionNotifier
         var wh = _webhook.SendEventAsync(tenantId, "frustration.detected", payload, ct);
         return Task.WhenAll(hub, wh);
     }
+
+    public Task NotifyIncidentCreatedAsync(
+        Guid tenantId, Guid incidentId, string title, string severity, CancellationToken ct = default)
+    {
+        var payload = new { incidentId, title, severity, at = DateTimeOffset.UtcNow };
+        var hub = _hubContext.Clients
+            .Group($"tenant:{tenantId}")
+            .SendAsync("IncidentCreated", payload, ct);
+        var wh = _webhook.SendEventAsync(tenantId, "incident.created", payload, ct);
+        return Task.WhenAll(hub, wh);
+    }
+
+    public Task NotifyApprovalRequiredAsync(
+        Guid tenantId, Guid incidentId, string branchName, CancellationToken ct = default)
+    {
+        var payload = new { incidentId, branchName, at = DateTimeOffset.UtcNow };
+        var hub = _hubContext.Clients
+            .Group($"tenant:{tenantId}")
+            .SendAsync("ApprovalRequired", payload, ct);
+        var wh = _webhook.SendEventAsync(tenantId, "approval.required", payload, ct);
+        return Task.WhenAll(hub, wh);
+    }
 }

@@ -12,7 +12,7 @@ namespace HiveOps.Agents.Router;
 public sealed class RouterPlugin
 {
     [KernelFunction("classify_intent")]
-    [Description("Classifies the user message into an intent category. Returns one of: Greeting, Purchase, Inventory, Reservation, StaticInfo, HumanHandoff, IncidentReport, IncidentQuery, IncidentApprove, IncidentReject, DeployRequest or Unknown.")]
+    [Description("Classifies the user message into an intent category. Returns one of: Greeting, HumanHandoff, IncidentReport, IncidentQuery, IncidentApprove, IncidentReject, DeployRequest or Unknown.")]
     public async Task<string> ClassifyIntentAsync(
         Kernel kernel,
         [Description("The raw user message to classify.")] string userMessage,
@@ -22,41 +22,32 @@ public sealed class RouterPlugin
         if (heuristic is not null)
             return heuristic.Value.ToString();
 
-        var prompt = $"""
-            Eres el router de un chatbot de atención al cliente para una tienda deportiva.
-            Clasifica el siguiente mensaje del cliente en EXACTAMENTE UNA de estas categorías:
+        var prompt = string.Format(
+            @"Eres el router de un chatbot de soporte técnico.
+Clasifica el siguiente mensaje del usuario en EXACTAMENTE UNA de estas categorías:
 
-            - Greeting: El cliente saluda, se presenta o envía un mensaje introductorio sin consulta específica.
-            - Purchase: El cliente quiere comprar, agregar al carrito o hacer el checkout.
-            - Inventory: El cliente pregunta por disponibilidad de productos, stock, marcas o busca un artículo.
-            - Reservation: El cliente quiere hacer, modificar o cancelar una reserva o turno.
-            - StaticInfo: El cliente pregunta por horarios, sucursales, envios o política de devoluciones.
-            - IncidentReport: El cliente reporta un bug, error, problema de base de datos o incidente de soporte.
-            - IncidentQuery: El cliente pregunta por el estado de un ticket de soporte o incidente anterior.
-            - IncidentApprove: El cliente aprueba una corrección propuesta por el agente de soporte.
-            - IncidentReject: El cliente rechaza una corrección propuesta.
-            - DeployRequest: El cliente solicita deployar una corrección.
-            - Unknown: La intención es ambigua o no relacionada con las categorías anteriores.
+- Greeting: El usuario saluda, se presenta o envía un mensaje introductorio sin consulta específica.
+- IncidentReport: El usuario reporta un bug, error, problema de base de datos o incidente de soporte.
+- IncidentQuery: El usuario pregunta por el estado de un ticket de soporte o incidente anterior.
+- IncidentApprove: El usuario aprueba una corrección propuesta por el agente de soporte.
+- IncidentReject: El usuario rechaza una corrección propuesta.
+- DeployRequest: El usuario solicita deployar una corrección.
+- HumanHandoff: El usuario pide hablar con una persona, asesor o ingeniero.
+- Unknown: La intención es ambigua o no relacionada con las categorías anteriores.
 
-            Ejemplos:
-            - "Hola" -> Greeting
-            - "Buenas tardes" -> Greeting
-            - "Tienen zapatillas Nike en talla 42?" -> Inventory
-            - "Quiero comprar dos remeras" -> Purchase
-            - "Reservame para hoy a las 21" -> Reservation
-            - "Cuales son los horarios de atencion?" -> StaticInfo
-            - "Hay un bug en el bot" -> IncidentReport
-            - "Quiero saber como va mi ticket" -> IncidentQuery
-            - "Apruebo el fix" -> IncidentApprove
-            - "Deployea la correccion" -> DeployRequest
-            - "Pasame con un humano" -> Unknown
+Ejemplos:
+- ""Hola"" -> Greeting
+- ""Hay un bug en el bot"" -> IncidentReport
+- ""Quiero saber como va mi ticket"" -> IncidentQuery
+- ""Apruebo el fix"" -> IncidentApprove
+- ""Deployea la correccion"" -> DeployRequest
+- ""Pasame con un humano"" -> HumanHandoff
 
-            Responde SOLO con el nombre de la categoría, sin explicación.
+Responde SOLO con el nombre de la categoría, sin explicación.
 
-            Mensaje: {userMessage}
+Mensaje: {0}
 
-            Categoría:
-            """;
+Categoría:", userMessage);
 
         string raw;
         try
@@ -92,40 +83,6 @@ public sealed class RouterPlugin
         // Pase a humano explícito
         if (ContainsAny(text, "hablar con", "persona", "humano", "asesor", "vendedor", "agente", "operador"))
             return IntentType.HumanHandoff;
-
-        // Compra
-        if (ContainsAny(text, "compr", "carrito", "checkout", "pagar", "pedido", "orden", "quiero uno", "quiero dos", "dame"))
-            return IntentType.Purchase;
-
-        // Info estática
-        if (ContainsAny(text,
-            "horario", "sucursal", "direcci", "envio", "envío", "devolucion", "devolución", "politica", "política", "retiro", "local", "abierto", "cierra",
-            "dias abiertos", "días abiertos", "dias atienden", "días atienden", "abren",
-            "medios de pago", "formas de pago", "pago", "pagos", "tarjeta", "efectivo", "transferencia", "mercado pago"))
-            return IntentType.StaticInfo;
-
-        // Inventario — ampliado con verbos de consulta + categorías de productos y deportes
-        if (ContainsAny(text,
-            "stock", "disponible", "inventario", "sku", "talla", "color", "marca",
-            "tienen", "tiene", "busco", "buscar", "busca", "necesito", "quiero ver",
-            "hay ", "muestrame", "mostrame", "mostrar", "catalogo", "catálogo",
-            "zapatilla", "zapatillas", "zapa", "zapas", "remera", "short", "camiseta", "mochila", "pelota", "botin", "botines",
-            "futbol", "fútbol", "football", "footbol", "fulbo", "soccer", "running", "correr", "basquet", "basket", "basketball",
-            "natacion", "nadar", "swim", "voley", "voleibol", "yoga", "pilates", "ciclismo", "padel", "boxeo", "trekking", "hiking", "handball", "rugby",
-            "auriculares", "cinta", "equipamiento", "ropa", "calzado", "accesorio",
-            "nike", "adidas", "puma", "under armour", "jbl", "domyos",
-            "precio", "costo", "cuanto sale", "cuanto cuesta",
-            "producto", "productos", "marcas", "categorias", "categorías", "tipo de producto", "tipos de productos",
-            "cosas para", "articulos de", "articulos para", "algo de", "para practicar", "para jugar"))
-            return IntentType.Inventory;
-
-        if (ContainsAny(text, "jugar", "deporte", "entrenar")
-            && ContainsAny(text, "quiero", "busco", "algo"))
-            return IntentType.Inventory;
-
-        // Reserva
-        if (ContainsAny(text, "reserv", "turno", "agenda", "mesa", "cita"))
-            return IntentType.Reservation;
 
         // Incidentes de soporte
         if (ContainsAny(text, "bug", "error", "incidente", "ticket", "falla", "fallo", "problema", "crash", "excepcion", "stack trace",

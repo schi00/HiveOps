@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using HiveOps.Agents.Support;
 using HiveOps.Api.Authentication;
+using HiveOps.Application;
+using HiveOps.Application.Interfaces;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
 using HiveOps.Domain.Interfaces;
@@ -22,19 +24,25 @@ public sealed class SupportDashboardController : ControllerBase
     private readonly IncidentAnalysisEngine _analysisEngine;
     private readonly IGitService _gitService;
     private readonly IDeploymentService _deploymentService;
+    private readonly ITenantDataFixerService _dataFixer;
+    private readonly ISupervisionNotifier _notifier;
 
     public SupportDashboardController(
         AppDbContext db,
         TenantContext tenantContext,
         IncidentAnalysisEngine analysisEngine,
         IGitService gitService,
-        IDeploymentService deploymentService)
+        IDeploymentService deploymentService,
+        ITenantDataFixerService dataFixer,
+        ISupervisionNotifier notifier)
     {
         _db = db;
         _tenantContext = tenantContext;
         _analysisEngine = analysisEngine;
         _gitService = gitService;
         _deploymentService = deploymentService;
+        _dataFixer = dataFixer;
+        _notifier = notifier;
     }
 
     private bool IsSuperAdmin => User.IsInRole(AppRoles.SuperAdmin);
@@ -150,6 +158,8 @@ public sealed class SupportDashboardController : ControllerBase
         incident.UpdatedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
 
+        await _notifier.NotifyIncidentCreatedAsync(incident.TenantId, incident.Id, incident.Title, incident.Severity.ToString(), ct);
+
         return Ok(MapToDetail(incident, analysis));
     }
 
@@ -192,6 +202,27 @@ public sealed class SupportDashboardController : ControllerBase
             incident.ResolvedAt,
             logs,
             attachments));
+    }
+
+    [HttpGet("incidents/{id:guid}/messages")]
+    public async Task<ActionResult<IReadOnlyList<MessageDto>>> GetIncidentMessages(Guid id, CancellationToken ct)
+    {
+        if (!_tenantContext.IsResolved && !IsSuperAdmin) return Unauthorized();
+
+        var incident = await _db.Incidents.AsNoTracking()
+            .FirstOrDefaultAsync(i => i.Id == id, ct);
+        if (incident is null) return NotFound();
+
+        if (!IsSuperAdmin && incident.TenantId != _tenantContext.TenantId)
+            return Forbid();
+
+        var messages = await _db.ConversationMessages.AsNoTracking()
+            .Where(m => m.ConversationId == incident.ConversationId && m.TenantId == incident.TenantId)
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new MessageDto(m.Id, m.Role.ToString(), m.Content, m.CreatedAt))
+            .ToListAsync(ct);
+
+        return Ok(messages);
     }
 
     [HttpPost("incidents/{id:guid}/attachments")]
@@ -237,23 +268,24 @@ public sealed class SupportDashboardController : ControllerBase
             return BadRequest(new { message = $"Script failed safety validation: {reason}" });
         }
 
-        // Execute in a transaction (actual execution would need raw ADO.NET or EF migration)
-        // For now, we record approval and mark as in-progress; real execution deferred to pipeline
+        // Execute the safe SQL script against the tenant database
+        var fixResult = await _dataFixer.ExecuteSafeSqlAsync(
+            incident.TenantId,
+            scriptAttachment.Content,
+            id,
+            ct);
+
+        if (!fixResult.Success)
+        {
+            return StatusCode(500, new { message = $"DB fix execution failed: {fixResult.Message}" });
+        }
+
         incident.Status = IncidentStatus.InProgress;
-        incident.ResolutionNotes = (incident.ResolutionNotes ?? "") + $"\nDB fix approved and queued: {scriptAttachment.FileName}";
+        incident.ResolutionNotes = (incident.ResolutionNotes ?? "") + $"\nDB fix executed: {scriptAttachment.FileName} | {fixResult.Message} | Rows affected: {fixResult.RowsAffected}";
         incident.UpdatedAt = DateTimeOffset.UtcNow;
 
-        _db.DiagnosticLogs.Add(new DiagnosticLog
-        {
-            TenantId = _tenantContext.TenantId,
-            IncidentId = id,
-            StepName = "db_fix_approved",
-            Result = scriptAttachment.Content,
-            IsSuccess = true
-        });
-
         await _db.SaveChangesAsync(ct);
-        return Ok(new { message = "DB fix approved and queued for execution." });
+        return Ok(new { message = "DB fix executed successfully.", fixResult.RowsAffected, fixResult.Message });
     }
 
     [HttpPost("incidents/{id:guid}/reject-fix")]
@@ -459,4 +491,5 @@ public sealed record KbArticleDto(Guid Id, string Title, string Category, string
 public sealed record CreateIncidentRequest(Guid ConversationId, string Title, string Description, IncidentCategory? Category, IncidentSeverity? Severity);
 public sealed record AddAttachmentRequest(IncidentAttachmentType Type, string FileName, string Content);
 public sealed record RejectFixRequest(string Reason);
+public sealed record MessageDto(Guid Id, string Role, string Content, DateTimeOffset CreatedAt);
 public sealed record CreateKbRequest(string Title, string Content, string Category, string Tags, string ResolutionSteps, bool IsPublished);

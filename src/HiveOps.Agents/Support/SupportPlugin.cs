@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.SemanticKernel;
+using HiveOps.Application;
+using HiveOps.Application.Interfaces;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
 using HiveOps.Domain.Interfaces;
@@ -21,17 +23,20 @@ public sealed class SupportPlugin
     private readonly IConversationStateManager _stateManager;
     private readonly IGitService _gitService;
     private readonly IDeploymentService _deploymentService;
+    private readonly ISupervisionNotifier _notifier;
 
     public SupportPlugin(
         AppDbContext db,
         IConversationStateManager stateManager,
         IGitService gitService,
-        IDeploymentService deploymentService)
+        IDeploymentService deploymentService,
+        ISupervisionNotifier notifier)
     {
         _db = db;
         _stateManager = stateManager;
         _gitService = gitService;
         _deploymentService = deploymentService;
+        _notifier = notifier;
     }
 
     [KernelFunction("analyze_incident")]
@@ -77,6 +82,8 @@ public sealed class SupportPlugin
         ctx.State = ConversationState.InIncidentAnalysis;
         ctx.FlowData["incidentId"] = incident.Id.ToString();
         await _stateManager.SetStateAsync(tenantId, convId, ctx, cancellationToken);
+
+        await _notifier.NotifyIncidentCreatedAsync(tenantId, incident.Id, incident.Title, incident.Severity.ToString(), cancellationToken);
 
         // If critical keywords, escalate immediately
         if (incident.Severity == IncidentSeverity.Critical)
@@ -173,6 +180,8 @@ public sealed class SupportPlugin
 
         await _db.SaveChangesAsync(cancellationToken);
 
+        await _notifier.NotifyApprovalRequiredAsync(tenantId, incident.Id, branchName, cancellationToken);
+
         return $"Proposed fix on branch `{branchName}` (commit: {commitHash}). Reply 'approve' to deploy or 'reject' to discard.";
     }
 
@@ -215,6 +224,8 @@ public sealed class SupportPlugin
         await _stateManager.SetStateAsync(tenantId, convId, ctx, cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
+
+        await _notifier.NotifyApprovalRequiredAsync(tenantId, incident.Id, $"db-fix-{incident.Id:N}", cancellationToken);
 
         return "Database fix script stored for review. Reply 'approve' to execute in a transaction, or 'reject' to discard.";
     }

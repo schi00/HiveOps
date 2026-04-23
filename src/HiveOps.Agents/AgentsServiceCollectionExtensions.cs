@@ -1,12 +1,8 @@
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
-using HiveOps.Agents.Commercial;
-using HiveOps.Agents.Ingestion;
-using HiveOps.Agents.Inventory;
 using HiveOps.Agents.Orchestration;
 using HiveOps.Agents.Planning;
 using HiveOps.Agents.Router;
-using HiveOps.Agents.StaticInfo;
 using HiveOps.Agents.Supervision;
 using HiveOps.Agents.Support;
 using HiveOps.Domain.Interfaces;
@@ -21,18 +17,10 @@ public static class AgentsServiceCollectionExtensions
     {
         // ── Agent Plugins (scoped so they get scoped AppDbContext) ─────────
         services.AddScoped<RouterPlugin>();
-        services.AddScoped<InventoryPlugin>();
-        services.AddScoped<StaticInfoPlugin>();
-        services.AddScoped<CommercialPlugin>();
-        services.AddScoped<IngestionPlugin>();
         services.AddScoped<SupervisionPlugin>();
         services.AddScoped<AgentRulesEngine>();
         services.AddScoped<SupportPlugin>();
         services.AddScoped<SelfSupportPlugin>();
-
-        // ── Support Infrastructure (singleton or scoped as appropriate) ────
-        services.AddSingleton<IGitService, LocalGitService>();
-        services.AddSingleton<IDeploymentService, PipelineDeploymentService>();
 
         // ── Planner runtime (hybrid heuristics + optional LLM) ───────────
         services.AddScoped<HeuristicPlanner>();

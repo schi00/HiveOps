@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace HiveOps.Agents.Support;
+namespace HiveOps.Application;
 
 /// <summary>
 /// Validates SQL scripts and commands before execution to prevent mass deletions

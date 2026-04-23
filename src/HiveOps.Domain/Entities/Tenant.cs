@@ -12,12 +12,6 @@ public sealed class Tenant
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
 
     // Navigation
-    public ICollection<Product> Products { get; set; } = [];
-    public ICollection<Synonym> Synonyms { get; set; } = [];
-    public ICollection<Concept> Concepts { get; set; } = [];
-    public ICollection<ConceptProductMap> ConceptProductMaps { get; set; } = [];
-    public ICollection<CatalogAttributeDefinition> CatalogAttributeDefinitions { get; set; } = [];
-    public ICollection<ProductAttributeValue> ProductAttributeValues { get; set; } = [];
     public ICollection<Conversation> Conversations { get; set; } = [];
     public ICollection<Incident> Incidents { get; set; } = [];
     public BusinessConfig? BusinessConfig { get; set; }

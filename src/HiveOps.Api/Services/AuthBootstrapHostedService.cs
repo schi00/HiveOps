@@ -61,15 +61,10 @@ public sealed class AuthBootstrapHostedService : IHostedService
     private static async Task EnsureTenantUsersAndDefaultsAsync(AppDbContext db, IndustrySettingsService industrySettings, CancellationToken ct)
     {
         var tenants = await db.Tenants.ToListAsync(ct);
-        var productBuckets = await db.Products
-            .IgnoreQueryFilters()
-            .GroupBy(p => p.TenantId)
-            .Select(g => new { TenantId = g.Key, Category = g.GroupBy(x => x.Category).OrderByDescending(x => x.Count()).Select(x => x.Key).FirstOrDefault() })
-            .ToListAsync(ct);
 
         foreach (var tenant in tenants)
         {
-            tenant.Industry ??= InferIndustry(tenant.Name, productBuckets.FirstOrDefault(x => x.TenantId == tenant.Id)?.Category);
+            tenant.Industry ??= InferIndustry(tenant.Name, null);
 
             var username = $"tenant_{Slug(tenant.Name)}";
             var existingUser = await db.AppUsers.FirstOrDefaultAsync(u => u.Username == username, ct);

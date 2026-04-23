@@ -3,10 +3,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
-using HiveOps.Agents.Commercial;
-using HiveOps.Agents.Inventory;
 using HiveOps.Agents.Router;
-using HiveOps.Agents.StaticInfo;
 using HiveOps.Agents.Supervision;
 using HiveOps.Agents.Support;
 using HiveOps.Agents.Planning;
@@ -44,9 +41,6 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
     private readonly IMessagingChannel _channel;
     private readonly TenantContext _tenantContext;
     private readonly RouterPlugin _routerPlugin;
-    private readonly InventoryPlugin _inventoryPlugin;
-    private readonly StaticInfoPlugin _staticInfoPlugin;
-    private readonly CommercialPlugin _commercialPlugin;
     private readonly SupervisionPlugin _supervisionPlugin;
     private readonly SupportPlugin _supportPlugin;
     private readonly SelfSupportPlugin _selfSupportPlugin;
@@ -63,9 +57,6 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
         IMessagingChannel channel,
         TenantContext tenantContext,
         RouterPlugin routerPlugin,
-        InventoryPlugin inventoryPlugin,
-        StaticInfoPlugin staticInfoPlugin,
-        CommercialPlugin commercialPlugin,
         SupervisionPlugin supervisionPlugin,
         SupportPlugin supportPlugin,
         SelfSupportPlugin selfSupportPlugin,
@@ -81,9 +72,6 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
         _channel = channel;
         _tenantContext = tenantContext;
         _routerPlugin = routerPlugin;
-        _inventoryPlugin = inventoryPlugin;
-        _staticInfoPlugin = staticInfoPlugin;
-        _commercialPlugin = commercialPlugin;
         _supervisionPlugin = supervisionPlugin;
         _supportPlugin = supportPlugin;
         _selfSupportPlugin = selfSupportPlugin;
@@ -203,9 +191,6 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
         // ── 4. Build Kernel with TenantId and register plugins ────────────────
         var kernel = _kernelFactory.CreateForTenant(tenantId);
         kernel.Plugins.AddFromObject(_routerPlugin, "RouterPlugin");
-        kernel.Plugins.AddFromObject(_inventoryPlugin, "InventoryPlugin");
-        kernel.Plugins.AddFromObject(_staticInfoPlugin, "StaticInfoPlugin");
-        kernel.Plugins.AddFromObject(_commercialPlugin, "CommercialPlugin");
         kernel.Plugins.AddFromObject(_supervisionPlugin, "SupervisionPlugin");
         kernel.Plugins.AddFromObject(_supportPlugin, "SupportPlugin");
         kernel.Plugins.AddFromObject(_selfSupportPlugin, "SelfSupportPlugin");
@@ -268,7 +253,6 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
             state,
             msg,
             conversation,
-            tenantId,
             cancellationToken);
 
         if (deterministicRuleResult.Handled)
@@ -310,9 +294,6 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
                 await _stateManager.SetStateAsync(tenantId, conversation.Id, state, cancellationToken);
             }
 
-            if (plannerResult.SuggestCartButtons)
-                outgoingButtons = BuildCartButtons();
-
             goto PersistAndSend;
         }
 
@@ -335,42 +316,15 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
                     state.HasGreeted = true;
                     await _stateManager.SetStateAsync(tenantId, conversation.Id, state, cancellationToken);
                     botResponse = tenantPhrases.WelcomeMessage;
-                    outgoingMenuSections = AgentRulesEngine.BuildMainMenuSections();
                 }
                 else
                 {
-                    botResponse = "¿En qué más puedo ayudarte? Puedo buscar productos, informarte sobre horarios o gestionar una reserva.";
+                    botResponse = "¿En qué más puedo ayudarte? Reportá un incidente o consultá el estado de un ticket.";
                 }
-            }
-            // ── 7b. Context switch ────────────────────────────────────────────
-            else if (state.State is ConversationState.InReservationFlow or ConversationState.InOrderFlow
-                && intent is IntentType.Inventory or IntentType.StaticInfo)
-            {
-                await _stateManager.PauseFlowAsync(tenantId, conversation.Id, cancellationToken);
-                botResponse = await DispatchIntentAsync(kernel, intent, msg.Text, tenantPhrases, conversation, cancellationToken);
-                if (intent == IntentType.Inventory)
-                {
-                    _rulesEngine.RememberInventoryContext(state, msg.Text);
-                    await _stateManager.SetStateAsync(tenantId, conversation.Id, state, cancellationToken);
-                }
-                var resumeHint = state.State == ConversationState.InReservationFlow
-                    ? "\n\n¿Querés continuar con tu reserva?"
-                    : "\n\n¿Querés continuar con tu carrito?";
-                botResponse += resumeHint;
             }
             else
             {
                 botResponse = await DispatchIntentAsync(kernel, intent, msg.Text, tenantPhrases, conversation, cancellationToken);
-                if (intent == IntentType.Inventory)
-                {
-                    _rulesEngine.RememberInventoryContext(state, msg.Text);
-                    await _stateManager.SetStateAsync(tenantId, conversation.Id, state, cancellationToken);
-                }
-            }
-
-            if (intent == IntentType.Purchase)
-            {
-                outgoingButtons = BuildCartButtons();
             }
 
             state.FailedClassificationCount = 0;
@@ -505,16 +459,6 @@ PersistAndSend:
         return !isConfirmingHumanWait;
     }
 
-    private static List<InteractiveButtonOption> BuildCartButtons()
-    {
-        return
-        [
-            new InteractiveButtonOption("btn_view_cart", "Ver carrito"),
-            new InteractiveButtonOption("btn_buy_now", "Comprar ahora"),
-            new InteractiveButtonOption("btn_open_menu", "Menu")
-        ];
-    }
-
     private static List<InteractiveButtonOption> EnsureMenuShortcut(
         List<InteractiveButtonOption>? buttons,
         List<InteractiveListSection>? menuSections)
@@ -540,51 +484,25 @@ PersistAndSend:
     {
         var result = intent switch
         {
-            IntentType.Inventory => await kernel.InvokeAsync<string>("InventoryPlugin", "search_products",
-                new KernelArguments { ["query"] = userMessage }, ct),
-
-            IntentType.StaticInfo => await kernel.InvokeAsync<string>("StaticInfoPlugin", "get_business_info",
-                new KernelArguments { ["infoType"] = "all" }, ct),
-
             IntentType.HumanHandoff => phrases.HumanHandoffMessage,
 
-            IntentType.Reservation => await kernel.InvokeAsync<string>("CommercialPlugin", "start_reservation",
-                new KernelArguments { ["conversationId"] = conversation.Id.ToString() }, ct),
+            IntentType.IncidentReport => await kernel.InvokeAsync<string>("SupportPlugin", "analyze_incident",
+                new KernelArguments { ["conversationId"] = conversation.Id.ToString(), ["description"] = userMessage }, ct),
 
-            IntentType.Purchase => await kernel.InvokeAsync<string>("CommercialPlugin", "start_order",
-                new KernelArguments
-                {
-                    ["conversationId"] = conversation.Id.ToString(),
-                    ["customerPhone"] = "unknown"
-                }, ct),
+            IntentType.IncidentQuery => "Consultá el estado de tus tickets desde el dashboard de soporte.",
 
-            // Safety net: intent desconocido pero el mensaje parece búsqueda de producto
-            _ when LooksLikeProductSearch(userMessage) =>
-                await kernel.InvokeAsync<string>("InventoryPlugin", "search_products",
-                    new KernelArguments { ["query"] = userMessage }, ct),
+            IntentType.IncidentApprove => await kernel.InvokeAsync<string>("SupportPlugin", "deploy_fix",
+                new KernelArguments { ["conversationId"] = conversation.Id.ToString(), ["approvalText"] = userMessage }, ct),
+
+            IntentType.IncidentReject => "Fix rechazado. El incidente quedó abierto para revisión.",
+
+            IntentType.DeployRequest => await kernel.InvokeAsync<string>("SupportPlugin", "deploy_fix",
+                new KernelArguments { ["conversationId"] = conversation.Id.ToString(), ["approvalText"] = userMessage }, ct),
 
             _ => phrases.FallbackMessage
         };
 
         return result ?? string.Empty;
-    }
-
-    /// <summary>Detecta si un mensaje de intención desconocida parece una búsqueda de producto,
-    /// para evitar caer en el fallback genérico del tenant cuando el usuario pregunta por categorías no reconocidas.</summary>
-    private static bool LooksLikeProductSearch(string userMessage)
-    {
-        var t = userMessage.Trim().ToLowerInvariant();
-        // Patrón "X para/de Y" donde X indica búsqueda de artículo
-        if (System.Text.RegularExpressions.Regex.IsMatch(
-                t, @"\b(cosas|algo|articulos|productos|material|equipo)\s+(para|de)\s+\w{3,}"))
-            return true;
-        // "para practicar/jugar/entrenar [algo]"
-        if (t.Contains("para practicar") || t.Contains("para jugar") || t.Contains("para entrenar"))
-            return true;
-        // Actividades/deportes no cubiertos por la heurística principal del router
-        var activities = (string[])["natacion", "nadar", "swim", "voley", "voleibol", "volleyball",
-            "yoga", "pilates", "ciclismo", "padel", "boxeo", "trekking", "hiking", "handball", "rugby"];
-        return activities.Any(t.Contains);
     }
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
@@ -703,16 +621,13 @@ PersistAndSend:
         if (string.IsNullOrWhiteSpace(response) && !runtime.Escalate)
             response = tenantPhrases.FallbackMessage;
 
-        var suggestCartButtons = plannerContext.PreviousSteps.Any(s =>
-            string.Equals(s.ToolName, "start_order", StringComparison.OrdinalIgnoreCase));
-
         return (
             true,
             runtime.Escalate,
             response ?? tenantPhrases.FallbackMessage,
             runtime.Reasoning,
             nextState,
-            suggestCartButtons);
+            false);
     }
 
     private async Task<PlannerToolExecutionResult> ExecutePlannerToolAsync(
@@ -725,175 +640,6 @@ PersistAndSend:
     {
         switch (toolName.ToLowerInvariant())
         {
-            case "search_products":
-            {
-                var query = GetArgValue(args, "query")
-                    ?? BuildSearchQueryFromArgs(args)
-                    ?? msg.Text;
-                var topK = TryGetIntArg(args, 5, "top_k", "topK");
-                var output = await kernel.InvokeAsync<string>(
-                    "InventoryPlugin",
-                    "search_products",
-                    new KernelArguments { ["query"] = query, ["topK"] = topK },
-                    ct);
-
-                var state = await _stateManager.GetStateAsync(conversation.TenantId, conversation.Id, ct)
-                    ?? new ConversationStateContext { TenantId = conversation.TenantId, ConversationId = conversation.Id };
-                _rulesEngine.RememberInventoryContext(state, query);
-                await _stateManager.SetStateAsync(conversation.TenantId, conversation.Id, state, ct);
-
-                return new PlannerToolExecutionResult
-                {
-                    Success = true,
-                    Output = output ?? string.Empty,
-                    StateTransition = ConversationState.InInventoryQuery.ToString()
-                };
-            }
-
-            case "get_product_details":
-            {
-                var productId = GetArgValue(args, "product_id", "productId") ?? string.Empty;
-                var includeVariants = TryGetBoolArg(args, true, "include_variants", "includeVariants");
-                var output = await kernel.InvokeAsync<string>(
-                    "InventoryPlugin",
-                    "get_product_details",
-                    new KernelArguments
-                    {
-                        ["productId"] = productId,
-                        ["includeVariants"] = includeVariants
-                    },
-                    ct);
-
-                return new PlannerToolExecutionResult
-                {
-                    Success = true,
-                    Output = output ?? string.Empty
-                };
-            }
-
-            case "get_store_info":
-            {
-                var infoType = GetArgValue(args, "info_type", "infoType") ?? "all";
-                var output = await kernel.InvokeAsync<string>(
-                    "StaticInfoPlugin",
-                    "get_business_info",
-                    new KernelArguments { ["infoType"] = infoType },
-                    ct);
-
-                return new PlannerToolExecutionResult
-                {
-                    Success = true,
-                    Output = output ?? string.Empty
-                };
-            }
-
-            case "start_order":
-            {
-                var output = await kernel.InvokeAsync<string>(
-                    "CommercialPlugin",
-                    "start_order",
-                    new KernelArguments
-                    {
-                        ["conversationId"] = conversation.Id.ToString(),
-                        ["customerPhone"] = msg.PhoneNumber ?? "unknown"
-                    },
-                    ct);
-
-                return new PlannerToolExecutionResult
-                {
-                    Success = true,
-                    Output = output ?? string.Empty,
-                    StateTransition = ConversationState.InOrderFlow.ToString()
-                };
-            }
-
-            case "view_cart":
-            {
-                var output = await kernel.InvokeAsync<string>(
-                    "CommercialPlugin",
-                    "view_cart",
-                    new KernelArguments { ["conversationId"] = conversation.Id.ToString() },
-                    ct);
-
-                return new PlannerToolExecutionResult
-                {
-                    Success = true,
-                    Output = output ?? string.Empty,
-                    StateTransition = ConversationState.InOrderFlow.ToString()
-                };
-            }
-
-            case "add_to_cart":
-            {
-                var productId = GetArgValue(args, "product_id", "productId") ?? string.Empty;
-                var quantity = TryGetIntArg(args, 1, "quantity");
-                var variant = GetArgValue(args, "variant");
-
-                var output = await kernel.InvokeAsync<string>(
-                    "CommercialPlugin",
-                    "add_to_cart",
-                    new KernelArguments
-                    {
-                        ["conversationId"] = conversation.Id.ToString(),
-                        ["productId"] = productId,
-                        ["quantity"] = quantity,
-                        ["variant"] = variant
-                    },
-                    ct);
-
-                return new PlannerToolExecutionResult
-                {
-                    Success = true,
-                    Output = output ?? string.Empty,
-                    StateTransition = ConversationState.InOrderFlow.ToString()
-                };
-            }
-
-            case "start_checkout":
-            {
-                var confirm = TryGetBoolArg(args, false, "confirm_purchase", "confirmPurchase");
-                if (!confirm)
-                {
-                    return new PlannerToolExecutionResult
-                    {
-                        Success = false,
-                        Output = "Checkout requires explicit confirmation."
-                    };
-                }
-
-                var output = await kernel.InvokeAsync<string>(
-                    "CommercialPlugin",
-                    "checkout_cart",
-                    new KernelArguments
-                    {
-                        ["conversationId"] = conversation.Id.ToString(),
-                        ["customerPhone"] = msg.PhoneNumber ?? "unknown"
-                    },
-                    ct);
-
-                return new PlannerToolExecutionResult
-                {
-                    Success = true,
-                    Output = output ?? string.Empty,
-                    StateTransition = ConversationState.Completed.ToString()
-                };
-            }
-
-            case "get_order_status":
-            {
-                var output = await kernel.InvokeAsync<string>(
-                    "CommercialPlugin",
-                    "track_order",
-                    new KernelArguments { ["conversationId"] = conversation.Id.ToString() },
-                    ct);
-
-                return new PlannerToolExecutionResult
-                {
-                    Success = true,
-                    Output = output ?? string.Empty
-                };
-            }
-
             case "escalate_to_human":
             {
                 var reason = GetArgValue(args, "reason") ?? "Planner requested human handoff";
@@ -912,22 +658,6 @@ PersistAndSend:
                     Success = true,
                     Output = output ?? string.Empty,
                     StateTransition = ConversationState.AwaitingHuman.ToString()
-                };
-            }
-
-            case "start_reservation":
-            {
-                var output = await kernel.InvokeAsync<string>(
-                    "CommercialPlugin",
-                    "start_reservation",
-                    new KernelArguments { ["conversationId"] = conversation.Id.ToString() },
-                    ct);
-
-                return new PlannerToolExecutionResult
-                {
-                    Success = true,
-                    Output = output ?? string.Empty,
-                    StateTransition = ConversationState.InReservationFlow.ToString()
                 };
             }
 
@@ -994,26 +724,4 @@ PersistAndSend:
         return new string(buffer[..index]);
     }
 
-    private static string? BuildSearchQueryFromArgs(IReadOnlyDictionary<string, string> args)
-    {
-        var fragments = new List<string>();
-        var category = GetArgValue(args, "category");
-        var brand = GetArgValue(args, "brand");
-        var color = GetArgValue(args, "color");
-        var size = GetArgValue(args, "size");
-        var minPrice = GetArgValue(args, "min_price", "minPrice");
-        var maxPrice = GetArgValue(args, "max_price", "maxPrice");
-
-        if (!string.IsNullOrWhiteSpace(category)) fragments.Add(category);
-        if (!string.IsNullOrWhiteSpace(brand)) fragments.Add(brand);
-        if (!string.IsNullOrWhiteSpace(color)) fragments.Add(color);
-        if (!string.IsNullOrWhiteSpace(size)) fragments.Add($"talle {size}");
-        if (!string.IsNullOrWhiteSpace(minPrice) || !string.IsNullOrWhiteSpace(maxPrice))
-            fragments.Add($"precio {minPrice ?? "0"}-{maxPrice ?? "max"}");
-
-        if (fragments.Count == 0)
-            return null;
-
-        return string.Join(" ", fragments);
-    }
 }

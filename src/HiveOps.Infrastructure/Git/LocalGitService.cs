@@ -1,48 +1,87 @@
+using System.Diagnostics;
 using HiveOps.Domain.Interfaces;
+using Microsoft.Extensions.Configuration;
 
 namespace HiveOps.Infrastructure.Git;
 
 /// <summary>
-/// Stub implementation of IGitService using local git CLI commands.
-/// In production, replace with LibGit2Sharp or a proper git abstraction.
+/// Real implementation of IGitService using local git CLI commands.
+/// Requires git to be installed on the host and a valid repo path configured.
 /// </summary>
 public sealed class LocalGitService : IGitService
 {
     private readonly string _repoPath;
 
-    public LocalGitService(string repoPath)
+    public LocalGitService(IConfiguration configuration)
     {
-        _repoPath = repoPath;
+        _repoPath = configuration["Git:RepoPath"] ?? throw new InvalidOperationException("Configuration 'Git:RepoPath' is required.");
     }
 
-    public Task<string> CreateBranchAsync(string branchName, CancellationToken ct = default)
+    public async Task<string> CreateBranchAsync(string branchName, CancellationToken ct = default)
     {
-        return Task.FromResult($"Branch {branchName} created (stub).");
+        var result = await RunGitAsync($"checkout -b {branchName}", ct);
+        return result.Trim();
     }
 
-    public Task<string> CommitAsync(string message, IEnumerable<string> files, CancellationToken ct = default)
+    public async Task<string> CommitAsync(string message, IEnumerable<string> files, CancellationToken ct = default)
     {
-        return Task.FromResult($"Commit '{message}' created (stub).");
+        var fileList = string.Join(" ", files.Select(f => $"\"{f}\""));
+        await RunGitAsync($"add {fileList}", ct);
+        var result = await RunGitAsync($"commit -m \"{message.Replace("\"", "\\\"")}\"", ct);
+        return result.Trim();
     }
 
-    public Task PushAsync(string branchName, CancellationToken ct = default)
+    public async Task PushAsync(string branchName, CancellationToken ct = default)
     {
-        return Task.FromResult($"Pushed {branchName} (stub).");
+        await RunGitAsync($"push -u origin {branchName}", ct);
     }
 
-    public Task<string> GetDiffAsync(string branchName, CancellationToken ct = default)
+    public async Task<string> GetDiffAsync(string branchName, CancellationToken ct = default)
     {
-        return Task.FromResult("Diff not available in stub mode.");
+        return await RunGitAsync($"diff origin/main...{branchName}", ct);
     }
 
-    public Task<bool> BranchExistsAsync(string branchName, CancellationToken ct = default)
+    public async Task<bool> BranchExistsAsync(string branchName, CancellationToken ct = default)
     {
-        return Task.FromResult(false);
+        try
+        {
+            var output = await RunGitAsync($"branch --list {branchName}", ct);
+            return !string.IsNullOrWhiteSpace(output);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
-    public Task<string> MergePullRequestAsync(string branchName, CancellationToken ct = default)
+    public async Task<string> MergePullRequestAsync(string branchName, CancellationToken ct = default)
     {
-        // Stub: in production this calls the Git provider API (GitHub/Azure DevOps)
-        return Task.FromResult($"MERGED:{branchName}:{DateTimeOffset.UtcNow:O}");
+        await RunGitAsync("checkout main", ct);
+        var result = await RunGitAsync($"merge --no-ff {branchName} -m \"Merge {branchName}\"", ct);
+        await RunGitAsync("push origin main", ct);
+        return $"MERGED:{branchName}:{DateTimeOffset.UtcNow:O}";
+    }
+
+    private async Task<string> RunGitAsync(string arguments, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo("git", arguments)
+        {
+            WorkingDirectory = _repoPath,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start git process.");
+        await process.WaitForExitAsync(ct);
+
+        var output = await process.StandardOutput.ReadToEndAsync(ct);
+        var error = await process.StandardError.ReadToEndAsync(ct);
+
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"Git command failed: {error.Trim()}");
+
+        return output;
     }
 }

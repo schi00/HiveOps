@@ -75,7 +75,6 @@ builder.Services.AddScoped<IOutboundWebhookService>(sp => sp.GetRequiredService<
 builder.Services.AddHttpClient("OutboundWebhook");
 
 // -- Background Workers --------------------------------------------------------
-builder.Services.AddHostedService<CatalogIngestionWorker>();
 builder.Services.AddHostedService<AuthBootstrapHostedService>();
 builder.Services.AddSingleton<IMessageQueueService, BackgroundMessageQueueService>();
 builder.Services.AddHostedService(sp => (BackgroundMessageQueueService)sp.GetRequiredService<IMessageQueueService>());

@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
-using HiveOps.Agents.Inventory;
 using HiveOps.Application.Interfaces;
 using HiveOps.Domain.Enums;
 
@@ -129,15 +128,11 @@ public sealed class AgentRuntime : IAgentRuntime
 
         if (!string.IsNullOrWhiteSpace(lastToolOutput))
         {
-            var responseText = lastToolOutput;
-            if (InventoryPlugin.TryFormatProductResults(lastToolOutput, out var formatted))
-                responseText = formatted;
-
             return new AgentRuntimeResult
             {
                 Handled = true,
                 Escalate = false,
-                Response = responseText,
+                Response = lastToolOutput,
                 Reasoning = "Reached planner step limit; responding with latest tool output.",
                 StateTransition = lastStateTransition
             };

@@ -17,7 +17,6 @@ public sealed class AdminTenantsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly IConfiguration _configuration;
-    private readonly ICatalogMirrorSyncService _syncService;
     private readonly TenantContext _tenantContext;
     private readonly IndustrySettingsService _industrySettings;
     private readonly IWhatsAppAccessTokenValidator _whatsAppAccessTokenValidator;
@@ -25,14 +24,12 @@ public sealed class AdminTenantsController : ControllerBase
     public AdminTenantsController(
         AppDbContext db,
         IConfiguration configuration,
-        ICatalogMirrorSyncService syncService,
         TenantContext tenantContext,
         IndustrySettingsService industrySettings,
         IWhatsAppAccessTokenValidator whatsAppAccessTokenValidator)
     {
         _db = db;
         _configuration = configuration;
-        _syncService = syncService;
         _tenantContext = tenantContext;
         _industrySettings = industrySettings;
         _whatsAppAccessTokenValidator = whatsAppAccessTokenValidator;
@@ -135,18 +132,7 @@ public sealed class AdminTenantsController : ControllerBase
     public async Task<IActionResult> TriggerSync(Guid tenantId, CancellationToken ct)
     {
         if (!IsAdminRequest()) return Unauthorized("Admin credentials required.");
-
-        _tenantContext.SetTenant(tenantId);
-
-        var tenant = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, ct);
-        if (tenant is null) return NotFound();
-
-        var settings = TenantSettingsJson.Parse(tenant.ConfigJson);
-        if (settings.CatalogSync.SourceType == CatalogSyncSourceType.None)
-            return BadRequest("Catalog sync source is not configured for this tenant.");
-
-        var syncResult = await _syncService.SyncTenantAsync(tenantId, settings.CatalogSync, ct);
-        return Ok(syncResult);
+        return BadRequest("Catalog sync is no longer supported.");
     }
 
     [HttpPost("{tenantId:guid}/whatsapp/access-token")]
@@ -381,100 +367,7 @@ public sealed class AdminTenantsController : ControllerBase
         if (!tenantExists)
             return NotFound();
 
-        var attributes = await _db.CatalogAttributeDefinitions
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Where(x => x.TenantId == tenantId)
-            .OrderBy(x => x.SortOrder)
-            .ThenBy(x => x.AttributeKey)
-            .Select(x => new CatalogAttributeDefinitionDto(
-                x.AttributeKey,
-                x.DisplayName,
-                x.DataType,
-                x.IsFilterable,
-                x.IsSearchable,
-                x.SortOrder))
-            .ToListAsync(ct);
-
-        return Ok(attributes);
-    }
-
-    [HttpPut("{tenantId:guid}/catalog/attributes")]
-    public async Task<IActionResult> SaveCatalogAttributes(
-        Guid tenantId,
-        [FromBody] List<CatalogAttributeDefinitionDto> attributes,
-        CancellationToken ct)
-    {
-        if (!IsAdminRequest()) return Unauthorized("Admin credentials required.");
-        if (attributes is null)
-            return BadRequest("Catalog attributes payload is required.");
-
-        _tenantContext.SetTenant(tenantId);
-
-        var tenantExists = await _db.Tenants
-            .AnyAsync(t => t.Id == tenantId, ct);
-        if (!tenantExists)
-            return NotFound();
-
-        var normalized = attributes
-            .Where(a => !string.IsNullOrWhiteSpace(a.AttributeKey))
-            .Select(a => new CatalogAttributeDefinitionDto(
-                a.AttributeKey.Trim(),
-                string.IsNullOrWhiteSpace(a.DisplayName) ? a.AttributeKey.Trim() : a.DisplayName.Trim(),
-                string.IsNullOrWhiteSpace(a.DataType) ? "text" : a.DataType.Trim().ToLowerInvariant(),
-                a.IsFilterable,
-                a.IsSearchable,
-                a.SortOrder < 0 ? 0 : a.SortOrder))
-            .ToList();
-
-        var duplicateKey = normalized
-            .GroupBy(a => a.AttributeKey, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault(g => g.Count() > 1)?.Key;
-        if (!string.IsNullOrWhiteSpace(duplicateKey))
-            return BadRequest($"Duplicate attribute key detected: {duplicateKey}.");
-
-        var existing = await _db.CatalogAttributeDefinitions
-            .IgnoreQueryFilters()
-            .Where(x => x.TenantId == tenantId)
-            .ToListAsync(ct);
-
-        var incomingMap = normalized.ToDictionary(x => x.AttributeKey, StringComparer.OrdinalIgnoreCase);
-
-        foreach (var incoming in normalized)
-        {
-            var current = existing.FirstOrDefault(x => string.Equals(x.AttributeKey, incoming.AttributeKey, StringComparison.OrdinalIgnoreCase));
-            if (current is null)
-            {
-                _db.CatalogAttributeDefinitions.Add(new CatalogAttributeDefinition
-                {
-                    TenantId = tenantId,
-                    AttributeKey = incoming.AttributeKey,
-                    DisplayName = incoming.DisplayName,
-                    DataType = incoming.DataType,
-                    IsFilterable = incoming.IsFilterable,
-                    IsSearchable = incoming.IsSearchable,
-                    SortOrder = incoming.SortOrder
-                });
-                continue;
-            }
-
-            current.DisplayName = incoming.DisplayName;
-            current.DataType = incoming.DataType;
-            current.IsFilterable = incoming.IsFilterable;
-            current.IsSearchable = incoming.IsSearchable;
-            current.SortOrder = incoming.SortOrder;
-            current.UpdatedAt = DateTimeOffset.UtcNow;
-        }
-
-        var toDelete = existing
-            .Where(x => !incomingMap.ContainsKey(x.AttributeKey))
-            .ToList();
-        if (toDelete.Count > 0)
-            _db.CatalogAttributeDefinitions.RemoveRange(toDelete);
-
-        await _db.SaveChangesAsync(ct);
-
-        return Ok(new { message = "Catalog attributes saved.", tenantId, count = normalized.Count });
+        return BadRequest("Catalog management is no longer supported.");
     }
 
     private bool IsAdminRequest()
@@ -491,13 +384,6 @@ public sealed class AdminTenantsController : ControllerBase
 }
 
 public sealed record ValidateWhatsAppAccessTokenRequest(string AccessToken);
-public sealed record CatalogAttributeDefinitionDto(
-    string AttributeKey,
-    string DisplayName,
-    string DataType,
-    bool IsFilterable,
-    bool IsSearchable,
-    int SortOrder);
 
 public sealed record TenantUserDto(
     Guid Id,
@@ -509,6 +395,8 @@ public sealed record TenantUserDto(
 
 public sealed record CreateTenantUserRequest(string Username, string Email, string Password, bool IsActive = true);
 public sealed record UpdateTenantUserRequest(string? Username, string? Email, string? Password, bool IsActive);
+
+public sealed record MetricPointDto(string Label, double Value);
 
 public sealed record AdminBotMetricsDto(
     int ActiveConversations,

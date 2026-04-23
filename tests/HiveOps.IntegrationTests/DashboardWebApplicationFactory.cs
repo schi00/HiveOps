@@ -75,7 +75,6 @@ public sealed class DashboardWebApplicationFactory : WebApplicationFactory<Progr
         var alphaConversationId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
         var betaConversationId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1");
         var alphaInteractiveConversationId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2");
-        var alphaDraftOrderId = Guid.Parse("aaaaaaaa-3333-3333-3333-333333333333");
         var alphaSettings = new TenantAdminSettings
         {
             BotBehavior = new BotBehaviorSettings
@@ -213,55 +212,10 @@ public sealed class DashboardWebApplicationFactory : WebApplicationFactory<Progr
                 CreatedAt = DateTimeOffset.UtcNow.AddDays(-1)
             });
 
-        db.Products.AddRange(
-            new Product { Id = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001"), TenantId = alphaId, Name = "Runner Pro", Brand = "Nike", Category = "Running", Description = "Alpha product", Price = 100, StockQuantity = 8, Sku = "ALFA-001" },
-            new Product { Id = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002"), TenantId = alphaId, Name = "Dry Fit", Brand = "Adidas", Category = "Apparel", Description = "Alpha apparel", Price = 50, StockQuantity = 3, Sku = "ALFA-002" },
-            new Product { Id = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000001"), TenantId = betaId, Name = "Jean Slim", Brand = "Levis", Category = "Denim", Description = "Beta product", Price = 80, StockQuantity = 12, Sku = "BETA-001" },
-            new Product { Id = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002"), TenantId = betaId, Name = "Gorra Logo", Brand = "New Era", Category = "Accessories", Description = "Beta cap", Price = 25, StockQuantity = 40, Sku = "BETA-002" });
-
-        db.BusinessConfigs.AddRange(
-            new BusinessConfig
-            {
-                Id = Guid.Parse("aaaaaaaa-2222-2222-2222-222222222221"),
-                TenantId = alphaId,
-                OpeningHours = "Lunes a viernes de 9 a 18 hs.",
-                Branches = "Casa central Palermo",
-                ShippingMethods = "Envío a domicilio y retiro en tienda",
-                ReturnPolicy = "Cambios hasta 30 días",
-                WelcomeMessage = "Hola, soy Vadi.",
-                FallbackMessage = "No entendí del todo tu consulta. ¿Podrías reformularla?",
-                MaxRetryBeforeHandoff = 3
-            },
-            new BusinessConfig
-            {
-                Id = Guid.Parse("bbbbbbbb-2222-2222-2222-222222222221"),
-                TenantId = betaId,
-                OpeningHours = "Lunes a sábados de 10 a 20 hs.",
-                Branches = "Sucursal Belgrano",
-                ShippingMethods = "Correo y retiro",
-                ReturnPolicy = "Cambios hasta 15 días",
-                WelcomeMessage = "Hola, soy Moda Bot.",
-                FallbackMessage = "Contame qué prenda o estilo buscás y te ayudo.",
-                MaxRetryBeforeHandoff = 3
-            });
-
         db.Conversations.AddRange(
             new Conversation { Id = alphaConversationId, TenantId = alphaId, Channel = "whatsapp", ChannelUserId = "alpha-user", Status = HiveOps.Domain.Enums.ConversationStatus.Active },
             new Conversation { Id = betaConversationId, TenantId = betaId, Channel = "whatsapp", ChannelUserId = "beta-user", Status = HiveOps.Domain.Enums.ConversationStatus.Active },
             new Conversation { Id = alphaInteractiveConversationId, TenantId = alphaId, Channel = "whatsapp", ChannelUserId = "5491155517000", Status = HiveOps.Domain.Enums.ConversationStatus.Active });
-
-        db.Orders.AddRange(
-            new Order { Id = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111"), TenantId = alphaId, ConversationId = alphaConversationId, CustomerPhone = "+54911", CustomerName = "Alpha Buyer", Status = HiveOps.Domain.Enums.OrderStatus.Confirmed, TotalAmount = 150 },
-            new Order { Id = Guid.Parse("bbbbbbbb-1111-1111-1111-111111111111"), TenantId = betaId, ConversationId = betaConversationId, CustomerPhone = "+54922", CustomerName = "Beta Buyer", Status = HiveOps.Domain.Enums.OrderStatus.Confirmed, TotalAmount = 105 },
-            new Order { Id = alphaDraftOrderId, TenantId = alphaId, ConversationId = alphaInteractiveConversationId, CustomerPhone = "+549117000", CustomerName = "Alpha Interactive", Status = HiveOps.Domain.Enums.OrderStatus.Draft, TotalAmount = 0 });
-
-        db.OrderItems.AddRange(
-            new OrderItem { Id = Guid.NewGuid(), TenantId = alphaId, OrderId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111"), ProductId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001"), ProductName = "Runner Pro", Quantity = 1, UnitPrice = 100 },
-            new OrderItem { Id = Guid.NewGuid(), TenantId = alphaId, OrderId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111"), ProductId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002"), ProductName = "Dry Fit", Quantity = 1, UnitPrice = 50 },
-            new OrderItem { Id = Guid.NewGuid(), TenantId = betaId, OrderId = Guid.Parse("bbbbbbbb-1111-1111-1111-111111111111"), ProductId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000001"), ProductName = "Jean Slim", Quantity = 1, UnitPrice = 80 },
-            new OrderItem { Id = Guid.NewGuid(), TenantId = betaId, OrderId = Guid.Parse("bbbbbbbb-1111-1111-1111-111111111111"), ProductId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002"), ProductName = "Gorra Logo", Quantity = 1, UnitPrice = 25 },
-            new OrderItem { Id = Guid.NewGuid(), TenantId = alphaId, OrderId = alphaDraftOrderId, ProductId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001"), ProductName = "Runner Pro", Quantity = 1, UnitPrice = 100 },
-            new OrderItem { Id = Guid.NewGuid(), TenantId = alphaId, OrderId = alphaDraftOrderId, ProductId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002"), ProductName = "Dry Fit", Quantity = 1, UnitPrice = 50 });
 
         db.SaveChanges();
     }

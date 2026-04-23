@@ -10,8 +10,6 @@ using HiveOps.Infrastructure.Git;
 using HiveOps.Infrastructure.Messaging;
 using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
-using HiveOps.Infrastructure.Search;
-using HiveOps.Infrastructure.Synchronization;
 using StackExchange.Redis;
 
 namespace HiveOps.Infrastructure;
@@ -62,15 +60,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEmbeddingService, SemanticKernelEmbeddingService>();
         services.AddHttpClient<IQueryNormalizer, OpenRouterQueryNormalizer>();
 
-        // ── Hybrid Search ──────────────────────────────────────────────────
-        services.AddScoped<IProductSearchService>(sp =>
-        {
-            var connStr = configuration.GetConnectionString("DefaultConnection")
-                ?? throw new InvalidOperationException("Missing 'DefaultConnection'.");
-            var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SqlServerHybridSearchService>>();
-            return new SqlServerHybridSearchService(connStr, logger);
-        });
-
         // ── Messaging ──────────────────────────────────────────────────────
         services.AddHttpClient<IMessagingChannel, MetaWhatsAppChannel>();
 
@@ -78,9 +67,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IGitService, LocalGitService>();
         services.AddScoped<IDeploymentService, PipelineDeploymentService>();
 
-        // ── External catalog synchronization ───────────────────────────────
-        services.AddHttpClient(nameof(CatalogMirrorSyncService));
-        services.AddScoped<ICatalogMirrorSyncService, CatalogMirrorSyncService>();
+        // ── Tenant Data Fixer ────────────────────────────────────────────────
+        services.AddScoped<ITenantDataFixerService, TenantDataFixerService>();
 
         return services;
     }
