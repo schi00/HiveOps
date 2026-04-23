@@ -6,19 +6,30 @@ using HiveOps.Infrastructure.Persistence;
 
 namespace HiveOps.Api.Services;
 
+/// <summary>
+/// Validates critical security configuration at startup and bootstraps auth data.
+/// </summary>
 public sealed class AuthBootstrapHostedService : IHostedService
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<AuthBootstrapHostedService> _logger;
 
-    public AuthBootstrapHostedService(IServiceProvider serviceProvider, ILogger<AuthBootstrapHostedService> logger)
+    public AuthBootstrapHostedService(
+        IServiceProvider serviceProvider,
+        IConfiguration configuration,
+        ILogger<AuthBootstrapHostedService> logger)
     {
         _serviceProvider = serviceProvider;
+        _configuration = configuration;
         _logger = logger;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        // Validate critical security configuration before any database operations
+        ValidateSecurityConfiguration();
+
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var industrySettings = scope.ServiceProvider.GetRequiredService<IndustrySettingsService>();
@@ -30,6 +41,69 @@ public sealed class AuthBootstrapHostedService : IHostedService
         await EnsureTenantUsersAndDefaultsAsync(db, industrySettings, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Auth bootstrap completed.");
+    }
+
+    /// <summary>
+    /// Validates critical security configuration and logs warnings for insecure settings.
+    /// </summary>
+    private void ValidateSecurityConfiguration()
+    {
+        var warnings = new List<string>();
+        var criticalErrors = new List<string>();
+
+        // Check Admin:ApiKey
+        var adminApiKey = _configuration["Admin:ApiKey"];
+        if (string.IsNullOrWhiteSpace(adminApiKey))
+        {
+            criticalErrors.Add("Admin:ApiKey is not configured. Admin API endpoints will be inaccessible.");
+        }
+        else if (adminApiKey.Length < 32)
+        {
+            warnings.Add($"Admin:ApiKey is only {adminApiKey.Length} characters. Recommended minimum is 32 characters.");
+        }
+        else if (adminApiKey == "change-me-in-production" || adminApiKey == "admin123" || adminApiKey == "password")
+        {
+            criticalErrors.Add("Admin:ApiKey uses a default/weak value. Change immediately in production!");
+        }
+
+        // Check Git:RepoPath (for code fix deployment)
+        var gitRepoPath = _configuration["Git:RepoPath"];
+        if (string.IsNullOrWhiteSpace(gitRepoPath))
+        {
+            warnings.Add("Git:RepoPath is not configured. Code fix deployment features will not work.");
+        }
+
+        // Check JWT/Authentication configuration
+        var cookieSecure = _configuration["Authentication:Cookie:SecurePolicy"];
+        if (string.Equals(cookieSecure, "None", StringComparison.OrdinalIgnoreCase))
+        {
+            warnings.Add("Authentication cookie SecurePolicy is set to 'None'. Cookies may be transmitted over HTTP.");
+        }
+
+        // Log results
+        if (criticalErrors.Any())
+        {
+            _logger.LogError("=== CRITICAL SECURITY ERRORS ===");
+            foreach (var error in criticalErrors)
+            {
+                _logger.LogError("SECURITY: {Error}", error);
+            }
+            _logger.LogError("Application will continue but may have reduced functionality.");
+        }
+
+        if (warnings.Any())
+        {
+            _logger.LogWarning("=== SECURITY WARNINGS ===");
+            foreach (var warning in warnings)
+            {
+                _logger.LogWarning("SECURITY: {Warning}", warning);
+            }
+        }
+
+        if (!criticalErrors.Any() && !warnings.Any())
+        {
+            _logger.LogInformation("Security configuration validation passed.");
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

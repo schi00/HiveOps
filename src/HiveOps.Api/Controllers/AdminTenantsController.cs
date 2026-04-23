@@ -20,19 +20,22 @@ public sealed class AdminTenantsController : ControllerBase
     private readonly TenantContext _tenantContext;
     private readonly IndustrySettingsService _industrySettings;
     private readonly IWhatsAppAccessTokenValidator _whatsAppAccessTokenValidator;
+    private readonly ILogger<AdminTenantsController> _logger;
 
     public AdminTenantsController(
         AppDbContext db,
         IConfiguration configuration,
         TenantContext tenantContext,
         IndustrySettingsService industrySettings,
-        IWhatsAppAccessTokenValidator whatsAppAccessTokenValidator)
+        IWhatsAppAccessTokenValidator whatsAppAccessTokenValidator,
+        ILogger<AdminTenantsController> logger)
     {
         _db = db;
         _configuration = configuration;
         _tenantContext = tenantContext;
         _industrySettings = industrySettings;
         _whatsAppAccessTokenValidator = whatsAppAccessTokenValidator;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -125,6 +128,11 @@ public sealed class AdminTenantsController : ControllerBase
         }
 
         await _db.SaveChangesAsync(ct);
+
+        // Security audit logging
+        _logger.LogInformation("AUDIT: Settings updated by {Admin} - TenantId:{TenantId}",
+            GetAdminIdentifier(), tenantId);
+
         return Ok(new { message = "Settings saved.", tenantId });
     }
 
@@ -229,6 +237,10 @@ public sealed class AdminTenantsController : ControllerBase
         _db.AppUsers.Add(user);
         await _db.SaveChangesAsync(ct);
 
+        // Security audit logging
+        _logger.LogInformation("AUDIT: User created by {Admin} - UserId:{UserId} TenantId:{TenantId} Username:{Username}",
+            GetAdminIdentifier(), user.Id, tenantId, username);
+
         return Ok(new TenantUserDto(user.Id, user.Username, user.Email, user.IsActive, user.CreatedAt, user.UpdatedAt));
     }
 
@@ -257,6 +269,11 @@ public sealed class AdminTenantsController : ControllerBase
         user.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _db.SaveChangesAsync(ct);
+
+        // Security audit logging
+        _logger.LogInformation("AUDIT: User updated by {Admin} - UserId:{UserId} TenantId:{TenantId}",
+            GetAdminIdentifier(), user.Id, tenantId);
+
         return Ok(new TenantUserDto(user.Id, user.Username, user.Email, user.IsActive, user.CreatedAt, user.UpdatedAt));
     }
 
@@ -271,6 +288,11 @@ public sealed class AdminTenantsController : ControllerBase
 
         _db.AppUsers.Remove(user);
         await _db.SaveChangesAsync(ct);
+
+        // Security audit logging
+        _logger.LogWarning("AUDIT: User deleted by {Admin} - UserId:{UserId} TenantId:{TenantId} Username:{Username}",
+            GetAdminIdentifier(), userId, tenantId, user.Username);
+
         return NoContent();
     }
 
@@ -380,6 +402,23 @@ public sealed class AdminTenantsController : ControllerBase
 
         if (!Request.Headers.TryGetValue("X-Admin-Key", out var key)) return false;
         return string.Equals(configured, key.ToString(), StringComparison.Ordinal);
+    }
+
+    private string GetAdminIdentifier()
+    {
+        // Prefer authenticated user name, fallback to API key indicator
+        if (User.Identity?.IsAuthenticated == true)
+            return User.Identity.Name ?? "authenticated";
+
+        // For API key auth, return a hash prefix of the key (never log full key)
+        if (Request.Headers.TryGetValue("X-Admin-Key", out var key))
+        {
+            var keyHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(key.ToString())))[..8];
+            return $"apikey:{keyHash}";
+        }
+
+        return "unknown";
     }
 }
 

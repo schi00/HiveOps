@@ -17,6 +17,7 @@ namespace HiveOps.Api.Controllers;
 
 [ApiController]
 [Route("api/inbox")]
+[Authorize(Roles = AppRoles.Tenant + "," + AppRoles.Admin)]
 public sealed class InboxController : ControllerBase
 {
     private const string AssignedAgentKey = "assignedAgent";
@@ -213,7 +214,6 @@ public sealed class InboxController : ControllerBase
         });
     }
 
-    [Authorize(Roles = AppRoles.Tenant)]
     [HttpPost("conversations/{conversationId:guid}/assign")]
     public async Task<IActionResult> Assign(Guid conversationId, [FromBody] AssignConversationRequest? request, CancellationToken ct)
     {
@@ -240,7 +240,6 @@ public sealed class InboxController : ControllerBase
         return Ok(new { message = "Conversation assigned.", conversationId, agent = actor });
     }
 
-    [Authorize(Roles = AppRoles.Tenant)]
     [HttpPost("conversations/{conversationId:guid}/unassign")]
     public async Task<IActionResult> Unassign(Guid conversationId, CancellationToken ct)
     {
@@ -263,7 +262,6 @@ public sealed class InboxController : ControllerBase
         return Ok(new { message = "Conversation unassigned.", conversationId });
     }
 
-    [Authorize(Roles = AppRoles.Tenant)]
     [HttpPost("conversations/{conversationId:guid}/takeover")]
     public async Task<IActionResult> Takeover(Guid conversationId, CancellationToken ct)
     {
@@ -279,7 +277,6 @@ public sealed class InboxController : ControllerBase
         return Ok(new { message = "Conversation marked as AwaitingHuman.", conversationId });
     }
 
-    [Authorize(Roles = AppRoles.Tenant)]
     [HttpPost("conversations/{conversationId:guid}/release")]
     public async Task<IActionResult> Release(Guid conversationId, CancellationToken ct)
     {
@@ -296,7 +293,6 @@ public sealed class InboxController : ControllerBase
         return Ok(new { message = "Conversation returned to bot.", conversationId });
     }
 
-    [Authorize(Roles = AppRoles.Tenant)]
     [HttpPost("conversations/{conversationId:guid}/resolve")]
     public async Task<IActionResult> Resolve(Guid conversationId, CancellationToken ct)
     {
@@ -384,7 +380,6 @@ public sealed class InboxController : ControllerBase
         ));
     }
 
-    [Authorize(Roles = AppRoles.Tenant)]
     [HttpPost("conversations/{conversationId:guid}/messages")]
     public async Task<IActionResult> SendHumanMessage(
         Guid conversationId,
@@ -422,7 +417,6 @@ public sealed class InboxController : ControllerBase
         return Ok(new { message = "Human message sent.", conversationId });
     }
 
-    [Authorize(Roles = AppRoles.Tenant)]
     [HttpPost("conversations/{conversationId:guid}/notes")]
     public async Task<IActionResult> AddInternalNote(
         Guid conversationId,
