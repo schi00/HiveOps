@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es" class="dark"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiveOps Support</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+<script>tailwind.config={darkMode:'class',theme:{extend:{colors:{slate:{950:'#020617',900:'#0f172a',800:'#1e293b'},indigo:{500:'#6366f1',600:'#4f46e5'},emerald:{500:'#10b981'},rose:{500:'#f43f5e'},amber:{500:'#f59e0b'}}}}}</script>
+<style>
+body{font-family:Inter,system-ui,sans-serif;}
+.glass{background:rgba(30,41,59,0.5);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.08);}
+.glass-strong{background:rgba(15,23,42,0.85);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.1);}
+.drawer{transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);}
+.drawer.open{transform:translateX(0);}
+.modal-overlay{opacity:0;pointer-events:none;transition:opacity .25s;}
+.modal-overlay.open{opacity:1;pointer-events:auto;}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+.view-section{display:none;opacity:0;}
+.view-section.active{display:block;}
+</style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+<div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950">
+<div class="glass-strong rounded-2xl p-10 w-full max-w-md">
+<div class="flex items-center gap-3 mb-8"><div class="w-10 h-10 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-xl">S</div><h1 class="text-2xl font-bold">HiveOps Support</h1></div>
+<form id="login-form" class="space-y-4">
+<input id="lu" type="text" class="w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-700 focus:border-indigo-500 outline-none" placeholder="admin" value="admin"/>
+<input id="lp" type="password" class="w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-700 focus:border-indigo-500 outline-none" placeholder="password" value="admin123"/>
+<button type="submit" class="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all">Ingresar</button>
+<div id="le" class="text-rose-400 text-sm hidden"></div>
+</form></div></div>
+<div id="app" class="hidden">
+<nav class="fixed top-0 left-0 right-0 h-16 glass z-40 flex items-center justify-between px-6">
+<div class="flex items-center gap-3"><div class="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center text-white font-bold">S</div><span class="font-semibold">HiveOps Support</span><span id="rb" class="ml-2 px-2 py-0.5 rounded text-xs bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"></span></div>
+<div class="flex items-center gap-1">
+<button onclick="n('dashboard')" id="n-dash" class="px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all">Dashboard</button>
+<button onclick="n('incidents')" id="n-inc" class="px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all">Incidentes</button>
+<button onclick="n('kb')" id="n-kb" class="px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all">KB</button>
+<button onclick="n('admin')" id="n-adm" class="px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all hidden">Admin</button>
+<button onclick="logout()" class="ml-2 px-3 py-1.5 rounded-lg text-sm text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-all">Salir</button>
+</div></nav>
+<main class="pt-20 pb-10 px-6 max-w-7xl mx-auto">
+<div id="v-dash" class="view-section space-y-6">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+<div class="glass rounded-xl p-6"><div class="flex justify-between mb-2"><span class="text-sm text-slate-400">Abiertos</span><div class="status-dot bg-amber-500 animate-pulse"></div></div><div class="text-3xl font-bold" id="c-open">0</div></div>
+<div class="glass rounded-xl p-6"><div class="flex justify-between mb-2"><span class="text-sm text-slate-400">Criticos</span><div class="status-dot bg-rose-500 animate-pulse"></div></div><div class="text-3xl font-bold" id="c-crit">0</div></div>
+<div class="glass rounded-xl p-6"><div class="flex justify-between mb-2"><span class="text-sm text-slate-400">Resueltos</span><div class="status-dot bg-emerald-500"></div></div><div class="text-3xl font-bold" id="c-res">0</div></div>
+<div class="glass rounded-xl p-6"><div class="flex justify-between mb-2"><span class="text-sm text-slate-400">Tiempo medio</span><svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div><div class="text-3xl font-bold" id="c-avg">0</div></div>
+</div>
+<div class="flex gap-3">
+<button onclick="om('mc')" class="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">+ Nuevo Incidente</button>
+<button onclick="ld()" class="px-5 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium">Actualizar</button>
+</div>
+<div class="glass rounded-xl overflow-hidden"><div class="px-6 py-4 border-b border-white/5 flex justify-between"><h2 class="font-semibold text-lg">Recientes</h2><button onclick="n('incidents')" class="text-sm text-indigo-400 hover:text-indigo-300">Ver todos &#8594;</button></div><div id="l-rec" class="divide-y divide-white/5"><div class="p-8 text-center text-slate-500">Cargando...</div></div></div>
+</div>
+<div id="v-inc" class="view-section space-y-4">
+<div class="flex justify-between"><h2 class="text-2xl font-bold">Incidentes</h2>
+<div class="flex gap-2"><select id="fs" onchange="li()" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm"><option value="">Todos</option><option value="Open">Abierto</option><option value="InProgress">En progreso</option><option value="Resolved">Resuelto</option><option value="Closed">Cerrado</option></select><select id="fv" onchange="li()" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm"><option value="">Severidad</option><option value="Low">Baja</option><option value="Medium">Media</option><option value="High">Alta</option><option value="Critical">Critica</option></select><button onclick="om('mc')" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">+ Nuevo</button></div></div>
+<div class="glass rounded-xl overflow-hidden"><div id="l-all" class="divide-y divide-white/5"><div class="p-8 text-center text-slate-500">Cargando...</div></div></div>
+</div>
+<div id="v-adm" class="view-section space-y-6">
+<h2 class="text-2xl font-bold">Administracion</h2>
+<div class="glass rounded-xl p-6"><h3 class="font-semibold text-lg mb-4">Cola de Merge</h3><div id="l-mer" class="space-y-3"><div class="text-center text-slate-500 py-8">Cargando...</div></div></div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="glass rounded-xl p-5 flex items-center gap-4"><div id="hd" class="w-3 h-3 rounded-full bg-emerald-500"></div><div><div class="text-sm text-slate-400">Base de Datos</div><div id="td" class="font-semibold">Healthy</div></div></div>
+<div class="glass rounded-xl p-5 flex items-center gap-4"><div id="hp" class="w-3 h-3 rounded-full bg-emerald-500"></div><div><div class="text-sm text-slate-400">Pipeline</div><div id="tp" class="font-semibold">Healthy</div></div></div>
+<div class="glass rounded-xl p-5 flex items-center gap-4"><div class="w-3 h-3 rounded-full bg-indigo-500"></div><div><div class="text-sm text-slate-400">Tests</div><div id="tt" class="font-semibold">Pendiente</div></div></div>
+</div></div>
+<div id="v-kb" class="view-section space-y-4">
+<div class="flex justify-between"><h2 class="text-2xl font-bold">Base de Conocimientos</h2>
+<div class="flex gap-2"><input id="kq" type="text" placeholder="Buscar..." class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm w-56" onkeyup="if(event.key==='Enter')sk()"/><button onclick="sk()" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">Buscar</button><button onclick="om('mk')" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm font-medium">+ Articulo</button></div></div>
+<div id="l-kb" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"><div class="glass rounded-xl p-8 text-center text-slate-500">Cargando...</div></div>
+</div>
+</main></div>
+
+<div id="mc" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+<div class="modal-content glass-strong rounded-2xl w-full max-w-lg mx-4 p-6">
+<div class="flex justify-between mb-6"><h3 class="text-xl font-bold">Nuevo Incidente</h3><button onclick="cm('mc')" class="text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
+<form id="fc" class="space-y-4">
+<input id="ct" type="text" placeholder="Titulo" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-indigo-500 outline-none" required/>
+<textarea id="cd" rows="4" placeholder="Descripcion" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-indigo-500 outline-none resize-none" required></textarea>
+<div class="grid grid-cols-2 gap-3"><select id="cv" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none"><option value="Low">Baja</option><option value="Medium" selected>Media</option><option value="High">Alta</option><option value="Critical">Critica</option></select><select id="cc" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none"><option value="Other">Otro</option><option value="CodeBug">Bug</option><option value="DbCorruption">BD</option><option value="ConfigError">Config</option><option value="Performance">Perf</option><option value="Security">Seg</option></select></div>
+<div class="flex justify-end gap-3"><button type="button" onclick="cm('mc')" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white">Cancelar</button><button type="submit" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">Crear</button></div>
+</form></div></div>
+
+<div id="mk" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+<div class="modal-content glass-strong rounded-2xl w-full max-w-2xl mx-4 p-6">
+<div class="flex justify-between mb-6"><h3 class="text-xl font-bold">Nuevo Articulo KB</h3><button onclick="cm('mk')" class="text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
+<form id="fk" class="space-y-4">
+<input id="kt" type="text" placeholder="Titulo" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none" required/>
+<input id="kc" type="text" placeholder="Categoria" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none"/>
+<input id="ktg" type="text" placeholder="Tags (coma separados)" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none"/>
+<textarea id="kb" rows="4" placeholder="Contenido" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none resize-none" required></textarea>
+<textarea id="ks" rows="3" placeholder="Pasos de resolucion" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none resize-none"></textarea>
+<div class="flex items-center gap-2"><input id="kp" type="checkbox" class="rounded bg-slate-800 border-slate-700"/><label class="text-sm text-slate-400">Publicado</label></div>
+<div class="flex justify-end gap-3"><button type="button" onclick="cm('mk')" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white">Cancelar</button><button type="submit" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">Guardar</button></div>
+</form></div></div>
+
+<div id="dr" class="fixed top-0 right-0 bottom-0 w-full max-w-xl glass-strong z-50 drawer overflow-y-auto">
+<div class="p-6">
+<div class="flex justify-between mb-6"><h3 class="text-xl font-bold">Detalle</h3><button onclick="cd()" class="text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
+<div id="db"><div class="text-center text-slate-500 py-10">Cargando...</div></div>
+</div></div>
+
+<div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300">
+<div class="glass-strong rounded-lg px-5 py-3 flex items-center gap-3 shadow-xl border border-white/10">
+<div id="ti" class="w-5 h-5 rounded-full flex items-center justify-center"></div><span id="tm" class="font-medium"></span>
+</div></div>
+
+<script src="app.js"></script>
+</body></html>

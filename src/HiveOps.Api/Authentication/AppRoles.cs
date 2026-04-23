@@ -1,0 +1,8 @@
+namespace HiveOps.Api.Authentication;
+
+public static class AppRoles
+{
+    public const string Admin = "Admin";
+    public const string SuperAdmin = "SuperAdmin";
+    public const string Tenant = "Tenant";
+}

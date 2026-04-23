@@ -1,0 +1,2227 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HiveOps Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4f2ed;
+      --surface: rgba(255,255,255,.9);
+      --ink: #15231d;
+      --muted: #61736b;
+      --line: #d8ddd7;
+      --brand: #126a57;
+      --brand-2: #f1a53a;
+      --danger: #b94035;
+      --shadow: 0 24px 48px rgba(21, 35, 29, .10);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Manrope", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 10%, rgba(18,106,87,.12), transparent 25%),
+        radial-gradient(circle at 90% 15%, rgba(241,165,58,.18), transparent 28%),
+        linear-gradient(180deg, #f8f7f3, var(--bg));
+      min-height: 100vh;
+    }
+
+    .wrap { max-width: 1240px; margin: 0 auto; padding: 28px; }
+    .hidden { display: none !important; }
+    .hero { display: grid; grid-template-columns: 1.15fr .85fr; gap: 20px; align-items: stretch; }
+
+    .splash, .login-card, .app-shell {
+      background: var(--surface);
+      border: 1px solid rgba(216,221,215,.9);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+    }
+
+    .splash {
+      padding: 34px;
+      background: linear-gradient(140deg, rgba(18,106,87,.96), rgba(21,53,45,.96));
+      color: #f7fff9;
+      position: relative;
+      overflow: hidden;
+    }
+    .splash::after {
+      content: "";
+      position: absolute;
+      width: 260px;
+      height: 260px;
+      border-radius: 50%;
+      right: -80px;
+      top: -80px;
+      background: radial-gradient(circle, rgba(241,165,58,.45), transparent 65%);
+    }
+
+    .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: .18em; color: #b4e8d6; font-weight: 800; }
+    h1 { margin: 12px 0 10px; font-size: clamp(34px, 5vw, 56px); line-height: .95; letter-spacing: -.04em; }
+    .lead { max-width: 560px; color: #d4efe4; line-height: 1.6; font-size: 16px; }
+
+    .mini-grid { margin-top: 26px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .mini-card { padding: 14px; border-radius: 18px; background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.14); }
+    .mini-card strong { display: block; font-size: 22px; }
+    .mini-card span { font-size: 12px; color: #c6e9dc; }
+
+    .login-card { padding: 26px; }
+    .login-card h2 { margin: 0 0 6px; font-size: 28px; letter-spacing: -.03em; }
+    .login-card p { margin: 0 0 20px; color: var(--muted); }
+    .input-group { margin-bottom: 14px; }
+    label { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; color: #32443c; font-size: 13px; font-weight: 700; }
+
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 13px 14px;
+      font: inherit;
+      color: var(--ink);
+      background: #fff;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: rgba(18,106,87,.55); box-shadow: 0 0 0 4px rgba(18,106,87,.10); }
+
+    button { border: none; border-radius: 14px; padding: 12px 16px; font: inherit; font-weight: 800; cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease; }
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: .65; cursor: not-allowed; transform: none; }
+    .btn-primary { background: linear-gradient(90deg, var(--brand), #0f5b4a); color: #fff; box-shadow: 0 14px 28px rgba(18,106,87,.22); }
+    .btn-secondary { background: #e9f3ef; color: #175344; }
+    .btn-warning { background: #ffedd5; color: #7c5310; }
+    .btn-success { background: #e4f5ec; color: #136249; }
+    .login-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+    .status { margin-top: 14px; min-height: 20px; font-size: 13px; }
+    .ok { color: var(--brand); }
+    .error { color: var(--danger); }
+    .muted { color: var(--muted); }
+
+    .tip {
+      display: inline-flex; width: 17px; height: 17px; border-radius: 50%; justify-content: center; align-items: center;
+      background: #dce9e2; color: #225143; font-size: 11px; font-weight: 800; position: relative; cursor: help;
+    }
+    .tip:hover::after {
+      content: attr(data-tip); position: absolute; top: 23px; left: 0; width: 260px; background: #20352d; color: #effcf6;
+      border-radius: 10px; padding: 9px 10px; line-height: 1.45; font-size: 11px; z-index: 50; box-shadow: var(--shadow);
+    }
+
+    .app-shell { margin-top: 22px; padding: 22px; }
+    .shell-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+    .identity h2 { margin: 0; font-size: 30px; letter-spacing: -.03em; }
+    .identity p { margin: 6px 0 0; color: var(--muted); }
+    .badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; background: #edf6f1; color: #195341; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; }
+    .tabs { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+    .tab { background: #f1f4f1; color: #294238; border: 1px solid #dde3dd; }
+    .tab.active { background: #fff; box-shadow: 0 8px 18px rgba(21,35,29,.08); border-color: #c8d5ce; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+    .card { padding: 18px; border: 1px solid #e3e7e2; border-radius: 18px; background: linear-gradient(180deg, #fff, #fbfcfb); }
+    .card .label { font-size: 12px; color: var(--muted); }
+    .card .value { margin-top: 6px; font-size: 28px; font-weight: 800; letter-spacing: -.04em; }
+
+    .table-card, .settings-card { border: 1px solid #e3e7e2; border-radius: 22px; background: #fff; padding: 18px; }
+    .table-card + .table-card, .settings-card + .settings-card { margin-top: 16px; }
+    .table-head, .section-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+    .section-head h3, .table-head h3 { margin: 0; font-size: 20px; }
+    .section-head p, .table-head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    .subsection-title { margin: 18px 0 10px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #587066; }
+    .settings-save-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      padding: 12px 14px;
+      border: 1px solid #dce7e0;
+      border-radius: 16px;
+      background: #f8fbf9;
+    }
+    .save-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 800;
+      background: #edf3ef;
+      color: #496056;
+    }
+    .save-indicator.dirty { background: #fff4e5; color: #8a5b15; }
+    .save-indicator.saved { background: #e9f6ef; color: #136249; }
+    .save-indicator.saving { background: #eef4ff; color: #1e4f9b; }
+    .save-help { font-size: 12px; color: var(--muted); }
+    .search-box { max-width: 320px; min-width: 220px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid #edf1ee; text-align: left; padding: 11px 8px; }
+    th { color: #31453c; cursor: pointer; user-select: none; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+    tr:hover td { background: #fbfcfb; }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+    .setting { border: 1px solid #e5e9e5; background: #fbfcfb; border-radius: 16px; padding: 12px; overflow: hidden; }
+    .setting textarea { min-height: 84px; }
+    .chart-wrap { position: relative; height: 250px; width: 100%; }
+    .setting canvas { display: block; }
+    .tenant-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .tenant-item { border: 1px solid #e5e9e5; border-radius: 16px; background: #fbfcfb; padding: 14px; cursor: pointer; }
+    .tenant-item.active { border-color: rgba(18,106,87,.45); box-shadow: 0 10px 20px rgba(18,106,87,.10); }
+    .tenant-item strong { display: block; font-size: 16px; }
+    .tenant-item span { display: block; font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+    .inbox-layout { display: grid; grid-template-columns: var(--inbox-sidebar-width, minmax(300px, 420px)) 6px minmax(0, 1fr); gap: 0; height: calc(100vh - 280px); overflow: hidden; }
+    .inbox-conversation-list { max-height: 520px; overflow: auto; border: 1px solid #e7ece8; border-radius: 14px; }
+    .inbox-item {
+      width: 100%;
+      border: none;
+      border-bottom: 1px solid #edf1ee;
+      border-radius: 0;
+      padding: 12px;
+      background: #fff;
+      color: #22362f;
+      text-align: left;
+      cursor: pointer;
+      display: block;
+      box-shadow: none;
+      transform: none;
+    }
+    .inbox-item:hover { background: #f8fbf9; transform: none; }
+    .inbox-item.active { background: #ecf6f2; }
+    .inbox-item-title { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 800; }
+    .inbox-item-meta { margin-top: 6px; color: #5e7068; font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 9px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .pill.active { background: #e8f5ef; color: #136249; }
+    .pill.awaitinghuman { background: #fff5e6; color: #7c5310; }
+    .inbox-side-panel { display: flex; flex-direction: column; overflow: hidden; }
+    .inbox-side-panel .inbox-conversation-list { flex: 1; max-height: none; }
+    .inbox-resizer { cursor: col-resize; background: transparent; border-left: 1px solid #e7ece8; transition: background 0.15s; }
+    .inbox-resizer:hover, .inbox-resizer.resizing { background: #126a57; }
+    .inbox-detail-stack { display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+    .inbox-sticky-header { position: sticky; top: 0; background: #fbfcfb; z-index: 10; padding: 10px 12px 8px; border-bottom: 1px solid #e7ece8; border-radius: 14px 14px 0 0; }
+    .inbox-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .inbox-thread {
+      flex: 1;
+      border: 1px solid #e7ece8;
+      border-top: none;
+      border-bottom: none;
+      background: #fbfcfb;
+      padding: 12px;
+      min-height: 0;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .inbox-compose-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 8px 12px 12px; background: #fbfcfb; border: 1px solid #e7ece8; border-radius: 0 0 14px 14px; }
+    .bubble { border-radius: 12px; padding: 9px 11px; line-height: 1.45; font-size: 13px; border: 1px solid #e2e8e3; max-width: 94%; }
+    .bubble.user { background: #ffffff; align-self: flex-start; }
+    .bubble.assistant { background: #ebf5f1; align-self: flex-end; }
+    .bubble.system { background: #f8f2e8; align-self: center; }
+    .bubble .meta { margin-top: 5px; font-size: 11px; color: #60726a; }
+    /* ── Wizard Styles ───────────────────────────────────────────────────────── */
+    .wizard-steps { display: flex; gap: 4px; margin-bottom: 20px; background: #eee; border-radius: 12px; padding: 4px; }
+    .wizard-step { 
+      flex: 1; padding: 10px; border: none; background: none; border-radius: 8px; 
+      font-size: 12px; font-weight: 800; color: #666; cursor: pointer; transition: all 0.2s;
+      text-align: center;
+    }
+    .wizard-step.active { background: #fff; color: var(--brand); box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+    .wizard-step.completed { color: var(--brand); }
+    .wizard-content { display: none; }
+    .wizard-content.active { display: block; animation: fade-in 0.3s ease; }
+    @keyframes fade-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+    .wizard-footer { display: flex; justify-content: space-between; margin-top: 24px; padding-top: 16px; border-top: 1px solid #eee; }
+    
+    /* ── Accordion Styles ─────────────────────────────────────────────────────── */
+    .accordion-item { border: 1px solid #e3e7e2; border-radius: 16px; margin-bottom: 12px; overflow: hidden; background: #fff; }
+    .accordion-header { 
+      padding: 16px; background: #fbfcfb; cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+      user-select: none; transition: background 0.2s;
+    }
+    .accordion-header:hover { background: #f4f7f5; }
+    .accordion-header h3 { margin: 0; font-size: 16px; color: #2d4a41; }
+    .accordion-header .icon { transition: transform 0.3s; color: var(--muted); }
+    .accordion-item.open .accordion-header { border-bottom: 1px solid #e3e7e2; background: #fff; }
+    .accordion-item.open .accordion-header .icon { transform: rotate(180deg); }
+    .accordion-body { display: none; padding: 18px; }
+    .accordion-item.open .accordion-body { display: block; }
+    .accordion-body .settings-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    @media (max-width: 980px) {
+      .inbox-layout { grid-template-columns: 1fr; }
+      .inbox-conversation-list { max-height: 280px; }
+      .inbox-thread { max-height: 320px; }
+    }
+
+    @media (max-width: 980px) { .hero { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) {
+      .wrap { padding: 16px; }
+      .splash, .login-card, .app-shell { border-radius: 22px; }
+      h1 { font-size: 38px; }
+      .mini-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Modals ─────────────────────────────────────────────────────────────── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(21,35,29,.55); z-index: 200;
+      justify-content: center; align-items: center;
+      backdrop-filter: blur(4px);
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: #fff; border-radius: 22px; padding: 30px;
+      max-width: 440px; width: 92%;
+      box-shadow: 0 32px 64px rgba(21,35,29,.22);
+      animation: modal-in .18s ease;
+    }
+    @keyframes modal-in { from { transform: translateY(18px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+    .modal-header h3 { margin: 0; font-size: 22px; letter-spacing: -.03em; }
+    .modal-close {
+      background: #f1f4f1; border: none; border-radius: 10px; width: 32px; height: 32px;
+      font-size: 18px; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .modal-close:hover { background: #e5e9e4; }
+    .btn-link {
+      background: none; border: none; padding: 0; color: var(--brand);
+      font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: underline;
+      text-decoration-color: transparent; transition: text-decoration-color .16s;
+    }
+    .btn-link:hover { text-decoration-color: var(--brand); transform: none; }
+    .success-msg { background: #edf8f2; border: 1px solid #b8e6cc; border-radius: 14px; padding: 14px 16px; color: #14583a; font-size: 14px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero" id="loginView">
+      <article class="splash">
+        <div class="eyebrow">Comercio inteligente</div>
+        <h1>Más ventas. Menos trabajo manual.</h1>
+        <p class="lead">Automatizá la atención al cliente, controlá tu inventario en tiempo real y tomá decisiones basadas en datos — todo desde un único lugar, sin necesidad de conocimientos técnicos.</p>
+        <div class="mini-grid">
+          <div class="mini-card"><strong>Automatización</strong><span>Respondé consultas de clientes las 24 hs sin intervención humana.</span></div>
+          <div class="mini-card"><strong>Visibilidad total</strong><span>Stock, ventas y métricas clave siempre a mano.</span></div>
+          <div class="mini-card"><strong>Escalable</strong><span>Crece con tu negocio sin cambiar de plataforma.</span></div>
+        </div>
+      </article>
+
+      <article class="login-card">
+        <h2>Ingresar</h2>
+        <p>Ingresa con usuario y contraseña. El sistema detecta automáticamente si ingresas como tenant o como administrador.</p>
+        <div class="input-group">
+          <label for="username">Usuario</label>
+          <input id="username" placeholder="Ingresa tu usuario" autocomplete="username" />
+        </div>
+        <div class="input-group">
+          <label for="password">Contraseña</label>
+          <input id="password" type="password" placeholder="Ingresa tu contraseña" autocomplete="current-password" />
+        </div>
+        <div class="login-actions">
+          <button class="btn-primary" id="loginBtn">Entrar al portal</button>
+          <button class="btn-secondary" id="refreshMeBtn">Revisar sesión actual</button>
+        </div>
+        <div style="margin-top: 10px; text-align: center;">
+          <button class="btn-link" id="forgotBtn">¿Olvidaste tu contraseña?</button>
+        </div>
+        <div id="loginStatus" class="status muted"></div>
+      </article>
+    </section>
+
+    <section class="app-shell hidden" id="appView">
+        <!-- ── Modal: Recuperar contraseña ───────────────────────────────────── -->
+        <div class="modal-overlay" id="recoveryModal" role="dialog" aria-modal="true" aria-labelledby="recoveryModalTitle">
+          <div class="modal-box">
+            <div class="modal-header">
+              <h3 id="recoveryModalTitle">Recuperar contraseña</h3>
+              <button class="modal-close" id="closeRecoveryBtn" aria-label="Cerrar">×</button>
+            </div>
+            <div id="recoveryStep1">
+              <p style="margin:0 0 18px; color: var(--muted); font-size:14px;">Ingresá tu correo electrónico y te enviamos un enlace para restablecer tu contraseña.</p>
+              <div class="input-group">
+                <label for="recoveryEmail">Correo electrónico</label>
+                <input id="recoveryEmail" type="email" placeholder="tu@correo.com" autocomplete="email" />
+              </div>
+              <div class="login-actions" style="margin-top:6px;">
+                <button class="btn-primary" id="sendRecoveryBtn">Enviar instrucciones</button>
+              </div>
+              <div id="recoveryStatus" class="status muted" style="margin-top:12px;"></div>
+            </div>
+            <div id="recoveryStep2" class="hidden">
+              <div class="success-msg">
+                ✓ Te enviamos un correo con el enlace de recuperación. Revisá tu bandeja de entrada (y la carpeta de spam si no lo ves en unos minutos).
+              </div>
+              <div class="login-actions" style="margin-top:18px; justify-content: center;">
+                <button class="btn-secondary" id="closeRecoveryOkBtn">Cerrar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Modal: Restablecer contraseña (desde link de email) ────────────── -->
+        <div class="modal-overlay" id="resetModal" role="dialog" aria-modal="true" aria-labelledby="resetModalTitle">
+          <div class="modal-box">
+            <div class="modal-header">
+              <h3 id="resetModalTitle">Nueva contraseña</h3>
+              <button class="modal-close" id="closeResetBtn" aria-label="Cerrar">×</button>
+            </div>
+            <div id="resetStep1">
+              <p style="margin:0 0 18px; color: var(--muted); font-size:14px;">Elegí una nueva contraseña para tu cuenta. Debe tener al menos 6 caracteres.</p>
+              <div class="input-group">
+                <label for="newPassword">Nueva contraseña</label>
+                <input id="newPassword" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password" />
+              </div>
+              <div class="input-group">
+                <label for="confirmPassword">Confirmá la contraseña</label>
+                <input id="confirmPassword" type="password" placeholder="Repetir contraseña" autocomplete="new-password" />
+              </div>
+              <div class="login-actions" style="margin-top:6px;">
+                <button class="btn-primary" id="resetBtn">Guardar nueva contraseña</button>
+              </div>
+              <div id="resetStatus" class="status muted" style="margin-top:12px;"></div>
+            </div>
+            <div id="resetStep2" class="hidden">
+              <div class="success-msg">
+                ✓ ¡Tu contraseña fue actualizada! Ya podés iniciar sesión con tu nueva contraseña.
+              </div>
+              <div class="login-actions" style="margin-top:18px; justify-content: center;">
+                <button class="btn-secondary" id="closeResetOkBtn">Ir al inicio de sesión</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      <div class="shell-header">
+        <div class="identity">
+          <div class="badge" id="roleBadge"></div>
+          <h2 id="shellTitle">Panel</h2>
+          <p id="shellSubtitle"></p>
+        </div>
+        <div class="toolbar">
+          <button class="btn-secondary" id="refreshBtn">Actualizar</button>
+          <button class="btn-secondary hidden" id="loadTenantsBtn">Cargar tenants</button>
+          <button class="btn-warning hidden" id="syncBtn">Ejecutar sync</button>
+          <button class="btn-secondary" id="logoutBtn">Salir</button>
+        </div>
+      </div>
+
+      <div class="tabs" id="tabs"></div>
+      <div id="portalStatus" class="status muted"></div>
+
+      <section class="panel active" id="panel-overview">
+        <div class="cards" id="summaryCards"></div>
+      </section>
+
+      <section class="panel" id="panel-products">
+        <div class="table-card">
+          <div class="table-head">
+            <div>
+              <h3>Productos y stock</h3>
+              <p>Vista operativa para encontrar rápido qué vender, qué falta y qué actualizar.</p>
+            </div>
+            <div class="search-box">
+              <input id="stockSearch" placeholder="Buscar por nombre, marca, categoría o SKU" />
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th data-sort="name">Nombre</th>
+                <th data-sort="brand">Marca</th>
+                <th data-sort="category">Categoría</th>
+                <th data-sort="sku">SKU</th>
+                <th data-sort="price">Precio</th>
+                <th data-sort="stock">Stock</th>
+                <th data-sort="updated">Actualizado</th>
+              </tr>
+            </thead>
+            <tbody id="stockBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-top-products">
+        <div class="table-card">
+          <div class="table-head">
+            <div>
+              <h3>Más vendidos</h3>
+              <p>Productos con mejor tracción comercial del tenant actual.</p>
+            </div>
+          </div>
+          <table>
+            <thead><tr><th>Producto</th><th>Marca</th><th>Unidades</th><th>Facturación</th></tr></thead>
+            <tbody id="topProductsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-inbox">
+        <div class="table-card">
+          <div class="table-head">
+            <div>
+              <h3>Inbox humano</h3>
+              <p>Gestiona conversaciones activas, takeover, asignación y notas internas.</p>
+            </div>
+            <div class="toolbar">
+              <select id="inboxStatusFilter">
+                <option value="">Todos los estados</option>
+                <option value="Active">Active</option>
+                <option value="AwaitingHuman">AwaitingHuman</option>
+                <option value="Resolved">Resolved</option>
+                <option value="Abandoned">Abandoned</option>
+              </select>
+              <input id="inboxAssignedFilter" placeholder="Filtrar por agente asignado" />
+              <button class="btn-secondary" id="refreshInboxBtn">Actualizar</button>
+            </div>
+          </div>
+          <div id="inboxSlaSummaryBar" class="sla-bar" style="display:none;"></div>
+          <div class="inbox-layout" id="inboxLayout">
+            <div class="inbox-side-panel">
+              <div class="inbox-conversation-list" id="inboxConversationList"></div>
+              <div id="inboxStatus" class="status muted" style="padding:8px; border-top:1px solid #eee;"></div>
+            </div>
+            <div class="inbox-resizer" id="inboxResizer"></div>
+            <div class="inbox-detail-stack">
+              <div class="inbox-sticky-header" id="inboxConversationHeader">
+                <div class="section-head" style="margin-bottom:8px;">
+                  <div>
+                    <h3 id="inboxSelectedTitle">Conversación</h3>
+                    <div id="inboxConversationMeta" class="status muted">Selecciona una conversación</div>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:12px;">
+                    <label style="font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px;"><input id="inboxIncludeInternal" type="checkbox" /> Internas</label>
+                    <button class="btn-success" id="inboxResolveBtn">Resolver ✓</button>
+                  </div>
+                </div>
+                <div class="inbox-actions">
+                  <button class="btn-secondary" id="inboxTakeoverBtn">Takeover</button>
+                  <button class="btn-secondary" id="inboxReleaseBtn">Release</button>
+                  <button class="btn-secondary" id="inboxAssignBtn">Asignarme</button>
+                  <button class="btn-warning" id="inboxUnassignBtn">Quitar</button>
+                </div>
+              </div>
+              <div id="inboxCustomerProfileBar" style="display:none; margin:10px 14px 0; padding:8px 12px; background:#f7fbf9; border:1px solid #d8ede5; border-radius:10px; font-size:12px; color:#2d4a41; gap:16px; flex-wrap:wrap;"></div>
+              <div class="inbox-thread" id="inboxThread"></div>
+              <div class="inbox-compose-grid">
+                <div class="setting" style="padding:8px;">
+                  <label style="font-size:11px; margin-bottom:4px;">Respuesta humana</label>
+                  <textarea id="inboxMessageInput" style="min-height:60px;" placeholder="Escribe al cliente..."></textarea>
+                  <div class="toolbar" style="margin-top:6px;">
+                    <button class="btn-primary" id="inboxSendBtn">Enviar</button>
+                  </div>
+                </div>
+                <div class="setting" style="padding:8px;">
+                  <label style="font-size:11px; margin-bottom:4px;">Nota interna</label>
+                  <textarea id="inboxNoteInput" style="min-height:60px;" placeholder="Contexto para el equipo..."></textarea>
+                  <div class="toolbar" style="margin-top:6px;">
+                    <button class="btn-secondary" id="inboxAddNoteBtn">Nota</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="table-card" style="margin-top:18px;">
+          <div class="table-head">
+            <div>
+              <h3>Analytics del inbox</h3>
+              <p>Métricas de conversaciones del soporte humano.</p>
+            </div>
+            <div class="toolbar">
+              <button class="btn-secondary" id="refreshAnalyticsBtn">Actualizar</button>
+            </div>
+          </div>
+          <div id="inboxAnalyticsCards" class="cards" style="margin-bottom:16px;"></div>
+          <div style="display:flex; gap:18px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:220px;">
+              <p style="font-size:12px; font-weight:700; color:var(--muted); margin-bottom:6px;">DISTRIBUCIÓN POR CANAL</p>
+              <div id="inboxAnalyticsByChannel"></div>
+            </div>
+            <div style="flex:1; min-width:220px;">
+              <p style="font-size:12px; font-weight:700; color:var(--muted); margin-bottom:6px;">DISTRIBUCIÓN POR ESTADO</p>
+              <div id="inboxAnalyticsByStatus"></div>
+            </div>
+          </div>
+          <div id="inboxAnalyticsStatus" class="status muted" style="margin-top:8px;"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-metrics">
+        <div class="table-card">
+          <div class="section-head">
+            <div>
+              <h3>Métricas del negocio</h3>
+              <p>Resumen por categoría, marca y evolución de ventas.</p>
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="setting">
+              <label>Productos por categoría</label>
+              <div class="chart-wrap"><canvas id="chartProductsByCategory"></canvas></div>
+              <div id="listProductsByCategory" class="status muted"></div>
+            </div>
+            <div class="setting">
+              <label>Productos por marca</label>
+              <div class="chart-wrap"><canvas id="chartProductsByBrand"></canvas></div>
+              <div id="listProductsByBrand" class="status muted"></div>
+            </div>
+          </div>
+          <div class="setting" style="margin-top:12px;">
+            <label>Ventas por día</label>
+            <div class="chart-wrap"><canvas id="chartSalesByDay"></canvas></div>
+            <div id="listSalesByDay" class="status muted"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-my-metrics">
+        <div class="table-card">
+          <div class="section-head">
+            <div>
+              <h3>Mis métricas</h3>
+              <p>Crea métricas personalizadas para tu operación y visualízalas en gráfico y lista.</p>
+            </div>
+          </div>
+          <div class="setting">
+            <label>Métricas personalizadas (JSON)</label>
+            <textarea id="tenantCustomMetrics" placeholder='[{"id":"m1","name":"Stock por categoría","metricType":"stock_total","groupBy":"category","topN":10}]'></textarea>
+            <div class="json-toolbar"><button class="btn-secondary" id="formatTenantCustomMetricsBtn" type="button">Formatear JSON</button></div>
+          </div>
+          <div class="toolbar" style="margin-top:12px;">
+            <button class="btn-secondary" id="saveTenantCustomMetricsBtn">Guardar métricas</button>
+            <button class="btn-secondary" id="refreshTenantCustomMetricsBtn">Actualizar resultados</button>
+          </div>
+          <div id="tenantCustomMetricsResults" style="margin-top:12px;"></div>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="panel-admin-tenants">
+        <div class="settings-card">
+          <div class="section-head">
+            <div>
+              <h3>Tenants</h3>
+              <p>Selecciona un tenant para revisar y parametrizar su comportamiento.</p>
+            </div>
+          </div>
+          <div class="tenant-list" id="tenantList"></div>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="panel-admin-settings">
+        <div class="settings-card">
+          <div class="section-head">
+            <div>
+              <h3>Configuración del bot</h3>
+              <p>Gestioná la identidad, integraciones y comportamiento avanzado del asistente.</p>
+            </div>
+          </div>
+          <div class="settings-save-bar">
+            <div>
+              <div id="settingsDirtyBadge" class="save-indicator">Sin cambios pendientes</div>
+              <div id="settingsSaveHelp" class="save-help">Elegí un tenant y configurá paso a paso.</div>
+            </div>
+            <div class="toolbar">
+              <button class="btn-primary" id="saveSettingsBtnTop">Guardar cambios</button>
+            </div>
+          </div>
+
+          <div class="wizard-steps" id="settingsWizardSteps">
+            <button class="wizard-step active" data-step="1">1. Identidad</button>
+            <button class="wizard-step" data-step="2">2. Catálogo</button>
+            <button class="wizard-step" data-step="3">3. WhatsApp</button>
+            <button class="wizard-step" data-step="4">4. Avanzado</button>
+          </div>
+
+          <!-- Step 1: Identidad y Mensajes -->
+          <div class="wizard-content active" id="wizardStep1">
+            <div class="accordion-item open">
+              <div class="accordion-header"><h3>Respuesta y Estilo</h3><span class="icon">▼</span></div>
+              <div class="accordion-body">
+                <div class="settings-grid">
+                  <div class="setting"><label>Nombre asistente</label><input id="assistantName" /></div>
+                  <div class="setting"><label>Tono</label><input id="tone" /></div>
+                  <div class="setting"><label>Idioma</label><input id="language" /></div>
+                  <div class="setting"><label>Máximo tokens</label><input id="maxTokens" type="number" /></div>
+                </div>
+              </div>
+            </div>
+            <div class="accordion-item">
+              <div class="accordion-header"><h3>Frases Principales</h3><span class="icon">▼</span></div>
+              <div class="accordion-body">
+                <div class="settings-grid">
+                  <div class="setting"><label>Bienvenida</label><textarea id="welcomeMessage"></textarea></div>
+                  <div class="setting"><label>Fallback (No entiendo)</label><textarea id="fallbackMessage"></textarea></div>
+                  <div class="setting"><label>Derivación humana</label><textarea id="handoffMessage"></textarea></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2: Catálogo -->
+          <div class="wizard-content" id="wizardStep2">
+            <div class="accordion-item open">
+              <div class="accordion-header"><h3>Origen de Datos</h3><span class="icon">▼</span></div>
+              <div class="accordion-body">
+                <div class="settings-grid">
+                  <div class="setting"><label>Fuente</label><select id="sourceType"><option value="0">Ninguna</option><option value="1">Google Sheets XLSX</option><option value="2">SQL Server</option></select></div>
+                  <div id="catalogSourceGoogle" style="display:none; grid-column: 1/-1;" class="grid-2">
+                    <div class="setting"><label>URL de Google Sheets</label><input id="sheetUrl" /></div>
+                    <div class="setting"><label>Nombre de hoja</label><input id="sheetName" /></div>
+                  </div>
+                  <div id="catalogSourceSql" style="display:none; grid-column: 1/-1;" class="grid-2">
+                    <div class="setting"><label>Cadena de conexión (SQL)</label><textarea id="sqlConnection"></textarea></div>
+                    <div class="setting"><label>Consulta SQL</label><textarea id="sqlQuery"></textarea></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="accordion-item">
+              <div class="accordion-header"><h3>Mapeo de Columnas e Inteligencia</h3><span class="icon">▼</span></div>
+              <div class="accordion-body">
+                <div class="settings-grid">
+                  <div class="setting"><label>Name</label><input id="mapName" /></div>
+                  <div class="setting"><label>Brand</label><input id="mapBrand" /></div>
+                  <div class="setting"><label>Category</label><input id="mapCategory" /></div>
+                  <div class="setting"><label>Description</label><input id="mapDescription" /></div>
+                  <div class="setting"><label>Price</label><input id="mapPrice" /></div>
+                  <div class="setting"><label>StockQuantity</label><input id="mapStock" /></div>
+                  <div class="setting"><label>Sku</label><input id="mapSku" /></div>
+                  <div class="setting"><label>Tags</label><input id="mapTags" /></div>
+                  <div class="setting" style="grid-column: 1 / -1;"><label>Atributos dinámicos (JSON)</label><textarea id="mapAttributes"></textarea><div class="json-toolbar"><button class="btn-secondary" id="formatMapAttributesBtn" type="button">Formatear JSON</button></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3: WhatsApp -->
+          <div class="wizard-content" id="wizardStep3">
+            <div class="settings-card" style="border:none; padding:0;">
+              <div class="section-head"><div><h3>Conexión WhatsApp Cloud API</h3><p>Validá tu token de Meta para habilitar el canal.</p></div></div>
+              <div class="setting">
+                <label>Access token</label>
+                <textarea id="whatsappApiKey" placeholder="Pega el token de Meta aquí"></textarea>
+              </div>
+              <div class="settings-grid" style="margin-top:12px;">
+                <div class="setting"><label><input id="interactiveButtonsEnabled" type="checkbox" /> Botones interactivos</label></div>
+                <div class="setting"><label><input id="interactiveMenuEnabled" type="checkbox" /> Menú de opciones</label></div>
+              </div>
+              <div class="toolbar" style="margin-top:16px;">
+                <button class="btn-secondary" id="validateWhatsAppTokenBtn">Probar y Guardar Token</button>
+              </div>
+              <div id="whatsAppTokenStatus" class="status muted"></div>
+            </div>
+          </div>
+
+          <!-- Step 4: Avanzado -->
+          <div class="wizard-content" id="wizardStep4">
+            <div class="accordion-item open">
+              <div class="accordion-header"><h3>Reglas y Escalación</h3><span class="icon">▼</span></div>
+              <div class="accordion-body">
+                <div class="settings-grid">
+                  <div class="setting" style="grid-column:1/-1;"><label>Palabras clave de escalación</label><textarea id="escalationKeywords"></textarea></div>
+                  <div class="setting"><label><input id="enableFrustrationEscalation" type="checkbox" /> Detección de frustración con IA</label></div>
+                </div>
+              </div>
+            </div>
+            <div class="accordion-item">
+              <div class="accordion-header"><h3>Webhooks y Definiciones</h3><span class="icon">▼</span></div>
+              <div class="accordion-body">
+                <div class="settings-grid">
+                  <div class="setting" style="grid-column:1/-1;"><label><input id="webhookEnabled" type="checkbox" /> Habilitar Webhook Saliente</label><input id="webhookUrl" style="margin-top:8px;" placeholder="https://..." /></div>
+                  <div class="setting" style="grid-column:1/-1;"><label>Secreto HMAC (opcional)</label><input id="webhookSecret" type="password" placeholder="••••••••" autocomplete="new-password" /></div>
+                  <div class="setting" style="grid-column:1/-1;"><label>Eventos suscritos</label><input id="webhookEvents" placeholder="handoff.requested, conversation.resolved" /></div>
+                  <div class="setting" style="grid-column:1/-1;"><label>Atributos de Catálogo (JSON)</label><textarea id="catalogAttributeDefinitions"></textarea><div class="json-toolbar"><button class="btn-secondary" id="formatCatalogAttributesBtn" type="button">Formatear JSON</button></div></div>
+                </div>
+                <div class="toolbar" style="margin-top:16px;">
+                  <button class="btn-secondary" id="saveCatalogAttributesBtn">Guardar atributos</button>
+                  <button class="btn-secondary" id="saveWebhookBtn">Guardar webhook</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wizard-footer">
+            <button class="btn-secondary" id="wizardPrevBtn" style="visibility:hidden;">Anterior</button>
+            <button class="btn-primary" id="wizardNextBtn">Siguiente</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="panel-admin-users">
+        <div class="settings-card">
+          <div class="section-head">
+            <div>
+              <h3>Usuarios del tenant</h3>
+              <p>ABM de usuarios para el tenant seleccionado.</p>
+            </div>
+          </div>
+          <div class="settings-grid">
+            <div class="setting"><label>Usuario</label><input id="newTenantUsername" /></div>
+            <div class="setting"><label>Email</label><input id="newTenantEmail" type="email" /></div>
+            <div class="setting"><label>Contraseña</label><input id="newTenantPassword" type="password" /></div>
+            <div class="setting"><label><input id="newTenantUserActive" type="checkbox" checked /> Activo</label></div>
+            <div class="setting"><label>ID usuario (edición)</label><input id="editTenantUserId" readonly /></div>
+          </div>
+          <div class="toolbar" style="margin-top:12px;">
+            <button class="btn-secondary" id="createTenantUserBtn">Crear usuario</button>
+            <button class="btn-secondary" id="updateTenantUserBtn">Guardar edición</button>
+            <button class="btn-secondary" id="refreshTenantUsersBtn">Actualizar listado</button>
+          </div>
+          <table style="margin-top:12px;">
+            <thead><tr><th>Usuario</th><th>Email</th><th>Estado</th><th>Acción</th></tr></thead>
+            <tbody id="tenantUsersBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel hidden" id="panel-admin-metrics">
+        <div class="settings-card">
+          <div class="section-head">
+            <div>
+              <h3>Métricas del bot</h3>
+              <p>Monitoreo operativo de calidad de respuesta y fallback.</p>
+            </div>
+            <div class="toolbar"><button class="btn-secondary" id="refreshAdminMetricsBtn">Actualizar</button></div>
+          </div>
+          <div class="cards" id="adminBotMetricCards"></div>
+          <div class="grid-2" style="margin-top:12px;">
+            <div class="setting">
+              <label>Respuestas por día</label>
+              <div class="chart-wrap"><canvas id="chartAdminResponses"></canvas></div>
+              <div id="listAdminResponses" class="status muted"></div>
+            </div>
+            <div class="setting">
+              <label>Fallbacks por día</label>
+              <div class="chart-wrap"><canvas id="chartAdminFallbacks"></canvas></div>
+              <div id="listAdminFallbacks" class="status muted"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script>
+    const state = {
+      me: null,
+      stockSortBy: 'name',
+      stockDesc: false,
+      tenants: [],
+      selectedTenantId: null,
+      selectedTenantName: null,
+      resetToken: null,
+      currentSettings: null,
+      inboxStatusFilter: '',
+      inboxAssignedFilter: '',
+      inboxIncludeInternal: false,
+      inboxSelectedConversationId: null,
+    };
+    const els = {
+      loginView: document.getElementById('loginView'),
+      appView: document.getElementById('appView'),
+      username: document.getElementById('username'),
+      password: document.getElementById('password'),
+      loginBtn: document.getElementById('loginBtn'),
+      refreshMeBtn: document.getElementById('refreshMeBtn'),
+      forgotBtn: document.getElementById('forgotBtn'),
+      loginStatus: document.getElementById('loginStatus'),
+      portalStatus: document.getElementById('portalStatus'),
+      roleBadge: document.getElementById('roleBadge'),
+      shellTitle: document.getElementById('shellTitle'),
+      shellSubtitle: document.getElementById('shellSubtitle'),
+      tabs: document.getElementById('tabs'),
+      summaryCards: document.getElementById('summaryCards'),
+      topProductsBody: document.getElementById('topProductsBody'),
+      stockBody: document.getElementById('stockBody'),
+      stockSearch: document.getElementById('stockSearch'),
+      inboxStatusFilter: document.getElementById('inboxStatusFilter'),
+      inboxAssignedFilter: document.getElementById('inboxAssignedFilter'),
+      inboxConversationList: document.getElementById('inboxConversationList'),
+      inboxConversationMeta: document.getElementById('inboxConversationMeta'),
+      inboxThread: document.getElementById('inboxThread'),
+      inboxIncludeInternal: document.getElementById('inboxIncludeInternal'),
+      inboxTakeoverBtn: document.getElementById('inboxTakeoverBtn'),
+      inboxReleaseBtn: document.getElementById('inboxReleaseBtn'),
+      inboxAssignBtn: document.getElementById('inboxAssignBtn'),
+      inboxUnassignBtn: document.getElementById('inboxUnassignBtn'),
+      inboxMessageInput: document.getElementById('inboxMessageInput'),
+      inboxSendBtn: document.getElementById('inboxSendBtn'),
+      inboxNoteInput: document.getElementById('inboxNoteInput'),
+      inboxAddNoteBtn: document.getElementById('inboxAddNoteBtn'),
+      refreshInboxBtn: document.getElementById('refreshInboxBtn'),
+      inboxStatus: document.getElementById('inboxStatus'),
+      inboxSlaSummaryBar: document.getElementById('inboxSlaSummaryBar'),
+      inboxResolveBtn: document.getElementById('inboxResolveBtn'),
+      inboxAnalyticsCards: document.getElementById('inboxAnalyticsCards'),
+      inboxCustomerProfileBar: document.getElementById('inboxCustomerProfileBar'),
+      inboxAnalyticsByChannel: document.getElementById('inboxAnalyticsByChannel'),
+      inboxAnalyticsByStatus: document.getElementById('inboxAnalyticsByStatus'),
+      inboxAnalyticsStatus: document.getElementById('inboxAnalyticsStatus'),
+      refreshAnalyticsBtn: document.getElementById('refreshAnalyticsBtn'),
+      tenantList: document.getElementById('tenantList'),
+      loadTenantsBtn: document.getElementById('loadTenantsBtn'),
+      syncBtn: document.getElementById('syncBtn'),
+      settingsDirtyBadge: document.getElementById('settingsDirtyBadge'),
+      settingsSaveHelp: document.getElementById('settingsSaveHelp'),
+      saveSettingsBtnTop: document.getElementById('saveSettingsBtnTop'),
+      escalationKeywords: document.getElementById('escalationKeywords'),
+      enableFrustrationEscalation: document.getElementById('enableFrustrationEscalation'),
+      webhookEnabled: document.getElementById('webhookEnabled'),
+      webhookUrl: document.getElementById('webhookUrl'),
+      webhookSecret: document.getElementById('webhookSecret'),
+      webhookEvents: document.getElementById('webhookEvents'),
+      saveWebhookBtn: document.getElementById('saveWebhookBtn'),
+      // Recovery modal
+      recoveryModal: document.getElementById('recoveryModal'),
+      recoveryEmail: document.getElementById('recoveryEmail'),
+      sendRecoveryBtn: document.getElementById('sendRecoveryBtn'),
+      recoveryStatus: document.getElementById('recoveryStatus'),
+      recoveryStep1: document.getElementById('recoveryStep1'),
+      recoveryStep2: document.getElementById('recoveryStep2'),
+      closeRecoveryBtn: document.getElementById('closeRecoveryBtn'),
+      closeRecoveryOkBtn: document.getElementById('closeRecoveryOkBtn'),
+      // Reset modal
+      resetModal: document.getElementById('resetModal'),
+      newPassword: document.getElementById('newPassword'),
+      confirmPassword: document.getElementById('confirmPassword'),
+      resetBtn: document.getElementById('resetBtn'),
+      resetStatus: document.getElementById('resetStatus'),
+      resetStep1: document.getElementById('resetStep1'),
+      resetStep2: document.getElementById('resetStep2'),
+      closeResetBtn: document.getElementById('closeResetBtn'),
+      closeResetOkBtn: document.getElementById('closeResetOkBtn'),
+      validateWhatsAppTokenBtn: document.getElementById('validateWhatsAppTokenBtn'),
+      whatsAppTokenStatus: document.getElementById('whatsAppTokenStatus'),
+      saveCatalogAttributesBtn: document.getElementById('saveCatalogAttributesBtn'),
+      formatMapAttributesBtn: document.getElementById('formatMapAttributesBtn'),
+      formatCatalogAttributesBtn: document.getElementById('formatCatalogAttributesBtn'),
+      formatTenantCustomMetricsBtn: document.getElementById('formatTenantCustomMetricsBtn'),
+      saveTenantCustomMetricsBtn: document.getElementById('saveTenantCustomMetricsBtn'),
+      refreshTenantCustomMetricsBtn: document.getElementById('refreshTenantCustomMetricsBtn'),
+      createTenantUserBtn: document.getElementById('createTenantUserBtn'),
+      updateTenantUserBtn: document.getElementById('updateTenantUserBtn'),
+      refreshTenantUsersBtn: document.getElementById('refreshTenantUsersBtn'),
+      refreshAdminMetricsBtn: document.getElementById('refreshAdminMetricsBtn'),
+    };
+
+    const chartStore = {};
+
+    const tenantTabs = [{ id: 'overview', label: 'Resumen' }, { id: 'products', label: 'Stock' }, { id: 'top-products', label: 'Más vendidos' }, { id: 'inbox', label: 'Inbox' }, { id: 'metrics', label: 'Métricas' }, { id: 'my-metrics', label: 'Mis métricas' }];
+    const adminTabs = [{ id: 'admin-tenants', label: 'Tenants' }, { id: 'admin-settings', label: 'Configuración' }, { id: 'admin-users', label: 'Usuarios' }, { id: 'admin-metrics', label: 'Métricas bot' }];
+
+    function setStatus(target, text, type = 'muted') { target.className = `status ${type}`; target.textContent = text; }
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+    async function api(url, options = {}) {
+      const response = await fetch(url, { credentials: 'include', headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options });
+      if (!response.ok) { const text = await response.text(); throw new Error(text || `HTTP ${response.status}`); }
+      if (response.status === 204) return null;
+      return await response.json();
+    }
+
+    async function refreshSession() {
+      try {
+        const me = await api('/api/auth/me', { method: 'GET' });
+        state.me = me;
+        if (me.authenticated) { renderForUser(); setStatus(els.loginStatus, 'Sesión activa encontrada.', 'ok'); }
+        else { showLogin(); }
+      } catch (error) {
+        showLogin();
+        setStatus(els.loginStatus, `No se pudo validar la sesión: ${error.message}`, 'error');
+      }
+    }
+
+    async function login() {
+      const username = els.username.value.trim();
+      const password = els.password.value;
+      if (!username || !password) { setStatus(els.loginStatus, 'Ingresa usuario y contraseña.', 'error'); return; }
+      try {
+        const me = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
+        state.me = me;
+        renderForUser();
+        setStatus(els.loginStatus, 'Ingreso correcto.', 'ok');
+      } catch (error) {
+        setStatus(els.loginStatus, `No se pudo ingresar: ${error.message}`, 'error');
+      }
+    }
+
+    // ── Modal helpers ────────────────────────────────────────────────────
+    function openModal(modal) { modal.classList.add('open'); }
+    function closeModal(modal) { modal.classList.remove('open'); }
+
+    // ── Recovery modal ───────────────────────────────────────────────────
+    function openRecoveryModal() {
+      els.recoveryEmail.value = '';
+      setStatus(els.recoveryStatus, '', 'muted');
+      els.recoveryStep1.classList.remove('hidden');
+      els.recoveryStep2.classList.add('hidden');
+      openModal(els.recoveryModal);
+      setTimeout(() => els.recoveryEmail.focus(), 80);
+    }
+
+    async function sendRecoveryEmail() {
+      const email = els.recoveryEmail.value.trim();
+      if (!email) { setStatus(els.recoveryStatus, 'Ingresá tu correo electrónico.', 'error'); return; }
+      els.sendRecoveryBtn.disabled = true;
+      try {
+        await api('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ usernameOrEmail: email }) });
+        els.recoveryStep1.classList.add('hidden');
+        els.recoveryStep2.classList.remove('hidden');
+      } catch (error) {
+        setStatus(els.recoveryStatus, `Error: ${error.message}`, 'error');
+      } finally {
+        els.sendRecoveryBtn.disabled = false;
+      }
+    }
+
+    // ── Reset password modal ─────────────────────────────────────────────
+    function openResetModal(token) {
+      state.resetToken = token;
+      els.newPassword.value = '';
+      els.confirmPassword.value = '';
+      setStatus(els.resetStatus, '', 'muted');
+      els.resetStep1.classList.remove('hidden');
+      els.resetStep2.classList.add('hidden');
+      openModal(els.resetModal);
+      setTimeout(() => els.newPassword.focus(), 80);
+    }
+
+    async function resetPassword() {
+      const token = state.resetToken;
+      const newPassword = els.newPassword.value;
+      const confirmPassword = els.confirmPassword.value;
+      if (!token) { setStatus(els.resetStatus, 'Token inválido. Solicitá un nuevo enlace.', 'error'); return; }
+      if (!newPassword || newPassword.length < 6) { setStatus(els.resetStatus, 'La contraseña debe tener al menos 6 caracteres.', 'error'); return; }
+      if (newPassword !== confirmPassword) { setStatus(els.resetStatus, 'Las contraseñas no coinciden.', 'error'); return; }
+      els.resetBtn.disabled = true;
+      try {
+        await api('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, newPassword }) });
+        // Remove token from URL without reloading
+        const url = new URL(window.location.href);
+        url.searchParams.delete('token');
+        window.history.replaceState({}, '', url.toString());
+        state.resetToken = null;
+        els.resetStep1.classList.add('hidden');
+        els.resetStep2.classList.remove('hidden');
+      } catch (error) {
+        setStatus(els.resetStatus, `Error: ${error.message}`, 'error');
+      } finally {
+        els.resetBtn.disabled = false;
+      }
+    }
+
+    async function logout() {
+      await api('/api/auth/logout', { method: 'POST' });
+      state.me = null; state.selectedTenantId = null; state.selectedTenantName = null;
+      showLogin();
+      setStatus(els.loginStatus, 'Sesión cerrada.', 'muted');
+    }
+
+    function showLogin() { els.loginView.classList.remove('hidden'); els.appView.classList.add('hidden'); }
+    function showApp() { els.loginView.classList.add('hidden'); els.appView.classList.remove('hidden'); }
+
+    function renderTabs(tabs) {
+      els.tabs.innerHTML = tabs.map((tab, index) => `<button class="tab ${index === 0 ? 'active' : ''}" data-panel="${tab.id}">${tab.label}</button>`).join('');
+      document.querySelectorAll('.panel').forEach(panel => panel.classList.remove('active'));
+      tabs.forEach((tab, index) => {
+        const panel = document.getElementById(`panel-${tab.id}`);
+        if (!panel) return;
+        panel.classList.remove('hidden');
+        if (index === 0) panel.classList.add('active');
+      });
+      document.querySelectorAll('.tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+          document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+          btn.classList.add('active');
+          document.getElementById(`panel-${btn.dataset.panel}`).classList.add('active');
+          if (btn.dataset.panel === 'inbox' && state.me?.role !== 'Admin') {
+            loadInboxConversations();
+            loadInboxSlaSummary();
+            loadInboxAnalytics();
+          }
+        });
+      });
+    }
+
+    function renderForUser() {
+      showApp();
+      const isAdmin = state.me.role === 'Admin';
+      els.roleBadge.textContent = isAdmin ? 'Administrador' : 'Tenant';
+      els.shellTitle.textContent = isAdmin ? 'Consola de administración' : `Hola, ${state.me.tenantName || state.me.displayName || 'equipo'}`;
+      els.shellSubtitle.textContent = isAdmin
+        ? 'Gestiona tenants, comportamiento del bot y sincronizaciones desde una sola vista.'
+        : 'Consulta ventas, productos y stock sin tener que manejar claves ni parámetros técnicos.';
+
+      document.getElementById('panel-admin-tenants').classList.toggle('hidden', !isAdmin);
+      document.getElementById('panel-admin-settings').classList.toggle('hidden', !isAdmin);
+      els.loadTenantsBtn.classList.toggle('hidden', !isAdmin);
+      els.syncBtn.classList.toggle('hidden', !isAdmin);
+
+      renderTabs(isAdmin ? adminTabs : tenantTabs);
+      if (isAdmin) {
+        setStatus(els.portalStatus, 'Sesión admin lista. Cargando tenants...', 'ok');
+        loadTenants();
+      } else {
+        loadTenantData();
+        loadInboxConversations();
+        loadInboxSlaSummary();
+        loadInboxAnalytics();
+        loadTenantMetrics();
+        loadTenantCustomMetrics();
+      }
+    }
+
+    function inboxStatusClass(status) {
+      return String(status || '').toLowerCase();
+    }
+
+    function renderInboxConversations(rows) {
+      const list = els.inboxConversationList;
+      if (!list) return;
+
+      if (!rows || rows.length === 0) {
+        list.innerHTML = '<div class="status muted" style="padding:10px;">No hay conversaciones para este filtro.</div>';
+        return;
+      }
+
+      list.innerHTML = rows.map(r => `
+        <button class="inbox-item ${state.inboxSelectedConversationId === r.id ? 'active' : ''}" data-conversation-id="${r.id}">
+          <div class="inbox-item-title">
+            <span>${escapeHtml(r.channelUserId)}</span>
+            <span class="pill ${inboxStatusClass(r.status)}">${escapeHtml(r.status)}</span>
+            ${r.isOverdue ? '<span class="pill overdue">SLA</span>' : ''}
+          </div>
+          <div class="inbox-item-meta">
+            <span>${escapeHtml(r.channel || '-')}</span>
+            <span>${r.assignedAgent ? `Asignado: ${escapeHtml(r.assignedAgent)}` : 'Sin asignar'}</span>
+          </div>
+          <div class="inbox-item-meta">
+            <span>Última actividad: ${new Date(r.lastActivityAt).toLocaleString('es-AR')}</span>
+          </div>
+        </button>
+      `).join('');
+
+      list.querySelectorAll('button[data-conversation-id]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const conversationId = btn.getAttribute('data-conversation-id');
+          if (!conversationId) return;
+          state.inboxSelectedConversationId = conversationId;
+          await loadInboxConversationDetail();
+          await loadInboxConversations();
+        });
+      });
+    }
+
+    function renderInboxMessages(rows) {
+      const thread = els.inboxThread;
+      if (!thread) return;
+
+      if (!rows || rows.length === 0) {
+        thread.innerHTML = '<div class="status muted">Sin mensajes todavía.</div>';
+        return;
+      }
+
+      thread.innerHTML = rows.map(m => {
+        const role = String(m.role || '').toLowerCase();
+        const sender = m.agentName ? ` · ${escapeHtml(m.agentName)}` : '';
+        const internal = m.isInternal ? ' · Interna' : '';
+        return `
+          <div class="bubble ${role}">
+            <div>${escapeHtml(m.content)}</div>
+            <div class="meta">${escapeHtml(m.role)}${sender}${internal} · ${new Date(m.createdAt).toLocaleString('es-AR')}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function loadInboxConversations() {
+      if (state.me?.role === 'Admin') return;
+      try {
+        const params = new URLSearchParams();
+        if (state.inboxStatusFilter) params.set('status', state.inboxStatusFilter);
+        if (state.inboxAssignedFilter) params.set('assignedTo', state.inboxAssignedFilter);
+        params.set('take', '80');
+
+        const rows = await api(`/api/inbox/conversations?${params.toString()}`);
+        renderInboxConversations(rows || []);
+
+        if (!state.inboxSelectedConversationId && rows && rows.length > 0) {
+          state.inboxSelectedConversationId = rows[0].id;
+          await loadInboxConversationDetail();
+        }
+
+        if (state.inboxSelectedConversationId && rows && rows.length > 0) {
+          const exists = rows.some(x => x.id === state.inboxSelectedConversationId);
+          if (!exists) {
+            state.inboxSelectedConversationId = rows[0].id;
+            await loadInboxConversationDetail();
+          }
+        }
+
+        setStatus(els.inboxStatus, 'Inbox actualizado.', 'ok');
+      } catch (error) {
+        setStatus(els.inboxStatus, `No se pudo cargar inbox: ${error.message}`, 'error');
+      }
+    }
+
+    async function loadInboxSlaSummary() {
+      if (state.me?.role === 'Admin' || !els.inboxSlaSummaryBar) return;
+      try {
+        const s = await api('/api/inbox/sla-summary');
+        const bar = els.inboxSlaSummaryBar;
+        if (s.overdue > 0) {
+          bar.style.display = 'flex';
+          const oldest = s.oldestOverdueAt ? ` · Más antigua: ${new Date(s.oldestOverdueAt).toLocaleString('es-AR')}` : '';
+          bar.innerHTML = `<span>&#9888; SLA:</span><span>${s.overdue} de ${s.awaitingHuman} conversaciones vencidas (umbral: ${s.slaThresholdMinutes} min)${oldest}</span>`;
+        } else {
+          bar.style.display = s.awaitingHuman > 0 ? 'flex' : 'none';
+          bar.innerHTML = s.awaitingHuman > 0
+            ? `<span class="sla-ok">&#10003; SLA al día</span><span>${s.awaitingHuman} en espera humana · umbral: ${s.slaThresholdMinutes} min</span>`
+            : '';
+        }
+      } catch {
+        /* silently ignore — SLA bar is optional */
+      }
+    }
+
+    async function loadInboxAnalytics() {
+      if (state.me?.role === 'Admin') return;
+      const cardsEl = els.inboxAnalyticsCards;
+      const byChannelEl = els.inboxAnalyticsByChannel;
+      const byStatusEl = els.inboxAnalyticsByStatus;
+      const statusEl = els.inboxAnalyticsStatus;
+      if (!cardsEl) return;
+
+      try {
+        const a = await api('/api/inbox/analytics');
+
+        cardsEl.innerHTML = [
+          { label: 'Total conversaciones', value: a.total },
+          { label: 'Esperando humano', value: a.awaitingHumanCount, warn: a.awaitingHumanCount > 0 },
+          { label: 'Vencidas (SLA)', value: a.overdueCount, warn: a.overdueCount > 0 },
+          { label: 'Nuevas (24h)', value: a.createdLast24h },
+          { label: 'Nuevas (7d)', value: a.createdLast7d },
+          { label: 'Resueltas (7d)', value: a.resolvedLast7d },
+          { label: 'Resueltas (30d)', value: a.resolvedLast30d },
+          { label: 'Tasa escalación', value: `${a.escalationRatePct}%`, warn: a.escalationRatePct > 20 },
+        ].map(c => `
+          <div class="card">
+            <div class="label">${escapeHtml(c.label)}</div>
+            <div class="value" style="${c.warn ? 'color:#8c2d24;' : ''}">${escapeHtml(String(c.value))}</div>
+          </div>
+        `).join('');
+
+        if (byChannelEl) {
+          byChannelEl.innerHTML = (a.byChannel || []).map(ch =>
+            `<div style="display:flex; justify-content:space-between; padding:4px 0; font-size:13px; border-bottom:1px solid #f0f0f0;">
+              <span>${escapeHtml(ch.channel)}</span><span style="font-weight:700;">${ch.count}</span>
+            </div>`
+          ).join('') || '<span class="status muted">Sin datos</span>';
+        }
+
+        if (byStatusEl) {
+          const statusEntries = Object.entries(a.byStatus || {});
+          byStatusEl.innerHTML = statusEntries.map(([k, v]) =>
+            `<div style="display:flex; justify-content:space-between; padding:4px 0; font-size:13px; border-bottom:1px solid #f0f0f0;">
+              <span><span class="pill ${k.toLowerCase()}">${escapeHtml(k)}</span></span><span style="font-weight:700;">${v}</span>
+            </div>`
+          ).join('') || '<span class="status muted">Sin datos</span>';
+        }
+
+        if (statusEl) setStatus(statusEl, `Analytics actualizado.`, 'ok');
+      } catch (error) {
+        if (statusEl) setStatus(statusEl, `No se pudo cargar analytics: ${error.message}`, 'error');
+      }
+    }
+
+      async function loadInboxCustomerProfile() {
+        const bar = els.inboxCustomerProfileBar;
+        if (!bar) return;
+        if (!state.inboxSelectedConversationId) { bar.style.display = 'none'; return; }
+        try {
+          const p = await api(`/api/inbox/conversations/${state.inboxSelectedConversationId}/customer-profile`);
+          const phone = p.customerPhone ? `<strong>Tel:</strong> ${escapeHtml(p.customerPhone)}` : '';
+          const count = `<strong>Mensajes:</strong> ${p.messageCount || 0}`;
+          const since = p.firstSeenAt ? `<strong>Desde:</strong> ${new Date(p.firstSeenAt).toLocaleDateString('es-AR')}` : '';
+          bar.style.display = 'flex';
+          bar.innerHTML = [phone, count, since].filter(Boolean).map(s => `<span style="margin-right:16px;">${s}</span>`).join('');
+        } catch {
+          bar.style.display = 'none';
+        }
+      }
+
+      async function saveWebhookSettings() {
+        if (!state.selectedTenantId) { setStatus(els.portalStatus, 'Selecciona un tenant antes de guardar.', 'error'); return; }
+        try {
+          const payload = collectSettings();
+          await api(`/api/admin/tenants/${state.selectedTenantId}/settings`, { method: 'PUT', body: JSON.stringify(payload) });
+          if (els.webhookSecret) els.webhookSecret.value = '';
+          setStatus(els.portalStatus, 'Configuración de webhook guardada.', 'ok');
+        } catch (error) {
+          setStatus(els.portalStatus, `No se pudo guardar el webhook: ${error.message}`, 'error');
+        }
+      }
+
+    async function loadInboxConversationDetail() {
+      await loadInboxCustomerProfile();
+      if (!state.inboxSelectedConversationId) {
+        els.inboxConversationMeta.textContent = 'Selecciona una conversación para ver el detalle.';
+        renderInboxMessages([]);
+        return;
+      }
+
+      try {
+        const payload = await api(`/api/inbox/conversations/${state.inboxSelectedConversationId}?includeInternal=${state.inboxIncludeInternal}`);
+        const assigned = payload.assignedAgent ? `Asignado a ${payload.assignedAgent}` : 'Sin asignación';
+        const assignedAt = payload.assignedAt ? ` · desde ${new Date(payload.assignedAt).toLocaleString('es-AR')}` : '';
+        els.inboxConversationMeta.textContent = `${payload.channelUserId} · ${payload.status} · ${assigned}${assignedAt}`;
+        renderInboxMessages(payload.messages || []);
+        loadInboxCustomerProfile();
+      } catch (error) {
+        setStatus(els.inboxStatus, `No se pudo cargar la conversación: ${error.message}`, 'error');
+      }
+    }
+
+    async function callInboxAction(path, method, body = null) {
+      if (!state.inboxSelectedConversationId) {
+        setStatus(els.inboxStatus, 'Selecciona una conversación primero.', 'error');
+        return false;
+      }
+
+      try {
+        await api(`/api/inbox/conversations/${state.inboxSelectedConversationId}/${path}`, {
+          method,
+          body: body ? JSON.stringify(body) : null
+        });
+        await loadInboxConversationDetail();
+        await loadInboxConversations();
+        await loadInboxSlaSummary();
+        return true;
+      } catch (error) {
+        setStatus(els.inboxStatus, `No se pudo ejecutar la acción: ${error.message}`, 'error');
+        return false;
+      }
+    }
+
+    async function takeoverConversation() {
+      const ok = await callInboxAction('takeover', 'POST');
+      if (ok) setStatus(els.inboxStatus, 'Conversación en takeover.', 'ok');
+    }
+
+    async function releaseConversation() {
+      const ok = await callInboxAction('release', 'POST');
+      if (ok) setStatus(els.inboxStatus, 'Conversación devuelta al bot.', 'ok');
+    }
+
+    async function resolveConversation() {
+      const ok = await callInboxAction('resolve', 'POST');
+      if (ok) {
+        setStatus(els.inboxStatus, 'Conversación resuelta.', 'ok');
+        await loadInboxAnalytics();
+      }
+    }
+
+    async function assignConversation() {
+      const agent = (state.me?.displayName || state.me?.tenantName || '').trim();
+      const ok = await callInboxAction('assign', 'POST', { agent });
+      if (ok) setStatus(els.inboxStatus, 'Conversación asignada.', 'ok');
+    }
+
+    async function unassignConversation() {
+      const ok = await callInboxAction('unassign', 'POST');
+      if (ok) setStatus(els.inboxStatus, 'Asignación removida.', 'ok');
+    }
+
+    async function sendInboxMessage() {
+      const content = (els.inboxMessageInput?.value || '').trim();
+      if (!content) {
+        setStatus(els.inboxStatus, 'Escribe un mensaje antes de enviar.', 'error');
+        return;
+      }
+
+      const ok = await callInboxAction('messages', 'POST', { content });
+      if (!ok) return;
+      els.inboxMessageInput.value = '';
+      setStatus(els.inboxStatus, 'Mensaje enviado al cliente.', 'ok');
+    }
+
+    async function addInboxNote() {
+      const content = (els.inboxNoteInput?.value || '').trim();
+      if (!content) {
+        setStatus(els.inboxStatus, 'Escribe una nota interna.', 'error');
+        return;
+      }
+
+      const ok = await callInboxAction('notes', 'POST', { content });
+      if (!ok) return;
+      els.inboxNoteInput.value = '';
+      setStatus(els.inboxStatus, 'Nota interna guardada.', 'ok');
+    }
+
+    function renderSimpleBarChart(canvasId, points) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const rows = (points || []).slice(0, 10);
+
+      if (window.Chart) {
+        const labels = rows.map(x => String(x.label || '-'));
+        const values = rows.map(x => Number(x.value || 0));
+        if (chartStore[canvasId]) {
+          chartStore[canvasId].destroy();
+        }
+
+        chartStore[canvasId] = new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              data: values,
+              backgroundColor: '#126a57',
+              borderRadius: 8,
+              borderSkipped: false
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            animation: false,
+            interaction: {
+              mode: 'index',
+              axis: 'y',
+              intersect: false
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                displayColors: false,
+                padding: 15
+              }
+            },
+            scales: {
+              x: {
+                grid: { color: '#eef2ef' },
+                ticks: {
+                  color: '#42564d',
+                  font: { family: 'Manrope, sans-serif', size: 12, weight: '500' }
+                }
+              },
+              y: {
+                grid: { display: false },
+                ticks: {
+                  color: '#42564d',
+                  font: { family: 'Manrope, sans-serif', size: 12, weight: '600' }
+                }
+              }
+            }
+          }
+        });
+        return;
+      }
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (rows.length === 0) return;
+
+      const maxValue = Math.max(...rows.map(x => Number(x.value || 0)), 1);
+      const leftPad = 10;
+      const barHeight = Math.max(10, Math.floor((canvas.height - 12) / rows.length) - 4);
+
+      rows.forEach((item, index) => {
+        const y = 8 + index * (barHeight + 4);
+        const value = Number(item.value || 0);
+        const width = Math.floor((canvas.width - 150) * (value / maxValue));
+        ctx.fillStyle = '#126a57';
+        ctx.fillRect(130, y, Math.max(2, width), barHeight);
+        ctx.fillStyle = '#32443c';
+        ctx.font = '11px Manrope';
+        ctx.fillText(String(item.label || '').slice(0, 18), leftPad, y + barHeight - 2);
+        ctx.fillText(value.toFixed(0), 130 + Math.max(2, width) + 6, y + barHeight - 2);
+      });
+    }
+
+    function renderMetricList(targetId, points) {
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      if (!points || points.length === 0) { target.textContent = 'Sin datos'; return; }
+      target.textContent = points.slice(0, 10).map(x => `${x.label}: ${Number(x.value || 0).toLocaleString('es-AR')}`).join(' | ');
+    }
+
+    function renderSummary(data) {
+      const cards = [
+        ['Ventas totales', `$ ${Number(data.totalSales || 0).toLocaleString('es-AR')}`],
+        ['Órdenes', Number(data.totalOrders || 0).toLocaleString('es-AR')],
+        ['Conversaciones activas', Number(data.activeConversations || 0).toLocaleString('es-AR')],
+        ['Productos', Number(data.totalProducts || 0).toLocaleString('es-AR')],
+        ['Stock crítico', Number(data.lowStockProducts || 0).toLocaleString('es-AR')]
+      ];
+      els.summaryCards.innerHTML = cards.map(card => `<div class="card"><div class="label">${card[0]}</div><div class="value">${card[1]}</div></div>`).join('');
+    }
+
+    function renderTopProducts(rows) {
+      els.topProductsBody.innerHTML = rows.map(r => `<tr><td>${r.name}</td><td>${r.brand}</td><td>${r.unitsSold}</td><td>$ ${Number(r.revenue).toLocaleString('es-AR')}</td></tr>`).join('');
+    }
+
+    function renderStock(rows) {
+      els.stockBody.innerHTML = rows.map(r => `<tr><td>${r.name}</td><td>${r.brand}</td><td>${r.category}</td><td>${r.sku || '-'}</td><td>$ ${Number(r.price).toLocaleString('es-AR')}</td><td>${r.stockQuantity}</td><td>${new Date(r.updatedAt).toLocaleString('es-AR')}</td></tr>`).join('');
+    }
+
+    async function loadTenantData() {
+      try {
+        const [summary, top, stock] = await Promise.all([
+          api('/api/dashboard/summary'),
+          api('/api/dashboard/top-products?take=10'),
+          api(`/api/dashboard/stock?sortBy=${state.stockSortBy}&desc=${state.stockDesc}&search=${encodeURIComponent(els.stockSearch.value || '')}`)
+        ]);
+        renderSummary(summary); renderTopProducts(top); renderStock(stock);
+        setStatus(els.portalStatus, 'Datos actualizados.', 'ok');
+      } catch (error) {
+        setStatus(els.portalStatus, `No se pudieron cargar los datos del tenant: ${error.message}`, 'error');
+      }
+    }
+
+    async function loadTenantMetrics() {
+      if (state.me?.role === 'Admin') return;
+      try {
+        const metrics = await api('/api/dashboard/tenant-metrics');
+        renderSimpleBarChart('chartProductsByCategory', metrics.productsByCategory || []);
+        renderSimpleBarChart('chartProductsByBrand', metrics.productsByBrand || []);
+        renderSimpleBarChart('chartSalesByDay', metrics.salesByDay || []);
+        renderMetricList('listProductsByCategory', metrics.productsByCategory || []);
+        renderMetricList('listProductsByBrand', metrics.productsByBrand || []);
+        renderMetricList('listSalesByDay', metrics.salesByDay || []);
+      } catch (error) {
+        setStatus(els.portalStatus, `No se pudieron cargar métricas: ${error.message}`, 'error');
+      }
+    }
+
+    async function loadTenants() {
+      try {
+        const tenants = await api('/api/admin/tenants');
+        state.tenants = tenants;
+        if (!state.selectedTenantId && tenants.length > 0) {
+          const firstActive = tenants.find(t => t.isActive) || tenants[0];
+          state.selectedTenantId = firstActive.id;
+          state.selectedTenantName = firstActive.name;
+        }
+        renderTenantList();
+        if (state.selectedTenantId) {
+          await loadTenantSettings();
+          setStatus(els.portalStatus, `Tenants cargados. Activo: ${state.selectedTenantName}.`, 'ok');
+        } else {
+          setStatus(els.portalStatus, 'Tenants cargados.', 'ok');
+        }
+      } catch (error) {
+        setStatus(els.portalStatus, `No se pudieron cargar tenants: ${error.message}`, 'error');
+      }
+    }
+
+    function renderTenantList() {
+      els.tenantList.innerHTML = state.tenants.map(tenant => `<button class="tenant-item ${tenant.id === state.selectedTenantId ? 'active' : ''}" data-tenant-id="${tenant.id}" data-tenant-name="${tenant.name}"><strong>${tenant.name}</strong><span>${tenant.whatsAppNumber || 'Sin WhatsApp'}</span><span>${tenant.isActive ? 'Activo' : 'Inactivo'}</span></button>`).join('');
+      document.querySelectorAll('.tenant-item').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          state.selectedTenantId = btn.dataset.tenantId;
+          state.selectedTenantName = btn.dataset.tenantName;
+          renderTenantList();
+          await loadTenantSettings();
+        });
+      });
+    }
+
+    function bindSettings(settings) {
+      state.currentSettings = settings;
+      const behavior = settings.botBehavior || {};
+      const phrases = settings.phrases || {};
+      const sync = settings.catalogSync || {};
+      const map = sync.columnMap || {};
+      const whatsApp = settings.whatsApp || {};
+      document.getElementById('assistantName').value = behavior.assistantName || '';
+      document.getElementById('tone').value = behavior.tone || '';
+      document.getElementById('language').value = behavior.responseLanguage || '';
+      document.getElementById('maxTokens').value = behavior.maxResponseTokens || 600;
+      document.getElementById('welcomeMessage').value = phrases.welcomeMessage || '';
+      document.getElementById('fallbackMessage').value = phrases.fallbackMessage || '';
+      document.getElementById('handoffMessage').value = phrases.humanHandoffMessage || '';
+      document.getElementById('sourceType').value = String(sync.sourceType ?? 0);
+      document.getElementById('sheetUrl').value = sync.googleSheets?.spreadsheetUrl || '';
+      document.getElementById('sheetName').value = sync.googleSheets?.sheetName || '';
+      document.getElementById('sqlConnection').value = sync.sqlServer?.connectionString || '';
+      document.getElementById('sqlQuery').value = sync.sqlServer?.query || '';
+      document.getElementById('mapName').value = map.name || 'Name';
+      document.getElementById('mapBrand').value = map.brand || 'Brand';
+      document.getElementById('mapCategory').value = map.category || 'Category';
+      document.getElementById('mapDescription').value = map.description || 'Description';
+      document.getElementById('mapPrice').value = map.price || 'Price';
+      document.getElementById('mapStock').value = map.stockQuantity || 'StockQuantity';
+      document.getElementById('mapSku').value = map.sku || 'Sku';
+      document.getElementById('mapTags').value = map.tags || 'Tags';
+      document.getElementById('mapAttributes').value = stringifyAttributesMap(map.attributes);
+      document.getElementById('whatsappApiKey').value = whatsApp.apiKey || '';
+      document.getElementById('interactiveButtonsEnabled').checked = !!whatsApp.enableInteractiveButtons;
+      document.getElementById('interactiveMenuEnabled').checked = !!whatsApp.enableInteractiveMenu;
+      setStatus(els.whatsAppTokenStatus, '', 'muted');
+      if (els.escalationKeywords) els.escalationKeywords.value = (behavior.escalationTriggerKeywords || []).join('\n');
+      if (els.enableFrustrationEscalation) els.enableFrustrationEscalation.checked = !!behavior.enableFrustrationEscalation;
+      const wh = settings.outboundWebhook || {};
+      if (els.webhookEnabled) els.webhookEnabled.checked = !!wh.enabled;
+      if (els.webhookUrl) els.webhookUrl.value = wh.url || '';
+      if (els.webhookEvents) els.webhookEvents.value = (wh.events || []).join(', ');
+      // webhookSecret: not pre-filled for security
+      toggleCatalogSourceFields();
+      markSettingsState('saved', 'Configuración cargada. Si hacés cambios, te voy a avisar antes de guardar.');
+    }
+
+    function markSettingsState(kind, message) {
+      if (!els.settingsDirtyBadge) return;
+      els.settingsDirtyBadge.className = `save-indicator${kind ? ` ${kind}` : ''}`;
+      els.settingsDirtyBadge.textContent = kind === 'dirty'
+        ? 'Cambios sin guardar'
+        : kind === 'saving'
+          ? 'Guardando cambios...'
+          : 'Todo guardado';
+      if (els.settingsSaveHelp) els.settingsSaveHelp.textContent = message || '';
+    }
+
+    function attachSettingsDirtyTracking() {
+      const panel = document.getElementById('panel-admin-settings');
+      if (!panel || panel.dataset.dirtyTrackingBound === 'true') return;
+      const handler = (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        if (!target.closest('#panel-admin-settings')) return;
+        markSettingsState('dirty', 'Tenés cambios pendientes. Guardalos para que impacten en el tenant.');
+      };
+      panel.addEventListener('input', handler);
+      panel.addEventListener('change', handler);
+      panel.dataset.dirtyTrackingBound = 'true';
+    }
+
+    function formatJsonField(elementId, emptyFallback, successMessage) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      const raw = (el.value || '').trim();
+      try {
+        const parsed = JSON.parse(raw || emptyFallback);
+        el.value = JSON.stringify(parsed, null, 2);
+        markSettingsState('dirty', successMessage);
+      } catch {
+        setStatus(els.portalStatus, 'No pude formatear ese JSON porque no es válido.', 'error');
+      }
+    }
+
+    function toggleCatalogSourceFields() {
+      const source = Number(document.getElementById('sourceType')?.value || 0);
+      const google = document.getElementById('catalogSourceGoogle');
+      const sql = document.getElementById('catalogSourceSql');
+      if (google) google.style.display = source === 1 ? '' : 'none';
+      if (sql) sql.style.display = source === 2 ? '' : 'none';
+    }
+
+    function stringifyAttributesMap(attributes) {
+      if (!attributes || typeof attributes !== 'object') return '{}';
+      try { return JSON.stringify(attributes, null, 2); }
+      catch { return '{}'; }
+    }
+
+    function stringifyAttributeDefinitions(definitions) {
+      if (!Array.isArray(definitions)) return '[]';
+      try { return JSON.stringify(definitions, null, 2); }
+      catch { return '[]'; }
+    }
+
+    function parseAttributeDefinitions() {
+      const raw = (document.getElementById('catalogAttributeDefinitions').value || '').trim();
+      if (!raw) return [];
+
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error('El JSON de definiciones de atributos no es válido.');
+      }
+
+      if (!Array.isArray(parsed))
+        throw new Error('Las definiciones deben ser un arreglo JSON.');
+
+      return parsed
+        .map((item, index) => {
+          const key = String(item?.attributeKey || '').trim();
+          const displayName = String(item?.displayName || key).trim();
+          const dataType = String(item?.dataType || 'text').trim().toLowerCase();
+          const sortOrder = Number(item?.sortOrder ?? index);
+          if (!key) return null;
+          return {
+            attributeKey: key,
+            displayName,
+            dataType: dataType || 'text',
+            isFilterable: item?.isFilterable !== false,
+            isSearchable: item?.isSearchable !== false,
+            sortOrder: Number.isFinite(sortOrder) ? Math.max(0, sortOrder) : index
+          };
+        })
+        .filter(Boolean);
+    }
+
+    function parseAttributesMap() {
+      const raw = (document.getElementById('mapAttributes').value || '').trim();
+      if (!raw) return {};
+
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error('El JSON de atributos dinámicos no es válido.');
+      }
+
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        throw new Error('El JSON de atributos debe ser un objeto clave-valor.');
+
+      const normalized = {};
+      for (const [key, value] of Object.entries(parsed)) {
+        const attrKey = String(key || '').trim();
+        const columnName = String(value || '').trim();
+        if (!attrKey || !columnName) continue;
+        normalized[attrKey] = columnName;
+      }
+
+      return normalized;
+    }
+
+    function collectSettings() {
+      const dynamicAttributes = parseAttributesMap();
+      const baseSettings = {
+        botBehavior: {
+          assistantName: document.getElementById('assistantName').value,
+          tone: document.getElementById('tone').value,
+          responseLanguage: document.getElementById('language').value,
+          maxResponseTokens: Number(document.getElementById('maxTokens').value || 600),
+          preferDeterministicRouting: true,
+          enableContextSwitching: true,
+          enableFrustrationEscalation: els.enableFrustrationEscalation ? !!els.enableFrustrationEscalation.checked : true,
+          escalationTriggerKeywords: els.escalationKeywords
+            ? els.escalationKeywords.value.split('\n').map(k => k.trim()).filter(Boolean)
+            : []
+        },
+        phrases: {
+          welcomeMessage: document.getElementById('welcomeMessage').value,
+          fallbackMessage: document.getElementById('fallbackMessage').value,
+          humanHandoffMessage: document.getElementById('handoffMessage').value
+        },
+        catalogSync: {
+          sourceType: Number(document.getElementById('sourceType').value),
+          googleSheets: {
+            spreadsheetUrl: document.getElementById('sheetUrl').value,
+            sheetName: document.getElementById('sheetName').value
+          },
+          sqlServer: {
+            connectionString: document.getElementById('sqlConnection').value,
+            query: document.getElementById('sqlQuery').value
+          },
+          columnMap: {
+            name: document.getElementById('mapName').value,
+            brand: document.getElementById('mapBrand').value,
+            category: document.getElementById('mapCategory').value,
+            description: document.getElementById('mapDescription').value,
+            price: document.getElementById('mapPrice').value,
+            stockQuantity: document.getElementById('mapStock').value,
+            sku: document.getElementById('mapSku').value,
+            tags: document.getElementById('mapTags').value,
+            attributes: dynamicAttributes
+          }
+        },
+        whatsApp: state.currentSettings?.whatsApp || {
+          enabled: false,
+          enableInteractiveButtons: false,
+          enableInteractiveMenu: false,
+          phoneNumber: '',
+          provider: 'MetaCloud',
+          apiKey: '',
+          apiKeyUpdatedAtUtc: null
+        }
+      };
+      baseSettings.whatsApp.enableInteractiveButtons = document.getElementById('interactiveButtonsEnabled').checked;
+      baseSettings.whatsApp.enableInteractiveMenu = document.getElementById('interactiveMenuEnabled').checked;
+        baseSettings.outboundWebhook = {
+          enabled: els.webhookEnabled ? !!els.webhookEnabled.checked : false,
+          url: els.webhookUrl ? els.webhookUrl.value.trim() : '',
+          secret: els.webhookSecret && els.webhookSecret.value.trim() ? els.webhookSecret.value.trim() : (state.currentSettings?.outboundWebhook?.secret || ''),
+          events: els.webhookEvents
+            ? els.webhookEvents.value.split(',').map(e => e.trim()).filter(Boolean)
+            : ['handoff.requested', 'conversation.resolved']
+        };
+      return baseSettings;
+    }
+
+    async function validateWhatsAppToken() {
+      if (!state.selectedTenantId) { setStatus(els.whatsAppTokenStatus, 'Selecciona un tenant antes de validar.', 'error'); return; }
+
+      const accessToken = document.getElementById('whatsappApiKey').value.trim();
+      if (!accessToken) { setStatus(els.whatsAppTokenStatus, 'Pega un access token para validar.', 'error'); return; }
+
+      els.validateWhatsAppTokenBtn.disabled = true;
+      try {
+        const result = await api(`/api/admin/tenants/${state.selectedTenantId}/whatsapp/access-token`, {
+          method: 'POST',
+          body: JSON.stringify({ accessToken })
+        });
+
+        if (state.currentSettings?.whatsApp) {
+          state.currentSettings.whatsApp.apiKey = accessToken;
+          state.currentSettings.whatsApp.apiKeyUpdatedAtUtc = result.updatedAtUtc || new Date().toISOString();
+        }
+
+        const label = result.subjectName ? ` Token válido para ${result.subjectName}.` : '';
+        setStatus(els.whatsAppTokenStatus, `Token validado y guardado.${label}`, 'ok');
+        markSettingsState('saved', 'Token de WhatsApp validado y guardado correctamente.');
+      } catch (error) {
+        setStatus(els.whatsAppTokenStatus, `Token inválido o no utilizable: ${error.message}`, 'error');
+      } finally {
+        els.validateWhatsAppTokenBtn.disabled = false;
+      }
+    }
+
+    async function loadTenantSettings() {
+      if (!state.selectedTenantId) { setStatus(els.portalStatus, 'Selecciona un tenant.', 'muted'); return; }
+      try {
+        const payload = await api(`/api/admin/tenants/${state.selectedTenantId}/settings`);
+        bindSettings(payload.settings || {});
+        await loadCatalogAttributes();
+        await loadTenantUsers();
+        await loadAdminBotMetrics();
+        setStatus(els.portalStatus, `Configuración cargada para ${payload.name}.`, 'ok');
+      } catch (error) {
+        setStatus(els.portalStatus, `No se pudo cargar la configuración: ${error.message}`, 'error');
+      }
+    }
+
+    function parseTenantCustomMetrics() {
+      const raw = (document.getElementById('tenantCustomMetrics').value || '').trim();
+      if (!raw) return [];
+      let parsed;
+      try { parsed = JSON.parse(raw); }
+      catch { throw new Error('El JSON de métricas personalizadas no es válido.'); }
+      if (!Array.isArray(parsed)) throw new Error('Las métricas personalizadas deben ser un arreglo JSON.');
+      return parsed;
+    }
+
+    function renderTenantCustomMetricResults(metrics) {
+      const host = document.getElementById('tenantCustomMetricsResults');
+      if (!host) return;
+      if (!metrics || metrics.length === 0) {
+        host.innerHTML = '<div class="status muted">No hay métricas personalizadas cargadas.</div>';
+        return;
+      }
+
+      host.innerHTML = metrics.map((m, index) => `
+        <div class="setting" style="margin-top:10px;">
+          <label>${m.definition?.name || `Métrica ${index + 1}`} - Total: ${Number(m.total || 0).toLocaleString('es-AR')}</label>
+          <div class="chart-wrap"><canvas id="tenantCustomMetricChart${index}"></canvas></div>
+          <div id="tenantCustomMetricList${index}" class="status muted"></div>
+        </div>
+      `).join('');
+
+      metrics.forEach((m, index) => {
+        renderSimpleBarChart(`tenantCustomMetricChart${index}`, m.points || []);
+        renderMetricList(`tenantCustomMetricList${index}`, m.points || []);
+      });
+    }
+
+    async function loadTenantCustomMetrics() {
+      if (state.me?.role === 'Admin') return;
+      try {
+        const metrics = await api('/api/dashboard/custom-metrics', { method: 'GET' });
+        const defs = (metrics || []).map(x => x.definition || {}).filter(Boolean);
+        document.getElementById('tenantCustomMetrics').value = defs.length > 0 ? JSON.stringify(defs, null, 2) : '[]';
+        renderTenantCustomMetricResults(metrics || []);
+      } catch (error) {
+        setStatus(els.portalStatus, `No se pudieron cargar métricas personalizadas: ${error.message}`, 'error');
+      }
+    }
+
+    async function saveTenantCustomMetrics() {
+      if (state.me?.role === 'Admin') return;
+      try {
+        const metrics = parseTenantCustomMetrics();
+        await api('/api/dashboard/custom-metrics', { method: 'PUT', body: JSON.stringify(metrics) });
+        await loadTenantCustomMetrics();
+        setStatus(els.portalStatus, 'Métricas personalizadas guardadas.', 'ok');
+        markSettingsState('saved', 'Métricas personalizadas guardadas correctamente.');
+      } catch (error) {
+        setStatus(els.portalStatus, `No se pudieron guardar métricas personalizadas: ${error.message}`, 'error');
+      }
+    }
+
+    async function loadTenantUsers() {
+      if (!state.selectedTenantId) return;
+      try {
+        const users = await api(`/api/admin/tenants/${state.selectedTenantId}/users`, { method: 'GET' });
+        const body = document.getElementById('tenantUsersBody');
+        if (!body) return;
+        body.innerHTML = (users || []).map(u => `
+          <tr>
+            <td>${u.username}</td>
+            <td>${u.email}</td>
+            <td>${u.isActive ? 'Activo' : 'Inactivo'}</td>
+            <td>
+              <button class="btn-secondary" data-edit-user-id="${u.id}">Editar</button>
+              <button class="btn-warning" data-user-id="${u.id}">Eliminar</button>
+            </td>
+          </tr>
+        `).join('');
+
+        body.querySelectorAll('button[data-edit-user-id]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const userId = btn.getAttribute('data-edit-user-id');
+            const user = (users || []).find(x => String(x.id) === String(userId));
+            if (!user) return;
+            document.getElementById('editTenantUserId').value = user.id;
+            document.getElementById('newTenantUsername').value = user.username || '';
+            document.getElementById('newTenantEmail').value = user.email || '';
+            document.getElementById('newTenantPassword').value = '';
+            document.getElementById('newTenantUserActive').checked = !!user.isActive;
+            setStatus(els.portalStatus, 'Usuario cargado para edición.', 'ok');
+          });
+        });
+
+        body.querySelectorAll('button[data-user-id]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const userId = btn.getAttribute('data-user-id');
+            if (!userId) return;
+            await api(`/api/admin/tenants/${state.selectedTenantId}/users/${userId}`, { method: 'DELETE' });
+            await loadTenantUsers();
+            setStatus(els.portalStatus, 'Usuario eliminado.', 'ok');
+          });
+        });
+      } catch (error) {
+        setStatus(els.portalStatus, `No se pudo cargar usuarios: ${error.message}`, 'error');
+      }
+    }
+
+    async function createTenantUser() {
+      if (!state.selectedTenantId) { setStatus(els.portalStatus, 'Selecciona un tenant antes de crear usuarios.', 'error'); return; }
+      try {
+        const payload = {
+          username: (document.getElementById('newTenantUsername').value || '').trim(),
+          email: (document.getElementById('newTenantEmail').value || '').trim(),
+          password: document.getElementById('newTenantPassword').value || '',
+          isActive: !!document.getElementById('newTenantUserActive').checked
+        };
+        await api(`/api/admin/tenants/${state.selectedTenantId}/users`, { method: 'POST', body: JSON.stringify(payload) });
+        document.getElementById('newTenantUsername').value = '';
+        document.getElementById('newTenantEmail').value = '';
+        document.getElementById('newTenantPassword').value = '';
+        document.getElementById('editTenantUserId').value = '';
+        await loadTenantUsers();
+        setStatus(els.portalStatus, 'Usuario creado correctamente.', 'ok');
+      } catch (error) {
+        setStatus(els.portalStatus, `No se pudo crear usuario: ${error.message}`, 'error');
+      }
+    }
+
+    async function updateTenantUser() {
+      if (!state.selectedTenantId) { setStatus(els.portalStatus, 'Selecciona un tenant antes de editar usuarios.', 'error'); return; }
+
+      const userId = (document.getElementById('editTenantUserId').value || '').trim();
+      if (!userId) { setStatus(els.portalStatus, 'Selecciona un usuario en la tabla para editar.', 'error'); return; }
+
+      try {
+        const payload = {
+          username: (document.getElementById('newTenantUsername').value || '').trim(),
+          email: (document.getElementById('newTenantEmail').value || '').trim(),
+          password: document.getElementById('newTenantPassword').value || null,
+          isActive: !!document.getElementById('newTenantUserActive').checked
+        };
+
+        await api(`/api/admin/tenants/${state.selectedTenantId}/users/${userId}`, { method: 'PUT', body: JSON.stringify(payload) });
+        document.getElementById('newTenantPassword').value = '';
+        await loadTenantUsers();
+        setStatus(els.portalStatus, 'Usuario actualizado correctamente.', 'ok');
+      } catch (error) {
+        setStatus(els.portalStatus, `No se pudo actualizar usuario: ${error.message}`, 'error');
+      }
+    }
+
+    function renderAdminBotMetricCards(data) {
+      const cards = document.getElementById('adminBotMetricCards');
+      if (!cards) return;
+      cards.innerHTML = [
+        ['Conversaciones activas', Number(data.activeConversations || 0).toLocaleString('es-AR')],
+        ['Esperando humano', Number(data.awaitingHumanConversations || 0).toLocaleString('es-AR')],
+        ['Fallbacks', Number(data.fallbackCount || 0).toLocaleString('es-AR')],
+        ['Resp. promedio (seg)', Number(data.avgResponseSeconds || 0).toFixed(1)]
+      ].map(c => `<div class="card"><div class="label">${c[0]}</div><div class="value">${c[1]}</div></div>`).join('');
+    }
+
+    async function loadAdminBotMetrics() {
+      if (state.me?.role !== 'Admin') return;
+      try {
+        const data = await api(`/api/admin/tenants/metrics/bot${state.selectedTenantId ? `?tenantId=${state.selectedTenantId}` : ''}`);
+        renderAdminBotMetricCards(data || {});
+        renderSimpleBarChart('chartAdminResponses', data.responsesPerDay || []);
+        renderSimpleBarChart('chartAdminFallbacks', data.fallbacksPerDay || []);
+        renderMetricList('listAdminResponses', data.responsesPerDay || []);
+        renderMetricList('listAdminFallbacks', data.fallbacksPerDay || []);
+      } catch (error) {
+        setStatus(els.portalStatus, `No se pudieron cargar métricas del bot: ${error.message}`, 'error');
+      }
+    }
+
+    async function loadCatalogAttributes() {
+      if (!state.selectedTenantId) return;
+      try {
+        const definitions = await api(`/api/admin/tenants/${state.selectedTenantId}/catalog/attributes`, { method: 'GET' });
+        document.getElementById('catalogAttributeDefinitions').value = stringifyAttributeDefinitions(definitions || []);
+      } catch (error) {
+        document.getElementById('catalogAttributeDefinitions').value = '[]';
+      }
+    }
+
+    async function saveSettings() {
+      if (!state.selectedTenantId) { setStatus(els.portalStatus, 'Selecciona un tenant antes de guardar.', 'error'); return; }
+
+      const currentTokenInput = document.getElementById('whatsappApiKey').value.trim();
+      const persistedToken = state.currentSettings?.whatsApp?.apiKey?.trim?.() || '';
+      if (currentTokenInput !== persistedToken) {
+        setStatus(els.portalStatus, 'El token de WhatsApp cambió en pantalla pero aún no fue validado y guardado. Usa "Probar token y guardar" antes de guardar la configuración general.', 'error');
+        return;
+      }
+
+      try {
+        markSettingsState('saving', 'Guardando configuración del tenant...');
+        const payload = collectSettings();
+        await api(`/api/admin/tenants/${state.selectedTenantId}/settings`, { method: 'PUT', body: JSON.stringify(payload) });
+        setStatus(els.portalStatus, 'Configuración guardada.', 'ok');
+        markSettingsState('saved', 'Los cambios ya quedaron guardados para este tenant.');
+      } catch (error) {
+        setStatus(els.portalStatus, `No se pudo guardar: ${error.message}`, 'error');
+        markSettingsState('dirty', 'Hubo un error al guardar. Revisá los datos e intentá de nuevo.');
+      }
+    }
+
+    async function runSync() {
+      if (!state.selectedTenantId) { setStatus(els.portalStatus, 'Selecciona un tenant antes de sincronizar.', 'error'); return; }
+      try {
+        const result = await api(`/api/admin/tenants/${state.selectedTenantId}/sync/run`, { method: 'POST' });
+        setStatus(els.portalStatus, `Sync OK. Procesados ${result.processed}, insertados ${result.inserted}, actualizados ${result.updated}.`, 'ok');
+      } catch (error) {
+        setStatus(els.portalStatus, `No se pudo sincronizar: ${error.message}`, 'error');
+      }
+    }
+
+    async function saveCatalogAttributes() {
+      if (!state.selectedTenantId) { setStatus(els.portalStatus, 'Selecciona un tenant antes de guardar atributos.', 'error'); return; }
+      try {
+        const definitions = parseAttributeDefinitions();
+        await api(`/api/admin/tenants/${state.selectedTenantId}/catalog/attributes`, {
+          method: 'PUT',
+          body: JSON.stringify(definitions)
+        });
+        setStatus(els.portalStatus, 'Definiciones de atributos guardadas.', 'ok');
+        markSettingsState('saved', 'Las definiciones de atributos quedaron guardadas.');
+      } catch (error) {
+        setStatus(els.portalStatus, `No se pudieron guardar atributos: ${error.message}`, 'error');
+      }
+    }
+
+    function initSettingsWizard() {
+      let currentStep = 1;
+      const totalSteps = 4;
+      const nextBtn = document.getElementById('wizardNextBtn');
+      const prevBtn = document.getElementById('wizardPrevBtn');
+      const steps = document.querySelectorAll('.wizard-step');
+      const contents = document.querySelectorAll('.wizard-content');
+
+      function updateUI() {
+        steps.forEach(s => {
+          s.classList.toggle('active', s.dataset.step == currentStep);
+          s.classList.toggle('completed', s.dataset.step < currentStep);
+        });
+        contents.forEach(c => c.classList.toggle('active', c.id === `wizardStep${currentStep}`));
+        
+        prevBtn.style.visibility = currentStep === 1 ? 'hidden' : 'visible';
+        nextBtn.textContent = currentStep === totalSteps ? 'Finalizar y Guardar' : 'Siguiente';
+      }
+
+      nextBtn.addEventListener('click', () => {
+        if (currentStep < totalSteps) {
+          currentStep++;
+          updateUI();
+        } else {
+          saveSettings();
+        }
+      });
+
+      prevBtn.addEventListener('click', () => {
+        if (currentStep > 1) {
+          currentStep--;
+          updateUI();
+        }
+      });
+
+      steps.forEach(s => {
+        s.addEventListener('click', () => {
+          currentStep = parseInt(s.dataset.step);
+          updateUI();
+        });
+      });
+    }
+
+    function initAccordions() {
+      document.querySelectorAll('.accordion-header').forEach(header => {
+        header.addEventListener('click', () => {
+          const item = header.parentElement;
+          item.classList.toggle('open');
+        });
+      });
+    }
+
+    function initInboxResizer() {
+      const resizer = document.getElementById('inboxResizer');
+      const layout = document.getElementById('inboxLayout');
+      if (!resizer || !layout) return;
+      let isResizing = false;
+      resizer.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        resizer.classList.add('resizing');
+        document.body.style.cursor = 'col-resize';
+      });
+      document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const offsetLeft = layout.getBoundingClientRect().left;
+        const newWidth = e.clientX - offsetLeft;
+        if (newWidth > 200 && newWidth < 600) {
+          layout.style.setProperty('--inbox-sidebar-width', `${newWidth}px`);
+        }
+      });
+      document.addEventListener('mouseup', () => {
+        if (isResizing) {
+          isResizing = false;
+          resizer.classList.remove('resizing');
+          document.body.style.cursor = '';
+        }
+      });
+    }
+
+    document.getElementById('loginBtn').addEventListener('click', login);
+    initInboxResizer();
+    initSettingsWizard();
+    initAccordions();
+    attachSettingsDirtyTracking();
+    document.getElementById('refreshMeBtn').addEventListener('click', refreshSession);
+    els.forgotBtn.addEventListener('click', openRecoveryModal);
+    document.getElementById('logoutBtn').addEventListener('click', logout);
+    document.getElementById('refreshBtn').addEventListener('click', () => state.me?.role === 'Admin' ? loadTenants() : loadTenantData());
+    if (els.inboxStatusFilter) {
+      els.inboxStatusFilter.addEventListener('change', () => {
+        state.inboxStatusFilter = els.inboxStatusFilter.value;
+        loadInboxConversations();
+        loadInboxSlaSummary();
+      });
+    }
+    if (els.inboxAssignedFilter) {
+      els.inboxAssignedFilter.addEventListener('input', () => {
+        clearTimeout(window.__inboxAgentTimer);
+        window.__inboxAgentTimer = setTimeout(() => {
+          state.inboxAssignedFilter = (els.inboxAssignedFilter.value || '').trim();
+          loadInboxConversations();
+        }, 260);
+      });
+    }
+    if (els.inboxIncludeInternal) {
+      els.inboxIncludeInternal.addEventListener('change', () => {
+        state.inboxIncludeInternal = !!els.inboxIncludeInternal.checked;
+        loadInboxConversationDetail();
+      });
+    }
+    if (els.refreshInboxBtn) els.refreshInboxBtn.addEventListener('click', loadInboxConversations);
+    if (els.inboxTakeoverBtn) els.inboxTakeoverBtn.addEventListener('click', takeoverConversation);
+    if (els.inboxReleaseBtn) els.inboxReleaseBtn.addEventListener('click', releaseConversation);
+    if (els.inboxAssignBtn) els.inboxAssignBtn.addEventListener('click', assignConversation);
+    if (els.inboxUnassignBtn) els.inboxUnassignBtn.addEventListener('click', unassignConversation);
+    if (els.inboxResolveBtn) els.inboxResolveBtn.addEventListener('click', resolveConversation);
+    if (els.refreshAnalyticsBtn) els.refreshAnalyticsBtn.addEventListener('click', loadInboxAnalytics);
+      if (els.saveWebhookBtn) els.saveWebhookBtn.addEventListener('click', saveWebhookSettings);
+    if (els.inboxSendBtn) els.inboxSendBtn.addEventListener('click', sendInboxMessage);
+    if (els.inboxAddNoteBtn) els.inboxAddNoteBtn.addEventListener('click', addInboxNote);
+    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+    if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', saveSettings);
+    if (els.saveSettingsBtnTop) els.saveSettingsBtnTop.addEventListener('click', saveSettings);
+    document.getElementById('sourceType').addEventListener('change', toggleCatalogSourceFields);
+    toggleCatalogSourceFields();
+    els.loadTenantsBtn.addEventListener('click', loadTenants);
+    els.syncBtn.addEventListener('click', runSync);
+    els.validateWhatsAppTokenBtn.addEventListener('click', validateWhatsAppToken);
+    els.saveCatalogAttributesBtn.addEventListener('click', saveCatalogAttributes);
+    if (els.formatMapAttributesBtn) els.formatMapAttributesBtn.addEventListener('click', () => formatJsonField('mapAttributes', '{}', 'JSON de atributos formateado. Revisalo y guardá cuando quieras.'));
+    if (els.formatCatalogAttributesBtn) els.formatCatalogAttributesBtn.addEventListener('click', () => formatJsonField('catalogAttributeDefinitions', '[]', 'JSON de definiciones formateado.'));
+    if (els.formatTenantCustomMetricsBtn) els.formatTenantCustomMetricsBtn.addEventListener('click', () => formatJsonField('tenantCustomMetrics', '[]', 'JSON de métricas formateado.'));
+    if (els.saveTenantCustomMetricsBtn) els.saveTenantCustomMetricsBtn.addEventListener('click', saveTenantCustomMetrics);
+    if (els.refreshTenantCustomMetricsBtn) els.refreshTenantCustomMetricsBtn.addEventListener('click', loadTenantCustomMetrics);
+    if (els.createTenantUserBtn) els.createTenantUserBtn.addEventListener('click', createTenantUser);
+    if (els.updateTenantUserBtn) els.updateTenantUserBtn.addEventListener('click', updateTenantUser);
+    if (els.refreshTenantUsersBtn) els.refreshTenantUsersBtn.addEventListener('click', loadTenantUsers);
+    if (els.refreshAdminMetricsBtn) els.refreshAdminMetricsBtn.addEventListener('click', loadAdminBotMetrics);
+
+    // Recovery modal events
+    els.sendRecoveryBtn.addEventListener('click', sendRecoveryEmail);
+    els.closeRecoveryBtn.addEventListener('click', () => closeModal(els.recoveryModal));
+    els.closeRecoveryOkBtn.addEventListener('click', () => closeModal(els.recoveryModal));
+    els.recoveryEmail.addEventListener('keydown', e => { if (e.key === 'Enter') sendRecoveryEmail(); });
+    els.recoveryModal.addEventListener('click', e => { if (e.target === els.recoveryModal) closeModal(els.recoveryModal); });
+
+    // Reset modal events
+    els.resetBtn.addEventListener('click', resetPassword);
+    els.closeResetBtn.addEventListener('click', () => { closeModal(els.resetModal); state.resetToken = null; const u = new URL(window.location.href); u.searchParams.delete('token'); window.history.replaceState({}, '', u.toString()); });
+    els.closeResetOkBtn.addEventListener('click', () => closeModal(els.resetModal));
+    els.resetModal.addEventListener('click', e => { if (e.target === els.resetModal) { closeModal(els.resetModal); } });
+
+    // ESC key closes any open modal
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        if (els.recoveryModal.classList.contains('open')) closeModal(els.recoveryModal);
+        if (els.resetModal.classList.contains('open')) { closeModal(els.resetModal); state.resetToken = null; }
+      }
+    });
+
+    els.stockSearch.addEventListener('input', () => {
+      clearTimeout(window.__searchTimer);
+      window.__searchTimer = setTimeout(loadTenantData, 220);
+    });
+
+    document.querySelectorAll('#panel-products th[data-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (state.stockSortBy === key) state.stockDesc = !state.stockDesc;
+        else { state.stockSortBy = key; state.stockDesc = false; }
+        loadTenantData();
+      });
+    });
+
+    // Auto-open reset modal if URL contains a recovery token
+    const urlToken = new URLSearchParams(window.location.search).get('token');
+    if (urlToken) openResetModal(urlToken);
+
+  </script>
+</body>
+</html>

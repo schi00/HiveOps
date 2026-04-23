@@ -1,5 +1,5 @@
 -- Diagnostic script to verify Full-Text Search index status
--- Run this against your SaaSBot database to ensure FTS is properly configured
+-- Run this against your HiveOps database to ensure FTS is properly configured
 
 PRINT '=== Full-Text Search Diagnostic Report ===';
 

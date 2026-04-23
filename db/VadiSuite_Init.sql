@@ -446,8 +446,8 @@ END CATCH;
 
 IF (FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') = 1)
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = N'SaaSBotFT')
-        CREATE FULLTEXT CATALOG SaaSBotFT AS DEFAULT;
+    IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = N'HiveOpsFT')
+        CREATE FULLTEXT CATALOG HiveOpsFT AS DEFAULT;
 
     IF OBJECT_ID(N'dbo.Products', N'U') IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM sys.fulltext_indexes WHERE object_id = OBJECT_ID(N'dbo.Products'))

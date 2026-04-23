@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HiveOps.Agents/HiveOps.Agents.csproj" />
+    <Project Path="src/HiveOps.Api/HiveOps.Api.csproj" />
+    <Project Path="src/HiveOps.Application/HiveOps.Application.csproj" />
+    <Project Path="src/HiveOps.Domain/HiveOps.Domain.csproj" />
+    <Project Path="src/HiveOps.Infrastructure/HiveOps.Infrastructure.csproj" />
+    <Project Path="src/HiveOps.Workers/HiveOps.Workers.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HiveOps.IntegrationTests/HiveOps.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

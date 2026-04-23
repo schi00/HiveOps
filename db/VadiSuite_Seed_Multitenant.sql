@@ -27,10 +27,10 @@ WHEN NOT MATCHED THEN
 
 MERGE dbo.AppUsers AS target
 USING (VALUES
-    (@AdminUserId, N'admin00', N'admin00@saasbot.local', @SeedPasswordHash, N'Admin', NULL, 1),
-    (@TenantAlphaUserId, N'tenant_alfa_deportes', N'tenant_alfa_deportes@saasbot.local', @SeedPasswordHash, N'Tenant', @TenantAlpha, 1),
-    (@TenantBetaUserId, N'tenant_beta_urban', N'tenant_beta_urban@saasbot.local', @SeedPasswordHash, N'Tenant', @TenantBeta, 1),
-    (@TenantGammaUserId, N'tenant_gamma_outdoor', N'tenant_gamma_outdoor@saasbot.local', @SeedPasswordHash, N'Tenant', @TenantGamma, 1)
+    (@AdminUserId, N'admin00', N'admin00@HiveOps.local', @SeedPasswordHash, N'Admin', NULL, 1),
+    (@TenantAlphaUserId, N'tenant_alfa_deportes', N'tenant_alfa_deportes@HiveOps.local', @SeedPasswordHash, N'Tenant', @TenantAlpha, 1),
+    (@TenantBetaUserId, N'tenant_beta_urban', N'tenant_beta_urban@HiveOps.local', @SeedPasswordHash, N'Tenant', @TenantBeta, 1),
+    (@TenantGammaUserId, N'tenant_gamma_outdoor', N'tenant_gamma_outdoor@HiveOps.local', @SeedPasswordHash, N'Tenant', @TenantGamma, 1)
 ) AS src(Id, Username, Email, PasswordHash, Role, TenantId, IsActive)
 ON target.Username = src.Username
 WHEN MATCHED THEN
