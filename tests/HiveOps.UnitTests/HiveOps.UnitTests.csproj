@@ -25,6 +25,7 @@
     <ProjectReference Include="..\..\src\HiveOps.Domain\HiveOps.Domain.csproj" />
     <ProjectReference Include="..\..\src\HiveOps.Application\HiveOps.Application.csproj" />
     <ProjectReference Include="..\..\src\HiveOps.Agents\HiveOps.Agents.csproj" />
+    <ProjectReference Include="..\..\src\HiveOps.Infrastructure\HiveOps.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

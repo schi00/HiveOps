@@ -1,5 +1,5 @@
 ﻿const API='/api';
-const s={token:localStorage.getItem('token'),user:JSON.parse(localStorage.getItem('user')||'null'),isAdmin:false,incidents:[],kb:[]};
+const s={token:localStorage.getItem('token'),user:JSON.parse(localStorage.getItem('user')||'null'),isAdmin:false,incidents:[],tenantId:localStorage.getItem('tenantId')||null,tenants:[]};
 if(s.token&&s.user){showApp();}else{showLogin();}
 document.getElementById('login-form').addEventListener('submit',async e=>{
 e.preventDefault();
@@ -8,16 +8,29 @@ try{
 const r=await fetch(`${API}/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('lu').value,password:document.getElementById('lp').value})});
 if(!r.ok)throw new Error('Credenciales invalidas');
 const d=await r.json();
-s.token=d.token;s.user={username:d.username,role:d.role};s.isAdmin=d.role==='SuperAdmin'||d.role==='Admin';
+s.token=d.token;
+s.user={username:d.displayName||d.username||'',role:d.role};
+s.isAdmin=d.role==='SuperAdmin'||d.role==='Admin';
+if(d.tenantId){s.tenantId=d.tenantId;localStorage.setItem('tenantId',s.tenantId);} 
 localStorage.setItem('token',s.token);localStorage.setItem('user',JSON.stringify(s.user));
 showApp();
 }catch(x){el.textContent=x.message;el.classList.remove('hidden');}
 });
 function showLogin(){document.getElementById('login-screen').classList.remove('hidden');document.getElementById('app').classList.add('hidden');}
-function showApp(){document.getElementById('login-screen').classList.add('hidden');document.getElementById('app').classList.remove('hidden');s.isAdmin=s.user.role==='SuperAdmin'||s.user.role==='Admin';document.getElementById('rb').textContent=s.user.role;if(s.isAdmin)document.getElementById('n-adm').classList.remove('hidden');n('dashboard');ld();}
+function showApp(){
+try{
+document.getElementById('login-screen').classList.add('hidden');
+document.getElementById('app').classList.remove('hidden');
+s.isAdmin=s.user.role==='SuperAdmin'||s.user.role==='Admin';
+if(s.isAdmin){const adm=document.getElementById('n-adm');if(adm)adm.classList.remove('hidden');}
+else {const adm=document.getElementById('n-adm');if(adm)adm.classList.add('hidden');}
+setTimeout(()=>{loadTenants();n('dashboard');ld();},100);
+}catch(e){console.error('Error in showApp:',e);showLogin();}
+}
 function logout(){localStorage.clear();s.token=null;s.user=null;showLogin();}
 async function api(m,p,b){
-const o={method:m,headers:{'Content-Type':'application/json',Authorization:'Bearer '+s.token}};
+const o={method:m,headers:{'Content-Type':'application/json','Authorization':'Bearer '+(s.token||'')},credentials:'include'};
+if(s.tenantId)o.headers['X-Tenant-Id']=s.tenantId;
 if(b)o.body=JSON.stringify(b);
 const r=await fetch(API+p,o);
 if(r.status===401){logout();throw new Error('Sesion expirada');}
@@ -26,27 +39,46 @@ return r.status===204?null:await r.json();
 }
 function toast(msg,t='info'){
 const el=document.getElementById('toast'),ic=document.getElementById('ti'),tx=document.getElementById('tm');
-tx.textContent=msg;ic.className='w-5 h-5 rounded-full flex items-center justify-center text-xs '+(t==='success'?'bg-emerald-500/20 text-emerald-400':t==='error'?'bg-rose-500/20 text-rose-400':'bg-indigo-500/20 text-indigo-400');
-el.classList.remove('translate-y-20','opacity-0');
-setTimeout(()=>el.classList.add('translate-y-20','opacity-0'),3000);
+tx.textContent=msg;
+ic.className='w-6 h-6 rounded-full flex items-center justify-center text-sm '+(t==='success'?'bg-emerald-500/20 text-emerald-400':t==='error'?'bg-red-500/20 text-red-400':'bg-amber-500/20 text-amber-400');
+ic.innerHTML=t==='success'?'<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>':t==='error'?'<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>':'<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+el.classList.add('show');
+setTimeout(()=>el.classList.remove('show'),4000);
 }
+function showToast(msg,t){toast(msg,t);}
 function n(v){
 document.querySelectorAll('.view-section').forEach(el=>{el.classList.remove('active');el.style.opacity='0';});
-document.querySelectorAll('[id^="n-"]').forEach(el=>el.classList.remove('text-white','bg-white/10'));
-const t=document.getElementById('v-'+v);t.classList.add('active');
-const nb=document.getElementById('n-'+v.replace('dashboard','dash').replace('incidents','inc').replace('admin','adm').replace('kb','kb'));
-if(nb){nb.classList.add('text-white','bg-white/10');}
-anime({targets:t,opacity:[0,1],translateY:[12,0],duration:400,easing:'easeOutCubic'});
-if(v==='incidents')li();if(v==='kb')lk();if(v==='admin'){lm();lh();}
+document.querySelectorAll('.nav-item').forEach(el=>{el.classList.remove('active');});
+const viewMap={dashboard:'dash',incidents:'inc',kb:'kb',config:'cfg',admin:'adm'};
+const viewId=viewMap[v]||v;
+const t=document.getElementById('v-'+viewId)||document.getElementById('v-'+v);
+if(t){t.classList.add('active');
+anime({targets:t,opacity:[0,1],translateY:[16,0],duration:450,easing:'easeOutCubic'});}
+else{console.warn('Dashboard view not found for',v,viewId);}
+const nb=document.getElementById('n-'+viewId)||document.getElementById('n-'+v);
+if(nb){nb.classList.add('active');}
+if(v==='incidents')li();if(v==='kb')lk();if(v==='config')lc();if(v==='admin'){lm();lh();}
 }
 async function ld(){
 try{
+// Admins pueden ver summary global sin tenant seleccionado
+if(!s.tenantId&&!s.isAdmin){
+document.getElementById('c-open').textContent='0';
+document.getElementById('c-crit').textContent='0';
+document.getElementById('c-res').textContent='0';
+document.getElementById('c-avg').textContent='0';
+document.getElementById('l-rec').innerHTML='<div class="p-8 text-center" style="color:var(--text-secondary)">Selecciona un tenant</div>';
+return;
+}
 const d=await api('GET','/support/summary');
 anime({targets:['#c-open','#c-crit','#c-res','#c-avg'],translateY:[20,0],opacity:[0,1],delay:anime.stagger(80),duration:600,easing:'easeOutExpo'});
-countUp('c-open',d.totalOpen||0);countUp('c-crit',d.totalCritical||0);countUp('c-res',d.totalResolved||0);countUp('c-avg',d.averageResolutionMinutes||0);
+countUp('c-open',d.openIncidents??d.totalOpen??0);
+countUp('c-crit',d.criticalOpen??d.totalCritical??0);
+countUp('c-res',d.resolvedThisMonth??d.totalResolved??0);
+countUp('c-avg',d.avgResolutionMinutes??d.averageResolutionMinutes??0);
 const rec=await api('GET','/support/incidents?status=&severity=&category=&pageSize=5');
 const lr=document.getElementById('l-rec');
-lr.innerHTML=(rec||[]).length?rec.map(x=>rRow(x,true)).join(''):'<div class="p-6 text-center text-slate-500">Sin incidentes</div>';
+lr.innerHTML=(rec||[]).length?rec.map(x=>rRow(x,true)).join(''):'<div class="p-8 text-center" style="color:var(--text-secondary)"><svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Sin incidentes recientes</div>';
 anime({targets:lr.children,translateX:[-20,0],opacity:[0,1],delay:anime.stagger(40),duration:400,easing:'easeOutCubic'});
 }catch(e){toast(e.message,'error');}
 }
@@ -54,13 +86,15 @@ function countUp(id,target){
 const el=document.getElementById(id);let cur=0;const dur=800;const step=16;const inc=target/(dur/step);
 const iv=setInterval(()=>{cur+=inc;if(cur>=target){cur=target;clearInterval(iv);}el.textContent=Math.round(cur);},step);
 }
-async function li(){
+async function li(search){
 try{
+// Admins pueden ver incidentes globales sin tenant seleccionado
+if(!s.tenantId&&!s.isAdmin){document.getElementById('l-all').innerHTML='<div class="p-10 text-center" style="color:var(--text-secondary)">Selecciona un tenant</div>';return;}
 const f=document.getElementById('fs').value,v=document.getElementById('fv').value;
-const q=`/support/incidents?${f?'status='+f+'&':''}${v?'severity='+v+'&':''}`;
+const q=`/support/incidents?${f?'status='+f+'&':''}${v?'severity='+v+'&':''}${search?'q='+encodeURIComponent(search)+'&':''}`;
 const d=await api('GET',q);s.incidents=d||[];
 const el=document.getElementById('l-all');
-el.innerHTML=d?.length?d.map(x=>rRow(x)).join(''):'<div class="p-8 text-center text-slate-500">Sin incidentes</div>';
+el.innerHTML=d?.length?d.map(x=>rRow(x)).join(''):'<div class="p-10 text-center" style="color:var(--text-secondary)"><svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>No hay incidentes</div>';
 anime({targets:el.children,translateY:[10,0],opacity:[0,1],delay:anime.stagger(30),duration:300,easing:'easeOutCubic'});
 }catch(e){toast(e.message,'error');}
 }
@@ -72,8 +106,8 @@ renderKb(d||[]);
 }
 function renderKb(list){
 const el=document.getElementById('l-kb');
-el.innerHTML=list.length?list.map(k=>`<div class="glass rounded-xl p-5 hover:bg-white/5 transition-colors cursor-pointer group"><div class="flex justify-between items-start mb-2"><h4 class="font-semibold text-white group-hover:text-indigo-300 transition-colors">${esc(k.title)}</h4>${k.isPublished?'<span class="text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Publicado</span>':'<span class="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-400">Borrador</span>'}</div><div class="text-sm text-slate-400 line-clamp-3 mb-3">${esc(k.content||'')}</div><div class="flex gap-2">${(k.tags||[]).map(t=>`<span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">${esc(t)}</span>`).join('')}</div></div>`).join(''):'<div class="glass rounded-xl p-8 text-center text-slate-500 col-span-full">Sin articulos</div>';
-anime({targets:el.children,scale:[0.97,1],opacity:[0,1],delay:anime.stagger(50),duration:400,easing:'easeOutCubic'});
+el.innerHTML=list.length?list.map(k=>`<div class="hive-card p-5 cursor-pointer group"><div class="flex justify-between items-start mb-3"><h4 class="font-semibold group-hover:text-amber-500 transition-colors" style="color:var(--text-primary)">${esc(k.title)}</h4>${k.isPublished?'<span class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">Publicado</span>':'<span class="text-xs px-2.5 py-1 rounded-full bg-neutral-700 text-neutral-400">Borrador</span>'}</div><div class="text-sm line-clamp-3 mb-4" style="color:var(--text-secondary)">${esc(k.content||'')}</div><div class="flex flex-wrap gap-2">${(k.tags||[]).map(t=>`<span class="text-xs px-2 py-1 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20">${esc(t)}</span>`).join('')}</div></div>`).join(''):'<div class="hive-card p-8 text-center col-span-full" style="color:var(--text-secondary)">Sin articulos</div>';
+anime({targets:el.children,scale:[0.95,1],opacity:[0,1],delay:anime.stagger(60),duration:500,easing:'easeOutCubic'});
 }
 async function sk(){
 try{
@@ -82,11 +116,18 @@ const d=await api('GET',`/support/kb?q=${encodeURIComponent(q)}`);
 renderKb(d||[]);
 }catch(e){toast(e.message,'error');}
 }
+document.getElementById('fk')?.addEventListener('submit',async e=>{
+e.preventDefault();
+try{
+const d=await api('POST','/support/kb',{title:document.getElementById('kt').value,category:document.getElementById('kc').value,tags:(document.getElementById('ktg').value||'').split(',').filter(x=>x.trim()),content:document.getElementById('kb').value,resolutionSteps:document.getElementById('ks').value,isPublished:document.getElementById('kp').checked});
+cm('mk');toast('Articulo KB creado','success');document.getElementById('fk').reset();lk();
+}catch(x){toast(x.message,'error');}
+});
 async function lm(){
 try{
 const d=await api('GET','/support/merge-queue');
 const el=document.getElementById('l-mer');
-el.innerHTML=(d||[]).length?d.map(m=>`<div class="glass rounded-lg p-4 flex items-center justify-between"><div><div class="font-semibold text-sm">${esc(m.title||'Fix')}</div><div class="text-xs text-slate-400 mt-1">Branch: <code class="text-indigo-300">${esc(m.branch)}</code></div></div><button onclick="approveMerge('${m.id}')" class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors">Aprobar</button></div>`).join(''):'<div class="text-center text-slate-500 py-4">Cola vacia</div>';
+el.innerHTML=(d||[]).length?d.map(m=>`<div class="hive-card p-4 flex items-center justify-between"><div><div class="font-semibold text-sm" style="color:var(--text-primary)">${esc(m.title||'Fix')}</div><div class="text-xs mt-1" style="color:var(--text-tertiary)">Branch: <code class="text-amber-500 font-mono">${esc(m.branch)}</code></div></div><button onclick="approveMerge('${m.id}')" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-all">Aprobar</button></div>`).join(''):`<div class="text-center py-6" style="color:var(--text-secondary)">Cola vacia</div>`;
 }catch(e){toast(e.message,'error');}
 }
 async function lh(){
@@ -103,31 +144,47 @@ document.getElementById('tt').textContent=d?.testsPassedLastRun!=null?(d.testsPa
 }
 async function approveMerge(id){try{await api('POST',`/support/merge-queue/${id}/approve`);toast('Merge aprobado','success');lm();}catch(e){toast(e.message,'error');}}
 function rRow(i,compact){
-const sevColors={Critical:'bg-rose-500',High:'bg-amber-500',Medium:'bg-yellow-500',Low:'bg-slate-500'};
-const stColors={Open:'text-amber-400',InProgress:'text-indigo-400',Resolved:'text-emerald-400',Closed:'text-slate-400'};
-const sev=sevColors[i.severity]||'bg-slate-500';
-const st=stColors[i.status]||'text-slate-400';
-return `<div onclick="od('${i.id}')" class="p-4 hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-4 ${compact?'':'border-b border-white/5'}"><div class="w-2 h-2 rounded-full ${sev} flex-shrink-0"></div><div class="flex-1 min-w-0"><div class="font-medium text-sm truncate">${esc(i.title)}</div><div class="text-xs text-slate-400 mt-0.5">${esc(i.category||'Other')} · ${timeAgo(i.createdAt)}</div></div><div class="text-xs font-medium ${st}">${i.status}</div></div>`;
+const sevColors={Critical:'bg-red-500',High:'bg-amber-500',Medium:'bg-yellow-500',Low:'bg-neutral-500'};
+const stColors={Open:'text-amber-500',InProgress:'text-amber-400',Resolved:'text-emerald-500',Closed:'text-neutral-400'};
+const sev=sevColors[i.severity]||'bg-neutral-500';
+const st=stColors[i.status]||'text-neutral-400';
+return `<div onclick="od('${i.id}')" class="p-4 hover:bg-amber-500/5 transition-all cursor-pointer flex items-center gap-4 group ${compact?'':'border-b'}" style="border-color:var(--border-color)"><div class="w-2 h-2 rounded-full ${sev} flex-shrink-0 status-pulse"></div><div class="flex-1 min-w-0"><div class="font-medium text-sm truncate" style="color:var(--text-primary)">${esc(i.title)}</div><div class="text-xs mt-0.5" style="color:var(--text-tertiary)">${esc(i.category||'Other')} · ${timeAgo(i.createdAt)}</div></div><div class="text-xs font-medium ${st}">${i.status}</div></div>`;
+}
+function filterIncidents(filter){
+if(filter==='Open'||filter==='InProgress'||filter==='Resolved'||filter==='Closed'){
+document.getElementById('fs').value=filter;
+}
+if(filter==='Critical'||filter==='High'||filter==='Medium'||filter==='Low'){
+document.getElementById('fv').value=filter;
+}
+n('incidents');
+li();
+}
+function searchIncidents(){
+const q=document.getElementById('global-search').value.trim();
+if(!q){li();return;}
+n('incidents');
+li(q);
 }
 function esc(t){const d=document.createElement('div');d.textContent=t||'';return d.innerHTML;}
 function timeAgo(d){if(!d)return'';const s=Math.floor((Date.now()-new Date(d))/1000);if(s<60)return'ahora';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'d';}
 async function od(id){
 try{
 const d=await api('GET','/support/incidents/'+id);
-const sevColors={Critical:'bg-rose-500',High:'bg-amber-500',Medium:'bg-yellow-500',Low:'bg-slate-500'};
-const sev=sevColors[d.severity]||'bg-slate-500';
-const stColors={Open:'text-amber-400',InProgress:'text-indigo-400',Resolved:'text-emerald-400',Closed:'text-slate-400'};
-const st=stColors[d.status]||'text-slate-400';
+const sevColors={Critical:'bg-red-500',High:'bg-amber-500',Medium:'bg-yellow-500',Low:'bg-neutral-500'};
+const sev=sevColors[d.severity]||'bg-neutral-500';
+const stColors={Open:'text-amber-500',InProgress:'text-amber-400',Resolved:'text-emerald-500',Closed:'text-neutral-400'};
+const st=stColors[d.status]||'text-neutral-400';
 let actions='';
 if(d.status==='Open'||d.status==='InProgress'){
-actions+=`<div class="flex gap-2 mt-4"><button onclick="upd('${id}','InProgress')" class="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs">Marcar En Progreso</button><button onclick="upd('${id}','Resolved')" class="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs">Resolver</button></div>`;
+actions+=`<div class="flex gap-3 mt-5"><button onclick="upd('${id}','InProgress')" class="btn-primary px-4 py-2 rounded-lg text-xs flex-1">Marcar En Progreso</button><button onclick="upd('${id}','Resolved')" class="btn-secondary px-4 py-2 rounded-lg text-xs flex-1" style="background:var(--bg-tertiary);color:#10b981;border-color:#10b981">Resolver</button></div>`;
 }
 if(d.suggestedFixSql){
-actions+=`<div class="mt-4 p-3 rounded-lg bg-slate-900 border border-slate-700"><div class="text-xs text-slate-400 mb-2">Fix sugerido (SQL)</div><pre class="text-xs text-indigo-300 overflow-x-auto">${esc(d.suggestedFixSql)}</pre><div class="flex gap-2 mt-2"><button onclick="appr('${id}')" class="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs">Aprobar DB Fix</button><button onclick="rej('${id}')" class="px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-xs">Rechazar</button></div></div>`;
+actions+=`<div class="mt-5 p-4 rounded-xl hive-card" style="background:rgba(245,158,11,0.05)"><div class="text-xs mb-2" style="color:var(--text-tertiary)">Fix sugerido (SQL)</div><pre class="text-xs text-amber-400 overflow-x-auto font-mono">${esc(d.suggestedFixSql)}</pre><div class="flex gap-2 mt-3"><button onclick="appr('${id}')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs">Aprobar</button><button onclick="rej('${id}')" class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs">Rechazar</button></div></div>`;
 }
-document.getElementById('db').innerHTML=`<div class="flex items-center gap-3 mb-4"><div class="w-3 h-3 rounded-full ${sev}"></div><div class="text-2xl font-bold">${esc(d.title)}</div></div><div class="text-sm text-slate-400 mb-1">Estado: <span class="${st} font-medium">${d.status}</span></div><div class="text-sm text-slate-400 mb-4">Creado: ${new Date(d.createdAt).toLocaleString()}</div><div class="glass rounded-lg p-4 mb-4"><div class="text-xs text-slate-400 uppercase tracking-wider mb-2">Descripcion</div><div class="text-sm leading-relaxed whitespace-pre-wrap">${esc(d.description)}</div></div>${d.resolutionNotes?`<div class="glass rounded-lg p-4 mb-4"><div class="text-xs text-slate-400 uppercase tracking-wider mb-2">Notas de resolucion</div><div class="text-sm whitespace-pre-wrap">${esc(d.resolutionNotes)}</div></div>`:''}${d.reasoning?`<div class="glass rounded-lg p-4 mb-4 border-l-2 border-indigo-500"><div class="text-xs text-indigo-400 uppercase tracking-wider mb-2">Analisis IA</div><div class="text-sm text-slate-300 italic">${esc(d.reasoning)}</div></div>`:''}${d.gitBranch?`<div class="text-xs text-slate-500">Branch: <code class="text-indigo-300">${esc(d.gitBranch)}</code> · Commit: <code class="text-slate-300">${esc((d.gitCommitHash||'').substring(0,8))}</code></div>`:''}${actions}`;
+document.getElementById('db').innerHTML=`<div class="flex items-center gap-3 mb-5"><div class="w-3 h-3 rounded-full ${sev} status-pulse"></div><div class="text-2xl font-bold" style="color:var(--text-primary)">${esc(d.title)}</div></div><div class="text-sm mb-1" style="color:var(--text-secondary)">Estado: <span class="${st} font-medium">${d.status}</span></div><div class="text-sm mb-5" style="color:var(--text-tertiary)">Creado: ${new Date(d.createdAt).toLocaleString()}</div><div class="hive-card p-4 mb-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Descripcion</div><div class="text-sm leading-relaxed whitespace-pre-wrap" style="color:var(--text-secondary)">${esc(d.description)}</div></div>${d.resolutionNotes?`<div class="hive-card p-4 mb-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Notas de resolucion</div><div class="text-sm whitespace-pre-wrap" style="color:var(--text-secondary)">${esc(d.resolutionNotes)}</div></div>`:''}${d.reasoning?`<div class="hive-card p-4 mb-4 border-l-2 border-amber-500" style="background:rgba(245,158,11,0.03)"><div class="text-xs text-amber-500 uppercase tracking-wider mb-2">Analisis IA</div><div class="text-sm italic" style="color:var(--text-secondary)">${esc(d.reasoning)}</div></div>`:''}${d.gitBranch?`<div class="text-xs" style="color:var(--text-tertiary)">Branch: <code class="text-amber-500 font-mono">${esc(d.gitBranch)}</code> · Commit: <code class="font-mono" style="color:var(--text-secondary)">${esc((d.gitCommitHash||'').substring(0,8))}</code></div>`:''}${actions}`;
 document.getElementById('dr').classList.add('open');
-anime({targets:'#db > *',translateX:[30,0],opacity:[0,1],delay:anime.stagger(60),duration:400,easing:'easeOutCubic'});
+anime({targets:'#db > *',translateX:[30,0],opacity:[0,1],delay:anime.stagger(60),duration:450,easing:'easeOutCubic'});
 }catch(e){toast(e.message,'error');}
 }
 async function upd(id,st){try{await api('PUT','/support/incidents/'+id,{status:st});toast('Estado actualizado','success');cd();li();ld();}catch(e){toast(e.message,'error');}}
@@ -140,14 +197,100 @@ function handleRipple(e){const b=e.currentTarget;const r=document.createElement(
 document.getElementById('fc').addEventListener('submit',async e=>{
 e.preventDefault();
 try{
+if(!s.tenantId&&!s.isAdmin){toast('Selecciona un tenant primero','error');return;}
 const d=await api('POST','/support/incidents',{title:document.getElementById('ct').value,description:document.getElementById('cd').value,severity:document.getElementById('cv').value,category:document.getElementById('cc').value});
 cm('mc');toast('Incidente creado','success');document.getElementById('fc').reset();li();ld();od(d.id);
 }catch(x){toast(x.message,'error');}
 });
-document.getElementById('fk').addEventListener('submit',async e=>{
-e.preventDefault();
+async function loadTenants(){
 try{
-await api('POST','/support/kb',{title:document.getElementById('kt').value,category:document.getElementById('kc').value,tags:document.getElementById('ktg').value.split(',').map(t=>t.trim()).filter(Boolean),content:document.getElementById('kb').value,resolutionSteps:document.getElementById('ks').value,isPublished:document.getElementById('kp').checked});
-cm('mk');toast('Articulo guardado','success');document.getElementById('fk').reset();lk();
-}catch(x){toast(x.message,'error');}
+const tenants=await api('GET','/tenants');
+s.tenants=tenants||[];
+const sel=document.getElementById('tenant-select');
+if(sel){
+sel.innerHTML='<option value="">Seleccionar Tenant...</option>'+(tenants||[]).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+if(s.tenantId&&tenants&&tenants.find(t=>t.id===s.tenantId)){sel.value=s.tenantId;changeTenant();}
+}
+}catch(e){console.error('Error loading tenants:',e);toast('Error al cargar tenants','error');}
+}
+function changeTenant(){
+const sel=document.getElementById('tenant-select');
+s.tenantId=sel.value;
+if(s.tenantId){
+localStorage.setItem('tenantId',s.tenantId);
+ld();li();
+}else{
+localStorage.removeItem('tenantId');
+}
+}
+async function lc(){
+try{
+if(!s.tenantId){toast('Selecciona un tenant primero','warning');return;}
+const cfg=await api('GET','/tenants/'+s.tenantId+'/config');
+document.getElementById('cfg-model').value=cfg.agent?.tone||'sales';
+document.getElementById('cfg-temp').value=0.7;
+document.getElementById('temp-value').textContent='0.7';
+document.getElementById('cfg-tokens').value=cfg.agent?.maxSteps||3;
+document.getElementById('cfg-db-conn').value='';
+document.getElementById('cfg-db-enabled').checked=cfg.tools?.toolSettings?.length>0||false;
+}catch(e){toast(e.message,'error');}
+}
+function applyPreset(preset){
+const presets={
+basic:{model:'gpt-3.5-turbo',temperature:0.5,maxTokens:1000},
+standard:{model:'gpt-4',temperature:0.7,maxTokens:2000},
+advanced:{model:'gpt-4',temperature:0.8,maxTokens:4000}
+};
+const p=presets[preset];
+document.getElementById('cfg-model').value=p.model;
+document.getElementById('cfg-temp').value=p.temperature;
+document.getElementById('temp-value').textContent=p.temperature;
+document.getElementById('cfg-tokens').value=p.maxTokens;
+['basic','standard','advanced'].forEach(k=>{
+const el=document.getElementById('preset-'+k);
+if(el){if(k===preset)el.classList.add('preset-selected');else el.classList.remove('preset-selected');}
 });
+toast('Preconfiguración '+preset+' aplicada','success');
+}
+async function saveConfig(){
+try{
+const cfg={
+agent:{enabled:true,enableLlmPlanner:true,plannerVersion:'v1',maxSteps:parseInt(document.getElementById('cfg-tokens').value),tone:document.getElementById('cfg-model').value,systemPromptOverride:null,promptVariables:{},allowedTools:[]},
+tools:{toolSettings:{}},
+business:{},
+channel:{},
+escalation:{},
+featureFlags:{},
+abTesting:{},
+policies:[]
+};
+await api('PUT','/tenants/'+s.tenantId+'/config',cfg);
+toast('Configuración guardada','success');
+}catch(e){toast(e.message,'error');}
+}
+function resetConfig(){
+lc();
+toast('Cambios descartados','info');
+}
+document.getElementById('cfg-temp').addEventListener('input',e=>{document.getElementById('temp-value').textContent=e.target.value;});
+
+let notifications=[];
+function toggleNotifications(){
+const el=document.getElementById('notif-dropdown');
+if(el.classList.contains('hidden')){el.classList.remove('hidden');loadNotifications();}
+else{el.classList.add('hidden');}
+}
+async function loadNotifications(){
+try{
+if(!s.tenantId&&!s.isAdmin){document.getElementById('notif-list').innerHTML='<div class="p-4 text-center text-sm" style="color:var(--text-secondary)">Selecciona un tenant</div>';return;}
+const d=await api('GET','/support/notifications');
+notifications=d||[];
+const nl=document.getElementById('notif-list');
+if(!notifications.length){nl.innerHTML='<div class="p-4 text-center text-sm" style="color:var(--text-secondary)">Sin notificaciones nuevas</div>';}
+else{nl.innerHTML=notifications.map(n=>`<div class="p-3 hover:bg-white/5 cursor-pointer transition-colors border-b" style="border-color:var(--border-color)" onclick="${n.type==='incident'?`od('${n.incidentId}');toggleNotifications();`:`n('incidents');toggleNotifications();`}"><div class="flex items-center gap-2 mb-1"><div class="w-1.5 h-1.5 rounded-full ${n.severity==='Critical'?'bg-red-500':n.severity==='High'?'bg-amber-500':'bg-amber-500/60'}"></div><span class="text-xs font-medium" style="color:var(--text-primary)">${n.title||'Notificacion'}</span></div><div class="text-xs" style="color:var(--text-tertiary)">${timeAgo(n.createdAt)}</div></div>`).join('');}
+const badge=document.getElementById('notif-badge');
+if(notifications.filter(n=>!n.read).length>0){badge.classList.remove('hidden');badge.classList.add('status-pulse');}
+else{badge.classList.add('hidden');badge.classList.remove('status-pulse');}
+}catch(e){document.getElementById('notif-list').innerHTML='<div class="p-4 text-center text-sm" style="color:var(--text-secondary)">Error cargando notificaciones</div>';}
+}
+function markAllRead(){notifications.forEach(n=>n.read=true);document.getElementById('notif-badge').classList.add('hidden');document.getElementById('notif-badge').classList.remove('status-pulse');}

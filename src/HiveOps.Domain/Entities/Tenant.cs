@@ -9,6 +9,7 @@ public sealed class Tenant
     public string ApiKey { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public string? ConfigJson { get; set; }
+    public string? EncryptedConnectionString { get; set; }
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
 
     // Navigation

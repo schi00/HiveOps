@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,12 +21,25 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        // ── Data Protection ────────────────────────────────────────────────
+        var dataProtectionPath = configuration.GetValue<string>("HiveOps:DataProtectionKeysPath") ?? "keys/dataprotection";
+        Directory.CreateDirectory(dataProtectionPath);
+        services.AddDataProtection()
+            .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
+            .SetApplicationName("HiveOps");
+
         // ── Multi-tenant context (scoped per request) ──────────────────────
         services.AddScoped<TenantContext>();
         services.AddScoped<ITenantContext>(sp => sp.GetRequiredService<TenantContext>());
         services.AddScoped<TenantSessionContextInterceptor>();
+        services.AddScoped<TenantSaveChangesInterceptor>();
         services.AddMemoryCache();
         services.AddScoped<ITenantConfigService, TenantConfigService>();
+
+        // ── Tenant resolution pipeline ─────────────────────────────────────
+        services.AddScoped<ITenantLookupService, TenantLookupService>();
+        services.AddScoped<ITenantProvider, TenantProvider>();
+        services.AddSingleton<IDynamicConnectionStringResolver, DynamicConnectionStringResolver>();
 
         // ── EF Core + SQL Server ───────────────────────────────────────────
         services.AddDbContext<AppDbContext>((sp, options) =>
@@ -33,12 +47,13 @@ public static class ServiceCollectionExtensions
             var connStr = configuration.GetConnectionString("DefaultConnection")
                 ?? throw new InvalidOperationException("Missing 'DefaultConnection' connection string.");
             var tenantInterceptor = sp.GetRequiredService<TenantSessionContextInterceptor>();
+            var saveChangesInterceptor = sp.GetRequiredService<TenantSaveChangesInterceptor>();
             options.UseSqlServer(connStr, sql =>
             {
                 sql.EnableRetryOnFailure(3);
                 sql.CommandTimeout(30);
             });
-            options.AddInterceptors(tenantInterceptor);
+            options.AddInterceptors(tenantInterceptor, saveChangesInterceptor);
         }, ServiceLifetime.Scoped);
 
         // ── Redis ──────────────────────────────────────────────────────────
@@ -64,8 +79,8 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<IMessagingChannel, MetaWhatsAppChannel>();
 
         // ── Git & Deployment (CI/CD pipeline stubs) ────────────────────────
-        services.AddScoped<IGitService, LocalGitService>();
-        services.AddScoped<IDeploymentService, PipelineDeploymentService>();
+        services.AddSingleton<IGitService, LocalGitService>();
+        services.AddSingleton<IDeploymentService, PipelineDeploymentService>();
 
         // ── Tenant Data Fixer ────────────────────────────────────────────────
         services.AddScoped<ITenantDataFixerService, TenantDataFixerService>();

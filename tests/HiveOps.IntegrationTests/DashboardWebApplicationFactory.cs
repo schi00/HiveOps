@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using HiveOps.Api.Authentication;
@@ -18,17 +19,31 @@ namespace HiveOps.IntegrationTests;
 public sealed class DashboardWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"HiveOps_Integration_{Guid.NewGuid():N}";
-    private string ConnectionString => $"Server=.\\SQLEXPRESS;Database={_databaseName};Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True";
     public FakeEmailService FakeEmail { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
 
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Git:RepoPath"] = Path.GetTempPath(),
+                ["Admin:ApiKey"] = "test-admin-api-key-1234567890-abcdef",
+                ["HiveOps:DataProtectionKeysPath"] = Path.Combine(Path.GetTempPath(), "hiveops-dp-keys")
+            });
+        });
+
         builder.ConfigureServices(services =>
         {
-            services.RemoveAll(typeof(DbContextOptions<AppDbContext>));
-            services.RemoveAll(typeof(AppDbContext));
+            // Remove ALL DbContext-related registrations to avoid provider conflicts
+            var dbDescriptors = services
+                .Where(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>)
+                         || d.ServiceType == typeof(AppDbContext)
+                         || (d.ServiceType.FullName?.Contains("DbContextOptions") == true))
+                .ToList();
+            foreach (var d in dbDescriptors) services.Remove(d);
             services.RemoveAll(typeof(IEmailService));
             services.RemoveAll(typeof(IWhatsAppAccessTokenValidator));
             services.RemoveAll(typeof(IMessagingChannel));
@@ -38,13 +53,24 @@ public sealed class DashboardWebApplicationFactory : WebApplicationFactory<Progr
             services.AddSingleton<IWhatsAppAccessTokenValidator, FakeWhatsAppAccessTokenValidator>();
             services.AddSingleton<IMessagingChannel, FakeMessagingChannel>();
             services.AddSingleton<IConversationStateManager, InMemoryConversationStateManager>();
+            services.RemoveAll(typeof(IGitService));
+            services.AddScoped<IGitService, FakeGitService>();
+            services.RemoveAll(typeof(ITenantLookupService));
+            services.AddScoped<ITenantLookupService, FakeTenantLookupService>();
+            services.RemoveAll(typeof(IDynamicConnectionStringResolver));
+            services.AddSingleton<IDynamicConnectionStringResolver, FakeDynamicConnectionStringResolver>();
 
-            services.AddDbContext<AppDbContext>(options => options.UseSqlServer(ConnectionString));
+            // Use InMemory for tests to avoid parallel schema creation conflicts
+            services.AddDbContext<AppDbContext>((sp, options) =>
+            {
+                options.UseInMemoryDatabase(_databaseName);
+                var saveChangesInterceptor = sp.GetRequiredService<HiveOps.Infrastructure.Persistence.TenantSaveChangesInterceptor>();
+                options.AddInterceptors(saveChangesInterceptor);
+            });
 
             var sp = services.BuildServiceProvider();
             using var scope = sp.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            db.Database.EnsureDeleted();
             db.Database.EnsureCreated();
             Seed(db);
         });
@@ -57,7 +83,7 @@ public sealed class DashboardWebApplicationFactory : WebApplicationFactory<Progr
         {
             var tenantContext = new TenantContext();
             var options = new DbContextOptionsBuilder<AppDbContext>()
-                .UseSqlServer(ConnectionString)
+                .UseInMemoryDatabase(_databaseName)
                 .Options;
 
             using var db = new AppDbContext(options, tenantContext);
@@ -381,4 +407,42 @@ public sealed class FakeEmailService : IEmailService
         }
         return null;
     }
+}
+
+internal sealed class FakeGitService : IGitService
+{
+    public Task<string> CreateBranchAsync(string b, CancellationToken ct = default) => Task.FromResult(b);
+    public Task<string> CommitAsync(string m, IEnumerable<string> f, CancellationToken ct = default) => Task.FromResult("ok");
+    public Task PushAsync(string b, CancellationToken ct = default) => Task.CompletedTask;
+    public Task<string> GetDiffAsync(string b, CancellationToken ct = default) => Task.FromResult("");
+    public Task<bool> BranchExistsAsync(string b, CancellationToken ct = default) => Task.FromResult(false);
+    public Task<string> MergePullRequestAsync(string b, CancellationToken ct = default) => Task.FromResult($"MERGED:{b}");
+}
+
+internal sealed class FakeDynamicConnectionStringResolver : IDynamicConnectionStringResolver
+{
+    public string Resolve(Guid tenantId) => "InMemory";
+    public Task WarmCacheAsync(Guid tenantId, CancellationToken ct = default) => Task.CompletedTask;
+    public void Invalidate(Guid tenantId) { }
+}
+
+internal sealed class FakeTenantLookupService : ITenantLookupService
+{
+    // Known test tenants seeded in Seed()
+    private static readonly HashSet<Guid> KnownTenants =
+    [
+        Guid.Parse("11111111-1111-1111-1111-111111111111"),
+        Guid.Parse("22222222-2222-2222-2222-222222222222")
+    ];
+
+    public Task<Guid?> FindByIdAsync(Guid tenantId, CancellationToken ct = default)
+        => Task.FromResult(KnownTenants.Contains(tenantId) ? (Guid?)tenantId : null);
+
+    public Task<Guid?> FindByApiKeyAsync(string apiKey, CancellationToken ct = default)
+        => Task.FromResult(apiKey == "TENANT-ALFA-KEY" ? (Guid?)Guid.Parse("11111111-1111-1111-1111-111111111111") :
+                           apiKey == "TENANT-BETA-KEY" ? (Guid?)Guid.Parse("22222222-2222-2222-2222-222222222222") : null);
+
+    public Task<Guid?> FindByWhatsAppNumberAsync(string phone, CancellationToken ct = default)
+        => Task.FromResult(phone == "+5491100000001" ? (Guid?)Guid.Parse("11111111-1111-1111-1111-111111111111") :
+                           phone == "+5491100000002" ? (Guid?)Guid.Parse("22222222-2222-2222-2222-222222222222") : null);
 }

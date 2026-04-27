@@ -1,14 +1,15 @@
 using System.Security.Claims;
+using System.Text;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 using HiveOps.Api.Authentication;
 using HiveOps.Api.Services;
 using HiveOps.Domain.Entities;
 using HiveOps.Infrastructure.Persistence;
-
-namespace HiveOps.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
@@ -46,18 +47,25 @@ public sealed class AuthController : ControllerBase
         if (user is null || !PasswordSecurity.VerifyPassword(request.Password, user.PasswordHash))
             return Unauthorized("Invalid credentials.");
 
-        if (string.Equals(user.Role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase))
+        string token;
+        if (string.Equals(user.Role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(user.Role, AppRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase))
         {
+            var role = string.Equals(user.Role, AppRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase)
+                ? AppRoles.SuperAdmin
+                : AppRoles.Admin;
+
             var claims = new List<Claim>
             {
                 new(ClaimTypes.Name, user.Username),
-                new(ClaimTypes.Role, AppRoles.Admin),
+                new(ClaimTypes.Role, role),
                 new(AppClaimTypes.UserId, user.Id.ToString()),
                 new(AppClaimTypes.Username, user.Username)
             };
 
+            token = GenerateJwtToken(claims);
             await SignInAsync(claims);
-            return Ok(new AuthMeResponse(true, AppRoles.Admin, null, null, user.Username));
+            return Ok(new LoginResponse(true, role, null, null, user.Username, token));
         }
 
         if (user.TenantId is null)
@@ -82,8 +90,9 @@ public sealed class AuthController : ControllerBase
             new(AppClaimTypes.Username, user.Username)
         };
 
+        token = GenerateJwtToken(tenantClaims);
         await SignInAsync(tenantClaims);
-        return Ok(new AuthMeResponse(true, AppRoles.Tenant, tenant.Id, tenant.Name, tenant.Name));
+        return Ok(new LoginResponse(true, AppRoles.Tenant, tenant.Id, tenant.Name, tenant.Name, token));
     }
 
     [HttpPost("forgot-password")]
@@ -191,9 +200,24 @@ public sealed class AuthController : ControllerBase
                 ExpiresUtc = DateTimeOffset.UtcNow.AddHours(12)
             });
     }
+
+    private string GenerateJwtToken(IEnumerable<Claim> claims)
+    {
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"] ?? "HiveOpsSecretKey12345678901234567890"));
+        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var token = new JwtSecurityToken(
+            issuer: _config["Jwt:Issuer"] ?? "HiveOps",
+            audience: _config["Jwt:Audience"] ?? "HiveOpsUsers",
+            claims: claims,
+            expires: DateTime.UtcNow.AddHours(12),
+            signingCredentials: credentials
+        );
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
 }
 
 public sealed record LoginRequest(string Username, string Password);
+public sealed record LoginResponse(bool Authenticated, string? Role, Guid? TenantId, string? TenantName, string? DisplayName, string Token);
 public sealed record ForgotPasswordRequest(string UsernameOrEmail);
 public sealed record ResetPasswordRequest(string Token, string NewPassword);
 public sealed record AuthMeResponse(bool Authenticated, string? Role, Guid? TenantId, string? TenantName, string? DisplayName);

@@ -1,34 +1,50 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using FluentValidation;
 using Serilog;
 using HiveOps.Api.HealthChecks;
 using HiveOps.Api.Hubs;
+using HiveOps.Api.Logging;
 using HiveOps.Api.Middleware;
 using HiveOps.Api.Services;
 using HiveOps.Api.Validation;
 using HiveOps.Agents;
+using HiveOps.Agents.Support;
 using HiveOps.Application.Interfaces;
+using HiveOps.Application.Services;
 using HiveOps.Domain.Models;
 using HiveOps.Infrastructure;
+using HiveOps.Infrastructure.Services;
 using HiveOps.Workers;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // -- Structured Logging with Serilog ------------------------------------------
-builder.Host.UseSerilog((context, configuration) =>
+builder.Host.UseSerilog((context, services, configuration) =>
 {
     configuration
         .MinimumLevel.Information()
-        .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+        .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [Tenant:{TenantId}] [Corr:{CorrelationId}] {Message:lj}{NewLine}{Exception}")
         .WriteTo.File(
             "logs/HiveOps-.txt",
             rollingInterval: RollingInterval.Day,
-            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}",
+            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] [Tenant:{TenantId}] [Corr:{CorrelationId}] {Message:lj}{NewLine}{Exception}",
             retainedFileCountLimit: 7)
         .Enrich.FromLogContext()
         .Enrich.WithProperty("ApplicationName", "HiveOps")
+        .Enrich.With(services.GetRequiredService<TenantIdEnricher>())
+        .Enrich.With(services.GetRequiredService<CorrelationIdEnricher>())
         .ReadFrom.Configuration(context.Configuration);
 });
+
+// -- HttpContext accessor for enrichers -----------------------------------------
+builder.Services.AddHttpContextAccessor();
+
+// -- Serilog enrichers --------------------------------------------------------
+builder.Services.AddSingleton<TenantIdEnricher>();
+builder.Services.AddSingleton<CorrelationIdEnricher>();
 
 // -- Infrastructure services --------------------------------------------------
 builder.Services.AddHiveOpsInfrastructure(builder.Configuration);
@@ -36,6 +52,10 @@ builder.Services.AddHiveOpsAgents();
 
 // -- ASP.NET Core -------------------------------------------------------------
 builder.Services.AddControllers();
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "HiveOpsSecretKey12345678901234567890";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "HiveOps";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "HiveOpsUsers";
+
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -48,7 +68,27 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return Task.CompletedTask;
         };
-    });
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        };
+    })
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+    })
+    .AddScheme<HiveOps.Api.Authentication.ApiKeyAuthenticationOptions, HiveOps.Api.Authentication.ApiKeyAuthenticationHandler>(
+        HiveOps.Api.Authentication.ApiKeyAuthScheme.SchemeName, _ => { });
 builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -74,8 +114,19 @@ builder.Services.AddScoped<OutboundWebhookService>();
 builder.Services.AddScoped<IOutboundWebhookService>(sp => sp.GetRequiredService<OutboundWebhookService>());
 builder.Services.AddHttpClient("OutboundWebhook");
 
+// -- Incident Auto Workflow Services --------------------------------------------
+builder.Services.Configure<IncidentAutoWorkflowOptions>(builder.Configuration.GetSection(IncidentAutoWorkflowOptions.SectionName));
+builder.Services.Configure<DatabaseBackupOptions>(builder.Configuration.GetSection(DatabaseBackupOptions.SectionName));
+builder.Services.AddSingleton<DatabaseBackupService>();
+builder.Services.AddSingleton<IIncidentMessageHistoryService, IncidentMessageHistoryService>();
+builder.Services.AddSingleton<IApprovalWorkflowService, ApprovalWorkflowService>();
+builder.Services.AddSingleton<IncidentEmailService>();
+builder.Services.AddSingleton<KbArticleGenerator>();
+
 // -- Background Workers --------------------------------------------------------
 builder.Services.AddHostedService<AuthBootstrapHostedService>();
+builder.Services.AddHostedService<TenantCacheWarmerHostedService>();
+builder.Services.AddHostedService<IncidentAutoWorkflowService>();
 builder.Services.AddSingleton<IMessageQueueService, BackgroundMessageQueueService>();
 builder.Services.AddHostedService(sp => (BackgroundMessageQueueService)sp.GetRequiredService<IMessageQueueService>());
 
@@ -88,7 +139,8 @@ builder.Services.AddSingleton<ResilienceService>();
 // -- Health checks -------------------------------------------------------------
 builder.Services
     .AddHealthChecks()
-    .AddCheck<SystemHealthCheck>("database", tags: ["startup", "ready", "live"]);
+    .AddCheck<SystemHealthCheck>("database", tags: ["startup", "ready", "live"])
+    .AddCheck<TenantDatabaseHealthCheck>("tenant_database", tags: ["tenant"]);
 
 var app = builder.Build();
 
@@ -129,6 +181,7 @@ app.Use(async (context, next) =>
 app.UseRouting();
 app.UseAuthentication();
 app.UseMiddleware<TenantResolutionMiddleware>();
+app.UseMiddleware<TenantLogContextMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

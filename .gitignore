@@ -24,6 +24,7 @@ BenchmarkDotNet.Artifacts/
 *.temp
 *.cache
 *.pid
+src/HiveOps.Api/logs/
 
 # Test artifacts
 TestResults/

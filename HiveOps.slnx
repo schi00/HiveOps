@@ -6,6 +6,7 @@
     <Project Path="src/HiveOps.Domain/HiveOps.Domain.csproj" />
     <Project Path="src/HiveOps.Infrastructure/HiveOps.Infrastructure.csproj" />
     <Project Path="src/HiveOps.Workers/HiveOps.Workers.csproj" />
+    <Project Path="src/HiveOps.Sandpit/HiveOps.Sandpit.Ui/HiveOps.Sandpit.Ui.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/HiveOps.IntegrationTests/HiveOps.IntegrationTests.csproj" />

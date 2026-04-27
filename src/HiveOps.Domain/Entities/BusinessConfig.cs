@@ -1,6 +1,8 @@
+using HiveOps.Domain.Interfaces;
+
 namespace HiveOps.Domain.Entities;
 
-public sealed class BusinessConfig
+public sealed class BusinessConfig : ITenantScoped
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public Guid TenantId { get; set; }

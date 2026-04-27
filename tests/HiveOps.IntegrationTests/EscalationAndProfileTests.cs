@@ -20,7 +20,7 @@ public sealed class EscalationAndProfileTests : IClassFixture<DashboardWebApplic
 {
     private static readonly Guid AlphaTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private const string AlphaApiKey = "TENANT-ALFA-KEY";
-    private const string AdminKey = "CHANGE_ME_ADMIN_KEY";
+    private const string AdminKey = "test-admin-api-key-1234567890-abcdef";
 
     private readonly DashboardWebApplicationFactory _factory;
 

@@ -1,19 +1,22 @@
-using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using HiveOps.Api.Authentication;
+using HiveOps.Domain.Interfaces;
+using HiveOps.Domain.Models;
 using HiveOps.Infrastructure.Multitenancy;
-using HiveOps.Infrastructure.Persistence;
 
 namespace HiveOps.Api.Middleware;
 
 /// <summary>
 /// Resolves TenantId from the incoming request before any handler executes.
-/// Resolution strategy (in order of precedence):
-///   1. X-Api-Key header  → lookup Tenant by ApiKey
-///   2. X-WhatsApp-Number header → lookup Tenant by WhatsAppNumber
-///   3. 401 if neither can be resolved (except exempted paths)
+/// Resolution strategy (in order of precedence via ITenantProvider pipeline):
+///   1. X-Tenant-Id header
+///   2. JWT Tenant claim (for Tenant role)
+///   3. X-Api-Key header
+///   4. X-WhatsApp-Number header
+///   5. 401 if none can be resolved (except exempted paths)
+///   SuperAdmin/Admin bypass without tenant.
 /// </summary>
 public sealed class TenantResolutionMiddleware
 {
@@ -23,9 +26,10 @@ public sealed class TenantResolutionMiddleware
         "/swagger",
         "/api/auth",
         "/webhook/whatsapp",
-        "/webhooks/whatsapp", // WhatsApp resolves tenant from payload.To inside controller
-        "/api/admin", // Protected separately with X-Admin-Key in admin endpoints
-        "/dashboard" // Static dashboard shell; data endpoints still enforce auth headers
+        "/webhooks/whatsapp",
+        "/api/admin",
+        "/dashboard",
+        "/api/support"
     ];
 
     private readonly RequestDelegate _next;
@@ -37,7 +41,11 @@ public sealed class TenantResolutionMiddleware
         _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context, AppDbContext db, TenantContext tenantContext)
+    public async Task InvokeAsync(
+        HttpContext context,
+        ITenantProvider tenantProvider,
+        IDynamicConnectionStringResolver connectionStringResolver,
+        TenantContext tenantContext)
     {
         var path = context.Request.Path.Value ?? string.Empty;
 
@@ -47,56 +55,62 @@ public sealed class TenantResolutionMiddleware
             return;
         }
 
+        // SuperAdmin/Admin bypass without tenant resolution
+        // Controllers will handle IsPrivileged check to allow global data access
         if (context.User.Identity?.IsAuthenticated == true &&
-            context.User.IsInRole(AppRoles.Tenant) &&
-            Guid.TryParse(context.User.FindFirstValue(AppClaimTypes.TenantId), out var tenantIdFromClaim))
+            (context.User.IsInRole(AppRoles.SuperAdmin) || context.User.IsInRole(AppRoles.Admin)))
         {
-            tenantContext.SetTenant(tenantIdFromClaim);
             await _next(context);
             return;
         }
 
-        // 1. Try X-Api-Key header
-        if (context.Request.Headers.TryGetValue("X-Api-Key", out var apiKey) && !string.IsNullOrWhiteSpace(apiKey))
+        context.Request.Headers.TryGetValue("X-Tenant-Id", out var tenantIdHeaderValue);
+        context.Request.Headers.TryGetValue("X-Api-Key", out var apiKeyHeaderValue);
+        context.Request.Headers.TryGetValue("X-WhatsApp-Number", out var whatsAppHeaderValue);
+
+        var tenantIdClaim = context.User.FindFirstValue(AppClaimTypes.TenantId);
+        var userRole = context.User.FindFirstValue(ClaimTypes.Role);
+
+        var result = await tenantProvider.ResolveAsync(
+            tenantIdHeaderValue.ToString(),
+            apiKeyHeaderValue.ToString(),
+            whatsAppHeaderValue.ToString(),
+            tenantIdClaim,
+            userRole,
+            context.RequestAborted);
+
+        if (result.IsResolved)
         {
-            var tenant = await db.Tenants
-                .AsNoTracking()
-                .Where(t => t.ApiKey == apiKey.ToString() && t.IsActive)
-                .Select(t => new { t.Id })
-                .FirstOrDefaultAsync(context.RequestAborted);
+            tenantContext.SetTenant(result.TenantId!.Value);
 
-            if (tenant is null)
-            {
-                _logger.LogWarning("Invalid or inactive API key from {IP}", context.Connection.RemoteIpAddress);
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                await context.Response.WriteAsync("Invalid or inactive API key.");
-                return;
-            }
+            // Warm the connection-string cache so downstream DbContext gets a hot path
+            await connectionStringResolver.WarmCacheAsync(result.TenantId.Value, context.RequestAborted);
 
-            tenantContext.SetTenant(tenant.Id);
+            // Observability: set correlation id from header or generate one
+            if (context.Request.Headers.TryGetValue("X-Correlation-Id", out var correlationId) && !string.IsNullOrWhiteSpace(correlationId))
+                tenantContext.CorrelationId = correlationId.ToString();
+            else
+                tenantContext.CorrelationId = Guid.NewGuid().ToString("N");
+
+            _logger.LogInformation(
+                "Tenant resolved. Source={Source}, TenantId={TenantId}, CorrelationId={CorrelationId}, Path={Path}",
+                result.Source,
+                result.TenantId.Value,
+                tenantContext.CorrelationId,
+                path);
+
             await _next(context);
             return;
         }
 
-        // 2. Try X-WhatsApp-Number header
-        if (context.Request.Headers.TryGetValue("X-WhatsApp-Number", out var phoneNumber) && !string.IsNullOrWhiteSpace(phoneNumber))
-        {
-            var tenant = await db.Tenants
-                .AsNoTracking()
-                .Where(t => t.WhatsAppNumber == phoneNumber.ToString() && t.IsActive)
-                .Select(t => new { t.Id })
-                .FirstOrDefaultAsync(context.RequestAborted);
+        _logger.LogWarning(
+            "Request from {IP} rejected: no valid tenant credentials. CorrelationId={CorrelationId}, Path={Path}, Error={Error}",
+            context.Connection.RemoteIpAddress,
+            tenantContext.CorrelationId ?? "n/a",
+            path,
+            result.ErrorMessage);
 
-            if (tenant is not null)
-            {
-                tenantContext.SetTenant(tenant.Id);
-                await _next(context);
-                return;
-            }
-        }
-
-        _logger.LogWarning("Request from {IP} rejected: no valid tenant credentials", context.Connection.RemoteIpAddress);
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        await context.Response.WriteAsync("Tenant credentials required.");
+        await context.Response.WriteAsync(result.ErrorMessage ?? "Tenant credentials required.");
     }
 }

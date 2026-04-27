@@ -1,6 +1,8 @@
+using HiveOps.Domain.Interfaces;
+
 namespace HiveOps.Domain.Entities;
 
-public sealed class DiagnosticLog
+public sealed class DiagnosticLog : ITenantScoped
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public Guid TenantId { get; set; }

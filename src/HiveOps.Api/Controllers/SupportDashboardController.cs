@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -46,9 +47,22 @@ public sealed class SupportDashboardController : ControllerBase
     }
 
     private bool IsSuperAdmin => User.IsInRole(AppRoles.SuperAdmin);
-    private Guid EffectiveTenantId => IsSuperAdmin && _tenantContext.IsResolved
-        ? _tenantContext.TenantId
-        : _tenantContext.TenantId;
+    private bool IsAdmin => User.IsInRole(AppRoles.Admin);
+    private bool IsPrivileged => IsSuperAdmin || IsAdmin;
+
+    private Guid? ResolveTenantFromHeader()
+    {
+        if (Request.Headers.TryGetValue("X-Tenant-Id", out var headerValue) && Guid.TryParse(headerValue.ToString(), out var tenantId))
+            return tenantId;
+        return null;
+    }
+
+    private Guid? GetEffectiveTenantId()
+    {
+        if (_tenantContext.IsResolved) return _tenantContext.TenantId;
+        if (IsPrivileged) return ResolveTenantFromHeader();
+        return null;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     //  INCIDENTS
@@ -57,22 +71,26 @@ public sealed class SupportDashboardController : ControllerBase
     [HttpGet("summary")]
     public async Task<ActionResult<SupportSummaryDto>> GetSummary(CancellationToken ct)
     {
-        if (!_tenantContext.IsResolved && !IsSuperAdmin) return Unauthorized();
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue && !IsPrivileged) return Unauthorized();
 
-        var tenantFilter = IsSuperAdmin ? (Guid?)null : _tenantContext.TenantId;
-
-        var query = _db.Incidents.AsNoTracking();
-        if (tenantFilter.HasValue)
-            query = query.Where(i => i.TenantId == tenantFilter.Value);
+        var query = IsPrivileged
+            ? _db.Incidents.IgnoreQueryFilters().AsNoTracking()
+            : _db.Incidents.AsNoTracking();
+        if (effectiveTenantId.HasValue)
+            query = query.Where(i => i.TenantId == effectiveTenantId.Value);
 
         var totalOpen = await query.CountAsync(i => i.Status != IncidentStatus.Closed && i.Status != IncidentStatus.Resolved, ct);
         var totalResolved = await query.CountAsync(i => i.Status == IncidentStatus.Resolved, ct);
         var totalCritical = await query.CountAsync(i => i.Severity == IncidentSeverity.Critical && i.Status != IncidentStatus.Closed && i.Status != IncidentStatus.Resolved, ct);
 
-        var avgResolution = await query
+        var resolvedTimes = await query
             .Where(i => i.Status == IncidentStatus.Resolved && i.ResolvedAt.HasValue)
-            .Select(i => (double?)EF.Functions.DateDiffMinute(i.CreatedAt, i.ResolvedAt!.Value))
-            .AverageAsync(ct);
+            .Select(i => new { i.CreatedAt, ResolvedAt = i.ResolvedAt!.Value })
+            .ToListAsync(ct);
+        var avgResolution = resolvedTimes.Count == 0
+            ? (double?)null
+            : resolvedTimes.Average(i => (i.ResolvedAt - i.CreatedAt).TotalMinutes);
 
         return Ok(new SupportSummaryDto(totalOpen, totalResolved, totalCritical, (int)(avgResolution ?? 0.0)));
     }
@@ -82,18 +100,22 @@ public sealed class SupportDashboardController : ControllerBase
         [FromQuery] string? status = null,
         [FromQuery] string? severity = null,
         [FromQuery] string? category = null,
+        [FromQuery] string? q = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken ct = default)
     {
-        if (!_tenantContext.IsResolved && !IsSuperAdmin) return Unauthorized();
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue && !IsPrivileged) return Unauthorized();
 
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 10, 200);
 
-        var query = _db.Incidents.AsNoTracking();
-        if (!IsSuperAdmin)
-            query = query.Where(i => i.TenantId == _tenantContext.TenantId);
+        var query = IsPrivileged
+            ? _db.Incidents.IgnoreQueryFilters().AsNoTracking()
+            : _db.Incidents.AsNoTracking();
+        if (effectiveTenantId.HasValue)
+            query = query.Where(i => i.TenantId == effectiveTenantId.Value);
 
         if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<IncidentStatus>(status, true, out var s))
             query = query.Where(i => i.Status == s);
@@ -101,6 +123,8 @@ public sealed class SupportDashboardController : ControllerBase
             query = query.Where(i => i.Severity == sev);
         if (!string.IsNullOrWhiteSpace(category) && Enum.TryParse<IncidentCategory>(category, true, out var c))
             query = query.Where(i => i.Category == c);
+        if (!string.IsNullOrWhiteSpace(q))
+            query = query.Where(i => i.Title.Contains(q) || i.Description.Contains(q));
 
         var items = await query
             .OrderByDescending(i => i.CreatedAt)
@@ -120,22 +144,45 @@ public sealed class SupportDashboardController : ControllerBase
         return Ok(items);
     }
 
+    [HttpGet("notifications")]
+    public async Task<ActionResult<IReadOnlyList<object>>> GetNotifications(CancellationToken ct)
+    {
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue && !IsPrivileged) return Unauthorized();
+
+        var query = IsPrivileged
+            ? _db.Incidents.IgnoreQueryFilters().AsNoTracking()
+            : _db.Incidents.AsNoTracking();
+        if (effectiveTenantId.HasValue)
+            query = query.Where(i => i.TenantId == effectiveTenantId.Value);
+
+        var items = await query
+            .Where(i => i.CreatedAt > DateTimeOffset.UtcNow.AddHours(-24))
+            .OrderByDescending(i => i.CreatedAt)
+            .Take(20)
+            .Select(i => new { id = i.Id, type = "incident", title = i.Title, severity = i.Severity.ToString(), createdAt = i.CreatedAt, read = false })
+            .ToListAsync(ct);
+
+        return Ok(items);
+    }
+
     [HttpPost("incidents")]
     public async Task<ActionResult<IncidentDetailDto>> CreateIncident(
         [FromBody] CreateIncidentRequest request,
         CancellationToken ct)
     {
-        if (!_tenantContext.IsResolved) return Unauthorized();
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue) return Unauthorized();
 
         var incident = new Incident
         {
             Id = Guid.NewGuid(),
-            TenantId = _tenantContext.TenantId,
-            ConversationId = request.ConversationId,
+            TenantId = effectiveTenantId.Value,
+            ConversationId = request.ConversationId ?? Guid.Empty,
             Title = request.Title,
             Description = request.Description,
-            Category = request.Category ?? IncidentCategory.Other,
-            Severity = request.Severity ?? IncidentSeverity.Low,
+            Category = Enum.TryParse<IncidentCategory>(request.Category, true, out var reqCat) ? reqCat : IncidentCategory.Other,
+            Severity = Enum.TryParse<IncidentSeverity>(request.Severity, true, out var reqSev) ? reqSev : IncidentSeverity.Low,
             Status = IncidentStatus.Open,
             AssignedTo = "bot",
             CreatedAt = DateTimeOffset.UtcNow,
@@ -145,20 +192,29 @@ public sealed class SupportDashboardController : ControllerBase
         _db.Incidents.Add(incident);
         await _db.SaveChangesAsync(ct);
 
-        // LLM triage in background
-        var analysis = await _analysisEngine.AnalyzeAsync(
-            _tenantContext.TenantId, request.Description, incident.Id, ct);
+        // LLM triage — non-blocking; failure should not prevent incident creation
+        IncidentAnalysisResult? analysis = null;
+        try
+        {
+            analysis = await _analysisEngine.AnalyzeAsync(
+                effectiveTenantId.Value, request.Description, incident.Id, ct);
 
-        // Update incident with LLM classification if valid
-        if (Enum.TryParse<IncidentCategory>(analysis.Category, true, out var cat))
-            incident.Category = cat;
-        if (Enum.TryParse<IncidentSeverity>(analysis.Severity, true, out var sev))
-            incident.Severity = sev;
+            if (Enum.TryParse<IncidentCategory>(analysis.Category, true, out var cat))
+                incident.Category = cat;
+            if (Enum.TryParse<IncidentSeverity>(analysis.Severity, true, out var sev))
+                incident.Severity = sev;
 
-        incident.UpdatedAt = DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync(ct);
+            incident.UpdatedAt = DateTimeOffset.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            HttpContext.RequestServices
+                .GetRequiredService<ILogger<SupportDashboardController>>()
+                .LogWarning(ex, "LLM triage failed for incident {IncidentId}; continuing without analysis.", incident.Id);
+        }
 
-        await _notifier.NotifyIncidentCreatedAsync(incident.TenantId, incident.Id, incident.Title, incident.Severity.ToString(), ct);
+        await _notifier.NotifyIncidentCreatedAsync(effectiveTenantId.Value, incident.Id, incident.Title, incident.Severity.ToString(), ct);
 
         return Ok(MapToDetail(incident, analysis));
     }
@@ -166,11 +222,12 @@ public sealed class SupportDashboardController : ControllerBase
     [HttpGet("incidents/{id:guid}")]
     public async Task<ActionResult<IncidentDetailDto>> GetIncident(Guid id, CancellationToken ct)
     {
-        if (!_tenantContext.IsResolved && !IsSuperAdmin) return Unauthorized();
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue && !IsPrivileged) return Unauthorized();
 
         var query = _db.Incidents.AsNoTracking().Where(i => i.Id == id);
-        if (!IsSuperAdmin)
-            query = query.Where(i => i.TenantId == _tenantContext.TenantId);
+        if (!IsPrivileged)
+            query = query.Where(i => i.TenantId == effectiveTenantId!.Value);
 
         var incident = await query.FirstOrDefaultAsync(ct);
         if (incident is null) return NotFound();
@@ -207,13 +264,14 @@ public sealed class SupportDashboardController : ControllerBase
     [HttpGet("incidents/{id:guid}/messages")]
     public async Task<ActionResult<IReadOnlyList<MessageDto>>> GetIncidentMessages(Guid id, CancellationToken ct)
     {
-        if (!_tenantContext.IsResolved && !IsSuperAdmin) return Unauthorized();
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue && !IsPrivileged) return Unauthorized();
 
         var incident = await _db.Incidents.AsNoTracking()
             .FirstOrDefaultAsync(i => i.Id == id, ct);
         if (incident is null) return NotFound();
 
-        if (!IsSuperAdmin && incident.TenantId != _tenantContext.TenantId)
+        if (!IsPrivileged && incident.TenantId != effectiveTenantId!.Value)
             return Forbid();
 
         var messages = await _db.ConversationMessages.AsNoTracking()
@@ -228,15 +286,16 @@ public sealed class SupportDashboardController : ControllerBase
     [HttpPost("incidents/{id:guid}/attachments")]
     public async Task<ActionResult> AddAttachment(Guid id, [FromBody] AddAttachmentRequest request, CancellationToken ct)
     {
-        if (!_tenantContext.IsResolved) return Unauthorized();
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue) return Unauthorized();
 
-        var incident = await _db.Incidents.FirstOrDefaultAsync(i => i.Id == id && i.TenantId == _tenantContext.TenantId, ct);
+        var incident = await _db.Incidents.FirstOrDefaultAsync(i => i.Id == id && i.TenantId == effectiveTenantId.Value, ct);
         if (incident is null) return NotFound();
 
         _db.IncidentAttachments.Add(new IncidentAttachment
         {
             Id = Guid.NewGuid(),
-            TenantId = _tenantContext.TenantId,
+            TenantId = effectiveTenantId.Value,
             IncidentId = id,
             Type = request.Type,
             FileName = request.FileName,
@@ -249,11 +308,12 @@ public sealed class SupportDashboardController : ControllerBase
     [HttpPost("incidents/{id:guid}/approve-db-fix")]
     public async Task<ActionResult> ApproveDbFix(Guid id, CancellationToken ct)
     {
-        if (!_tenantContext.IsResolved) return Unauthorized();
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue) return Unauthorized();
 
         var incident = await _db.Incidents
             .Include(i => i.Attachments)
-            .FirstOrDefaultAsync(i => i.Id == id && i.TenantId == _tenantContext.TenantId, ct);
+            .FirstOrDefaultAsync(i => i.Id == id && i.TenantId == effectiveTenantId.Value, ct);
         if (incident is null) return NotFound();
 
         var scriptAttachment = incident.Attachments
@@ -291,10 +351,11 @@ public sealed class SupportDashboardController : ControllerBase
     [HttpPost("incidents/{id:guid}/reject-fix")]
     public async Task<ActionResult> RejectFix(Guid id, [FromBody] RejectFixRequest request, CancellationToken ct)
     {
-        if (!_tenantContext.IsResolved) return Unauthorized();
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue) return Unauthorized();
 
         var incident = await _db.Incidents
-            .FirstOrDefaultAsync(i => i.Id == id && i.TenantId == _tenantContext.TenantId, ct);
+            .FirstOrDefaultAsync(i => i.Id == id && i.TenantId == effectiveTenantId.Value, ct);
         if (incident is null) return NotFound();
 
         incident.Status = IncidentStatus.Open;
@@ -309,10 +370,10 @@ public sealed class SupportDashboardController : ControllerBase
     // ═══════════════════════════════════════════════════════════════════════
 
     [HttpGet("merge-queue")]
-    [Authorize(Roles = AppRoles.SuperAdmin)]
     public async Task<ActionResult<IReadOnlyList<MergeRequestDto>>> GetMergeQueue(CancellationToken ct)
     {
-        var prs = await _db.Incidents.AsNoTracking()
+        if (!IsPrivileged) return StatusCode(StatusCodes.Status403Forbidden);
+        var prs = await _db.Incidents.IgnoreQueryFilters().AsNoTracking()
             .Where(i => !string.IsNullOrEmpty(i.GitBranch) && i.Status == IncidentStatus.InProgress)
             .OrderByDescending(i => i.CreatedAt)
             .Select(i => new MergeRequestDto(
@@ -328,9 +389,9 @@ public sealed class SupportDashboardController : ControllerBase
     }
 
     [HttpPost("merge-queue/{incidentId:guid}/approve")]
-    [Authorize(Roles = AppRoles.SuperAdmin)]
     public async Task<ActionResult> ApproveMerge(Guid incidentId, CancellationToken ct)
     {
+        if (!IsPrivileged) return StatusCode(StatusCodes.Status403Forbidden);
         var incident = await _db.Incidents.FindAsync(new object[] { incidentId }, ct);
         if (incident is null) return NotFound();
 
@@ -363,9 +424,9 @@ public sealed class SupportDashboardController : ControllerBase
     // ═══════════════════════════════════════════════════════════════════════
 
     [HttpGet("system-health")]
-    [Authorize(Roles = AppRoles.SuperAdmin)]
     public async Task<ActionResult<SystemHealthDto>> GetSystemHealth(CancellationToken ct)
     {
+        if (!IsPrivileged) return StatusCode(StatusCodes.Status403Forbidden);
         var dbHealthy = await _db.Database.CanConnectAsync(ct);
         var pipelineHealthy = await _deploymentService.IsPipelineHealthyAsync(ct);
         var lastTestRun = "unknown"; // would be stored in a settings table or retrieved from CI/CD
@@ -383,11 +444,18 @@ public sealed class SupportDashboardController : ControllerBase
         [FromQuery] int take = 20,
         CancellationToken ct = default)
     {
-        if (!_tenantContext.IsResolved) return Unauthorized();
+        if (!_tenantContext.IsResolved && !IsPrivileged) return Unauthorized();
         take = Math.Clamp(take, 1, 100);
 
-        var query = _db.KbArticles.AsNoTracking()
-            .Where(a => a.TenantId == _tenantContext.TenantId && a.IsPublished);
+        var query = _db.KbArticles.AsNoTracking();
+        
+        // Privileged users see all KB articles, regular users see only their tenant's
+        if (!IsPrivileged)
+        {
+            query = query.Where(a => a.TenantId == _tenantContext.TenantId);
+        }
+        
+        query = query.Where(a => a.IsPublished);
 
         if (!string.IsNullOrWhiteSpace(q))
         {
@@ -456,11 +524,210 @@ public sealed class SupportDashboardController : ControllerBase
             [],
             analysis is null ? null : analysis.Reasoning);
     }
+
+    /// <summary>
+    /// Dev-only endpoint: reads the latest TRX test-results file and creates incidents
+    /// with natural-language descriptions so the bot (LLM) can analyse them.
+    /// Protected by X-Dev-Key header.
+    /// </summary>
+    [HttpPost("incidents/from-test-results")]
+    [AllowAnonymous]
+    public async Task<ActionResult<List<IncidentDetailDto>>> CreateIncidentsFromTestResults(
+        [FromHeader(Name = "X-Dev-Key")] string? devKey,
+        CancellationToken ct)
+    {
+        const string expectedDevKey = "hiveops-dev-2026";
+        if (devKey != expectedDevKey)
+            return Unauthorized(new { error = "Missing or invalid X-Dev-Key header" });
+
+        var trxPath = Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..", "tests", "HiveOps.UnitTests", "TestResults", "unit-tests.trx");
+
+        if (!System.IO.File.Exists(trxPath))
+            trxPath = Path.Combine(Directory.GetCurrentDirectory(), "tests", "HiveOps.UnitTests", "TestResults", "unit-tests.trx");
+
+        if (!System.IO.File.Exists(trxPath))
+            return BadRequest(new { error = "TRX file not found", searchedPath = trxPath });
+
+        var doc = XDocument.Load(trxPath);
+        var ns = doc.Root?.GetDefaultNamespace() ?? XNamespace.None;
+
+        var failedTests = doc.Descendants(ns + "UnitTestResult")
+            .Where(r => (string?)r.Attribute("outcome") == "Failed")
+            .ToList();
+
+        if (failedTests.Count == 0)
+            return Ok(new { message = "No failed tests found in TRX", incidentsCreated = 0 });
+
+        var devTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var created = new List<IncidentDetailDto>();
+
+        foreach (var test in failedTests)
+        {
+            var testName = (string?)test.Attribute("testName") ?? "unknown-test";
+            var message = test.Element(ns + "Output")?.Element(ns + "ErrorInfo")?.Element(ns + "Message")?.Value ?? "No error message";
+            var stackTrace = test.Element(ns + "Output")?.Element(ns + "ErrorInfo")?.Element(ns + "StackTrace")?.Value ?? "";
+
+            var severity = IncidentSeverity.Medium;
+            if (message.Contains("Regex", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("NullReference", StringComparison.OrdinalIgnoreCase))
+                severity = IncidentSeverity.Critical;
+            else if (message.Contains("Assert", StringComparison.OrdinalIgnoreCase))
+                severity = IncidentSeverity.High;
+
+            var stackLines = string.Join("\n", stackTrace.Split('\n').Take(8));
+            var description = "El test automatizado '" + testName + "' fallo durante la ejecucion de la suite de pruebas.\n\n" +
+                "Error tecnico:\n" + message + "\n\n" +
+                "Stack trace resumido:\n" + stackLines + "\n\n" +
+                "Impacto: Este fallo indica una regresion en el codigo que podria afectar la estabilidad del sistema en produccion. Se recomienda revision inmediata del componente afectado.";
+
+            var incident = new Incident
+            {
+                Id = Guid.NewGuid(),
+                TenantId = devTenantId,
+                ConversationId = Guid.Empty,
+                Title = "[TEST-FAIL] " + testName,
+                Description = description,
+                Category = IncidentCategory.Code,
+                Severity = severity,
+                Status = IncidentStatus.Open,
+                AssignedTo = "bot",
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+
+            _db.Incidents.Add(incident);
+            await _db.SaveChangesAsync(ct);
+
+            IncidentAnalysisResult? analysis = null;
+            try
+            {
+                analysis = await _analysisEngine.AnalyzeAsync(devTenantId, description, incident.Id, ct);
+
+                if (Enum.TryParse<IncidentCategory>(analysis.Category, true, out var cat))
+                    incident.Category = cat;
+                if (Enum.TryParse<IncidentSeverity>(analysis.Severity, true, out var sev))
+                    incident.Severity = sev;
+
+                incident.UpdatedAt = DateTimeOffset.UtcNow;
+                await _db.SaveChangesAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                HttpContext.RequestServices
+                    .GetRequiredService<ILogger<SupportDashboardController>>()
+                    .LogWarning(ex, "LLM triage failed for test-incident {IncidentId}; continuing without analysis.", incident.Id);
+            }
+
+            created.Add(MapToDetail(incident, analysis));
+        }
+
+        await _notifier.NotifyIncidentCreatedAsync(devTenantId, created.Last().Id, $"Created {created.Count} incidents from test failures", created.Last().Severity, ct);
+
+        return Ok(created);
+    }
+
+    /// <summary>
+    /// Dev-only endpoint for Sandpit: creates a single incident from a fault simulation.
+    /// Protected by X-Dev-Key header.
+    /// </summary>
+    [HttpPost("incidents/from-sandpit")]
+    [AllowAnonymous]
+    public async Task<ActionResult<IncidentDetailDto>> CreateIncidentFromSandpit(
+        [FromHeader(Name = "X-Dev-Key")] string? devKey,
+        [FromBody] CreateIncidentFromSandpitRequest request,
+        CancellationToken ct)
+    {
+        const string expectedDevKey = "hiveops-dev-2026";
+        if (devKey != expectedDevKey)
+            return Unauthorized(new { error = "Missing or invalid X-Dev-Key header" });
+
+        // Use the real Sandpit tenant (ID: 22222222-2222-2222-2222-222222222222)
+        var sandpitTenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+        // Set tenant context for RLS session context - MUST happen before any DB operation
+        // The TenantSessionContextInterceptor will automatically set SESSION_CONTEXT when DB operations occur
+        if (_tenantContext is TenantContext tc && !tc.IsResolved)
+        {
+            tc.SetTenant(sandpitTenantId);
+        }
+
+        // Determine category based on incident title (simple rules for Sandpit errors)
+        var category = IncidentCategory.Other;
+        var severity = IncidentSeverity.Medium;
+        
+        var titleLower = request.Title.ToLowerInvariant();
+        var descLower = request.Description.ToLowerInvariant();
+        
+        if (titleLower.Contains("db") || titleLower.Contains("database") || 
+            titleLower.Contains("corrupt") || titleLower.Contains("sql") ||
+            descLower.Contains("tabla") || descLower.Contains("registros"))
+        {
+            category = IncidentCategory.Database;
+            severity = IncidentSeverity.High;
+        }
+        else if (titleLower.Contains("code") || titleLower.Contains("cwe") ||
+                 titleLower.Contains("bug") || titleLower.Contains("vulnerability"))
+        {
+            category = IncidentCategory.Code;
+            severity = IncidentSeverity.High;
+        }
+        else if (titleLower.Contains("timeout") || titleLower.Contains("performance"))
+        {
+            category = IncidentCategory.Infrastructure;
+            severity = IncidentSeverity.Medium;
+        }
+
+        var incident = new Incident
+        {
+            Id = Guid.NewGuid(),
+            TenantId = sandpitTenantId,
+            ConversationId = null,
+            Title = request.Title,
+            Description = request.Description,
+            Category = category,
+            Severity = severity,
+            Status = IncidentStatus.Open,
+            AssignedTo = "bot",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+        _db.Incidents.Add(incident);
+        await _db.SaveChangesAsync(ct);
+
+        // Try LLM analysis but don't fail if it doesn't work
+        IncidentAnalysisResult? analysis = null;
+        try
+        {
+            analysis = await _analysisEngine.AnalyzeAsync(sandpitTenantId, request.Description, incident.Id, ct);
+
+            if (Enum.TryParse<IncidentCategory>(analysis.Category, true, out var cat))
+                incident.Category = cat;
+            if (Enum.TryParse<IncidentSeverity>(analysis.Severity, true, out var sev))
+                incident.Severity = sev;
+
+            incident.UpdatedAt = DateTimeOffset.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            HttpContext.RequestServices
+                .GetRequiredService<ILogger<SupportDashboardController>>()
+                .LogWarning(ex, "LLM triage failed for sandpit incident {IncidentId}; using rule-based classification.", incident.Id);
+            // Continue with rule-based classification already set
+        }
+
+        await _notifier.NotifyIncidentCreatedAsync(sandpitTenantId, incident.Id, incident.Title, incident.Severity.ToString(), ct);
+
+        return Ok(MapToDetail(incident, analysis));
+    }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  DTOs
-// ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  DTOs
+    // ═══════════════════════════════════════════════════════════════════════════
 
 public sealed record SupportSummaryDto(int OpenIncidents, int ResolvedThisMonth, int CriticalOpen, int AvgResolutionMinutes);
 public sealed record IncidentListItemDto(Guid Id, string Title, string Category, string Severity, string Status, string AssignedTo, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
@@ -488,7 +755,8 @@ public sealed record MergeRequestDto(Guid IncidentId, string Title, string Branc
 public sealed record SystemHealthDto(bool DbHealthy, bool PipelineHealthy, string LastTestRun);
 public sealed record KbArticleDto(Guid Id, string Title, string Category, string Tags, DateTimeOffset CreatedAt);
 
-public sealed record CreateIncidentRequest(Guid ConversationId, string Title, string Description, IncidentCategory? Category, IncidentSeverity? Severity);
+public sealed record CreateIncidentRequest(Guid? ConversationId, string Title, string Description, string? Category, string? Severity);
+public sealed record CreateIncidentFromSandpitRequest(string Title, string Description);
 public sealed record AddAttachmentRequest(IncidentAttachmentType Type, string FileName, string Content);
 public sealed record RejectFixRequest(string Reason);
 public sealed record MessageDto(Guid Id, string Role, string Content, DateTimeOffset CreatedAt);
