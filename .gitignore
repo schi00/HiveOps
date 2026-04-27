@@ -25,6 +25,8 @@ BenchmarkDotNet.Artifacts/
 *.cache
 *.pid
 src/HiveOps.Api/logs/
+src/HiveOps.Api/keys/
+src/HiveOps.Sandpit/HiveOps.Sandpit.Ui/wwwroot/lib/
 
 # Test artifacts
 TestResults/
