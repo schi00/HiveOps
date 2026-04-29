@@ -484,6 +484,9 @@ html.light .hex-pattern {
 <!-- Login Screen -->
 <div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center">
   <div class="hero-glow"></div>
+  <div class="absolute top-6 right-6 z-20">
+    <a href="/onboarding/index.html" class="btn-primary px-5 py-2 rounded-xl text-sm">Crear Organización</a>
+  </div>
   <div class="hive-card w-full max-w-md p-8 relative z-10">
     <div class="flex flex-col items-center gap-6 mb-8">
       <div class="hive-logo">
@@ -516,6 +519,13 @@ html.light .hex-pattern {
         Ingresar
       </button>
       <div id="le" class="text-center text-sm text-red-500 hidden"></div>
+      <div class="mt-6 border-t border-gray-200 pt-4 text-center">
+        <span class="text-sm" style="color: var(--text-tertiary)">¿Nuevo en HiveOps?</span>
+        <a href="/onboarding/index.html"
+           class="ml-1 text-sm font-semibold text-indigo-400 hover:text-indigo-300 transition-colors">
+          Crea una cuenta de organización
+        </a>
+      </div>
     </form>
   </div>
 </div>
@@ -991,6 +1001,7 @@ html.light .hex-pattern {
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.5/signalr.min.js"></script>
 <script src="app.js"></script>
 <script>
 // Theme Toggle
@@ -1079,6 +1090,300 @@ async function changePassword() {
 
 // Init theme on load
 initTheme();
+</script>
+<script>
+// Augment incident detail to show deployment status, logs (RBAC) and Rollback button (admins)
+(function(){
+  const originalOd = window.od;
+  window.od = async function(id){
+    try {
+      // Call original renderer first
+      await originalOd.call(window, id);
+      // Fetch fresh details to render deploy block
+      const token = localStorage.getItem('token')||'';
+      const tenantId = localStorage.getItem('tenantId');
+      const headers = {'Content-Type':'application/json','Authorization':'Bearer '+token};
+      if (tenantId) headers['X-Tenant-Id']=tenantId;
+      const res = await fetch('/api/support/incidents/'+id,{headers,credentials:'include'});
+      if(!res.ok) return;
+      const d = await res.json();
+      const isAdmin = (function(){ try{const u=JSON.parse(localStorage.getItem('user')||'null'); return u && (u.role==='SuperAdmin'||u.role==='Admin');}catch{return false;} })();
+      if(!(d.deployStatus||d.deployRunId||d.deployLogUrl)) return;
+      const statusClass = d.deployStatus==='SUCCESS'?'text-emerald-500':(d.deployStatus==='FAILED'?'text-red-500':'text-amber-500');
+      const runSpan = d.deployRunId?` <span class="ml-2 text-xs" style="color:var(--text-tertiary)">(Run: ${escapeHtml(d.deployRunId)})</span>`:'';
+      const logLink = (isAdmin && d.deployLogUrl)?`<div class="mt-2"><a href="${escapeAttr(d.deployLogUrl)}" target="_blank" class="text-amber-500 hover:underline text-sm">Ver Logs de Ejecución</a>${runSpan}</div>`:'';
+      let rollbackBtn = '';
+      if (isAdmin && (d.deployStatus==='SUCCESS' || d.deployStatus==='FAILED')) {
+        // Visual gating: check plan capability for current tenant via admin list
+        let allowRb = true; let planNote = '';
+        try {
+          const adminRes = await fetch('/api/admin/tenants', { headers: { 'Authorization':'Bearer '+token }});
+          if (adminRes.ok) {
+            const list = await adminRes.json();
+            const selTid = tenantId;
+            const cur = Array.isArray(list)? list.find(x=>x.id===selTid) : null;
+            if (cur && cur.hasRollbackCapability===false) { allowRb = false; planNote = 'Tu plan actual no incluye reversión automática. Mejora tu plan para activar esta función.'; }
+          }
+        } catch {}
+        if (allowRb) {
+          rollbackBtn = `<div class="mt-3"><button data-incident="${escapeAttr(d.id)}" class="px-3 py-1.5 text-xs rounded-lg bg-red-600 hover:bg-red-500 text-white" id="rb-${escapeAttr(d.id)}">Rollback</button></div>`;
+        } else {
+          rollbackBtn = `<div class="mt-3 space-y-1">
+            <button class="px-3 py-1.5 text-xs rounded-lg bg-neutral-700 text-neutral-300 cursor-not-allowed flex items-center gap-1" disabled title="Disponible en Plan Pro">
+              <span>Rollback</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V6a5 5 0 00-5-5zm-3 8V6a3 3 0 016 0v3H9z"/></svg>
+            </button>
+            <div class="text-[11px]" style="color:var(--text-tertiary)">Tu plan actual (Starter) no incluye reversión automática. <span class="text-amber-500">Mejora tu plan</span> para activar esta función.</div>
+          </div>`;
+        }
+      }
+      const card = document.createElement('div');
+      card.className = 'hive-card p-4 mb-4';
+      card.innerHTML = `<div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Despliegue</div>
+        <div class="text-sm" style="color:var(--text-secondary)">Estado: <span class="font-medium ${statusClass}">${escapeHtml(d.deployStatus||'PENDING')}</span></div>
+        ${logLink}
+        ${rollbackBtn}`;
+      const container = document.getElementById('db');
+      if(!container) return;
+      // Insert before the first content card (Descripcion)
+      const firstCard = container.querySelector('.hive-card');
+      if(firstCard) container.insertBefore(card, firstCard);
+      else container.appendChild(card);
+
+      // Wire rollback button if present
+      if (isAdmin) {
+        const btn = document.getElementById(`rb-${escapeAttr(d.id)}`);
+        if (btn) btn.addEventListener('click', async () => {
+          if (!confirm('Esta acción revertirá los cambios al último estado estable conocido. ¿Proceder?')) return;
+          try {
+            const token2 = localStorage.getItem('token')||'';
+            const tid2 = localStorage.getItem('tenantId');
+            const hdr = {'Content-Type':'application/json','Authorization':'Bearer '+token2};
+            if (tid2) hdr['X-Tenant-Id']=tid2;
+            const resp = await fetch(`/api/support/incidents/${encodeURIComponent(d.id)}/rollback`, { method:'POST', headers: hdr, credentials:'include' });
+            if (!resp.ok) throw new Error(await resp.text());
+            toast('Rollback solicitado', 'info');
+            try { window.li && li(); window.ld && ld(); } catch {}
+          } catch (e) {
+            toast((e&&e.message)||'Error al solicitar rollback','error');
+          }
+        });
+      }
+    } catch(e) { console.warn('Deploy info render failed', e); }
+  };
+  function escapeHtml(t){ const d=document.createElement('div'); d.textContent=t||''; return d.innerHTML; }
+  function escapeAttr(t){ try{ return String(t).replace(/"/g,'&quot;'); }catch{return '';} }
+})();
+</script>
+<script>
+// UI Enhancer: Add "Abrir Portal de Pagos" button to Admin Billing card
+(function(){
+  function enhance(){
+    try{
+      var card = document.getElementById('billing-card');
+      if(!card) return; // card not present yet
+      if(card.querySelector('#bill-portal')) return; // already added
+
+      var ensureBtn = card.querySelector('#bill-ensure');
+      if(!ensureBtn || !ensureBtn.parentElement) return;
+      // Style gap between buttons
+      ensureBtn.parentElement.classList.add('gap-2');
+
+      // Create Portal button with Stripe-like color
+      var portalBtn = document.createElement('button');
+      portalBtn.id = 'bill-portal';
+      portalBtn.className = 'px-5 py-2.5 rounded-xl text-sm';
+      portalBtn.style.background = '#635BFF';
+      portalBtn.style.color = '#fff';
+      portalBtn.style.border = '1px solid var(--border-color)';
+      portalBtn.textContent = 'Abrir Portal de Pagos';
+      portalBtn.title = 'Abrir el portal de pagos de Stripe para este tenant';
+      ensureBtn.parentElement.appendChild(portalBtn);
+
+      var sel = document.getElementById('bill-tenant');
+      function updateEnabled(){
+        // Heurística: si la opción no muestra estado (no contiene "· "), asumimos que no tiene suscripción activa aún
+        try{
+          var opt = sel && sel.options && sel.options[sel.selectedIndex];
+          var hasStatus = !!(opt && /\u00B7|·/.test(opt.text));
+          portalBtn.disabled = false; // Permitimos click; manejamos error con mensaje
+          portalBtn.title = hasStatus ? 'Abrir el portal de pagos de Stripe para este tenant' : 'Si falla, primero activa la suscripción';
+          portalBtn.style.opacity = hasStatus ? '1' : '0.9';
+        }catch{}
+      }
+      if(sel){ sel.addEventListener('change', updateEnabled); updateEnabled(); }
+
+      portalBtn.addEventListener('click', async function(){
+        try{
+          var selEl = document.getElementById('bill-tenant');
+          var tid = selEl && selEl.value;
+          if(!tid){ if(window.toast) toast('Selecciona un tenant','error'); return; }
+          var original = portalBtn.textContent;
+          portalBtn.textContent = 'Abriendo…';
+          portalBtn.disabled = true;
+          var token = localStorage.getItem('token')||'';
+          var res = await fetch('/api/billing/stripe/portal-link?tenantId='+encodeURIComponent(tid), { headers: { 'Authorization':'Bearer '+token } });
+          if(!res.ok){ if(window.toast) toast('Portal no disponible o no configurado','error'); return; }
+          var data = await res.json();
+          if(data && data.url){ window.open(data.url, '_blank', 'noopener'); }
+          else { if(window.toast) toast('Portal no configurado','error'); }
+        } catch(e) {
+          if(window.toast) toast((e&&e.message)||'Error al abrir portal','error');
+        } finally {
+          portalBtn.disabled = false;
+          portalBtn.textContent = 'Abrir Portal de Pagos';
+        }
+      });
+    }catch(e){ console.warn('portal enhancer failed', e); }
+  }
+  // Observe DOM to add the button once the billing card appears
+  var obs = new MutationObserver(function(){ enhance(); });
+  obs.observe(document.body, { childList:true, subtree:true });
+  // Also attempt shortly after load
+  window.addEventListener('load', function(){ setTimeout(enhance, 800); });
+})();
+</script>
+<script>
+// Admin Widget: Deploys exitosos (últimos 30 días)
+(function(){
+  async function fetchUsage(){
+    const token = localStorage.getItem('token')||'';
+    const sel = document.getElementById('bill-tenant');
+    const tid = sel && sel.value ? sel.value : null;
+    const q = tid ? ('?tenantId='+encodeURIComponent(tid)) : '';
+    const res = await fetch('/api/admin/tenants/usage/deploy-success'+q, { headers: { 'Authorization':'Bearer '+token }});
+    if(!res.ok) throw new Error('No se pudo obtener métricas');
+    return res.json();
+  }
+  function renderSparkline(container, points){
+    // very small inline bars
+    container.innerHTML = '';
+    if(!points || points.length===0){ container.textContent='—'; return; }
+    const max = Math.max(...points.map(p=>p.value||0), 1);
+    const wrap = document.createElement('div');
+    wrap.className='flex items-end gap-1 h-10';
+    points.slice(-20).forEach(p=>{
+      const bar = document.createElement('div');
+      const h = Math.max(2, Math.round((p.value||0)/max*36));
+      bar.style.height = h+'px';
+      bar.style.width = '6px';
+      bar.style.borderRadius = '3px';
+      bar.style.background = (p.value>0)?'#10B981':'#4B5563';
+      bar.title = `${p.label}: ${p.value}`;
+      wrap.appendChild(bar);
+    });
+    container.appendChild(wrap);
+  }
+  async function ensureWidget(){
+    try{
+      const adm = document.getElementById('v-adm');
+      if(!adm) return;
+      let card = document.getElementById('usage-card');
+      if(!card){
+        card = document.createElement('div');
+        card.id = 'usage-card';
+        card.className = 'hive-card p-5';
+        card.innerHTML = '<div class="flex items-center justify-between mb-2">\
+          <h3 class="font-semibold text-lg">Deploys exitosos (30 días)</h3>\
+          <button id="usage-refresh" class="btn-secondary px-3 py-1.5 rounded-lg text-xs">Refrescar</button>\
+        </div>\
+        <div class="text-sm mb-2" id="usage-total" style="color:var(--text-secondary)">Cargando...</div>\
+        <div id="usage-spark"></div>';
+        adm.appendChild(card);
+      }
+      const btn = document.getElementById('usage-refresh');
+      const totalEl = document.getElementById('usage-total');
+      const sparkEl = document.getElementById('usage-spark');
+      async function load(){
+        try{
+          btn.disabled = true; btn.textContent='...';
+          const data = await fetchUsage();
+          totalEl.textContent = `Total: ${data.total ?? 0}`;
+          renderSparkline(sparkEl, data.perDay || []);
+        }catch(e){ totalEl.textContent = e.message || 'Error al cargar'; sparkEl.innerHTML=''; }
+        finally{ btn.disabled=false; btn.textContent='Refrescar'; }
+      }
+      btn.onclick = load;
+      await load();
+    }catch(e){ console.warn('usage widget failed', e); }
+  }
+  // Refresh when navigating to Admin and also when tenant selection changes (if present)
+  const obs = new MutationObserver(()=>ensureWidget());
+  obs.observe(document.body,{childList:true,subtree:true});
+  window.addEventListener('load', ()=> setTimeout(ensureWidget, 900));
+})();
+</script>
+<script>
+// Admin: badge de Deploys (30d) al lado de Pipeline
+(function(){
+  async function loadBadge(){
+    try{
+      const adm = document.getElementById('v-adm'); if(!adm) return;
+      const pipelineCard = document.getElementById('tp'); if(!pipelineCard) return;
+      let badge = document.getElementById('deploy-30-badge');
+      if(!badge){
+        badge = document.createElement('span');
+        badge.id = 'deploy-30-badge';
+        badge.className = 'ml-2 px-2 py-0.5 rounded-full text-[10px] bg-amber-500 text-black align-middle';
+        badge.title = 'Deploys exitosos en los últimos 30 días';
+        // insert next to the Pipeline status value
+        pipelineCard.parentElement?.appendChild(badge);
+      }
+      const token = localStorage.getItem('token')||'';
+      const sel = document.getElementById('bill-tenant');
+      const tid = sel && sel.value ? sel.value : null;
+      const q = tid ? ('?tenantId='+encodeURIComponent(tid)) : '';
+      const res = await fetch('/api/admin/tenants/usage/deploy-success'+q, { headers: { 'Authorization':'Bearer '+token }});
+      if(!res.ok){ badge.textContent='(30d: —)'; return; }
+      const data = await res.json();
+      badge.textContent = `(30d: ${data?.total ?? 0})`;
+    }catch(e){ /* silent */ }
+  }
+  const obs = new MutationObserver(()=>loadBadge());
+  obs.observe(document.body,{childList:true,subtree:true});
+  window.addEventListener('load', ()=> setTimeout(loadBadge, 1200));
+})();
+</script>
+<script>
+// Admin header: show current tenant Plan badge (Starter/Pro/Enterprise)
+(function(){
+  async function loadPlan(){
+    try{
+      const adm = document.getElementById('v-adm'); if(!adm) return;
+      // Mount near System Health (tp/td labels)
+      const anchor = document.getElementById('td')?.parentElement || adm.querySelector('.hive-card');
+      if(!anchor) return;
+      let badge = document.getElementById('tenant-plan-badge');
+      if(!badge){
+        badge = document.createElement('span');
+        badge.id = 'tenant-plan-badge';
+        badge.className = 'ml-2 px-2 py-0.5 rounded-full text-[10px] bg-neutral-800 border';
+        badge.style.borderColor = 'var(--border-color)';
+        anchor.appendChild(badge);
+      }
+      const token = localStorage.getItem('token')||'';
+      const selTid = localStorage.getItem('tenantId');
+      if(!selTid){ badge.textContent='Plan: —'; return; }
+      const res = await fetch('/api/admin/tenants', { headers: { 'Authorization':'Bearer '+token }});
+      if(!res.ok){ badge.textContent='Plan: —'; return; }
+      const list = await res.json();
+      const cur = Array.isArray(list)? list.find(x=>x.id===selTid) : null;
+      if(!cur){ badge.textContent='Plan: —'; return; }
+      const plan = (cur.plan===0?'Starter':(cur.plan===1?'Pro':(cur.plan===2?'Enterprise':String(cur.plan))));
+      // Color by plan
+      let bg = '#374151';
+      if(plan==='Pro') bg = '#10B981';
+      if(plan==='Enterprise') bg = '#6366F1';
+      badge.style.background = bg;
+      badge.style.color = '#fff';
+      badge.textContent = `Plan: ${plan}`;
+    }catch(e){ /* silent */ }
+  }
+  const obs = new MutationObserver(()=>loadPlan());
+  obs.observe(document.body,{childList:true,subtree:true});
+  window.addEventListener('load', ()=> setTimeout(loadPlan, 1000));
+  window.addEventListener('storage', (e)=>{ if(e.key==='tenantId') loadPlan(); });
+})();
 </script>
 </body>
 </html>

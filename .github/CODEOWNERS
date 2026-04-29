@@ -1,0 +1,4 @@
+# Require reviews from core team for protected paths
+/src/HiveOps.Api/* @core-team
+/src/HiveOps.Infrastructure/* @core-team
+/.github/workflows/* @core-team

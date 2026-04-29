@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Xunit;
 
 namespace HiveOps.IntegrationTests;
 
@@ -36,7 +37,9 @@ public sealed class SupportDashboardIntegrationTests : IClassFixture<DashboardWe
         using var client = await LoginAsync("tenant_alpha", "123456");
         var summary = await client.GetFromJsonAsync<SupportSummaryDto>("/api/support/summary");
         summary.Should().NotBeNull();
-        summary!.OpenIncidents.Should().BeGreaterThanOrEqualTo(0);
+        Assert.NotNull(summary);
+        var sum = summary;
+        sum.OpenIncidents.Should().BeGreaterThanOrEqualTo(0);
     }
 
     [Fact]
@@ -45,7 +48,9 @@ public sealed class SupportDashboardIntegrationTests : IClassFixture<DashboardWe
         using var client = await LoginAsync("tenant_alpha", "123456");
         var list = await client.GetFromJsonAsync<List<IncidentListItemDto>>("/api/support/incidents");
         list.Should().NotBeNull();
-        list!.Should().NotContain(i => i.Title.Contains("Beta"));
+        Assert.NotNull(list);
+        var items = list;
+        items.Should().NotContain(i => i.Title.Contains("Beta"));
     }
 
     [Fact]
@@ -62,7 +67,9 @@ public sealed class SupportDashboardIntegrationTests : IClassFixture<DashboardWe
         create.StatusCode.Should().Be(HttpStatusCode.OK);
         var detail = await create.Content.ReadFromJsonAsync<IncidentDetailDto>();
         detail.Should().NotBeNull();
-        detail!.Title.Should().Be("Test Incident");
+        Assert.NotNull(detail);
+        var det = detail;
+        det.Title.Should().Be("Test Incident");
     }
 
     [Fact]
@@ -71,7 +78,9 @@ public sealed class SupportDashboardIntegrationTests : IClassFixture<DashboardWe
         using var client = await LoginAsync("tenant_alpha", "123456");
         var kb = await client.GetFromJsonAsync<List<KbArticleDto>>("/api/support/kb");
         kb.Should().NotBeNull();
-        kb!.Should().Contain(k => k.Title.Contains("KB Alpha"));
+        Assert.NotNull(kb);
+        var articles = kb;
+        articles.Should().Contain(k => k.Title.Contains("KB Alpha"));
     }
 
     [Fact]
@@ -80,8 +89,10 @@ public sealed class SupportDashboardIntegrationTests : IClassFixture<DashboardWe
         using var client = await LoginAsync("admin00", "123456");
         var list = await client.GetFromJsonAsync<List<IncidentListItemDto>>("/api/support/incidents");
         list.Should().NotBeNull();
-        list!.Should().Contain(i => i.Title.Contains("Alpha"));
-        list.Should().Contain(i => i.Title.Contains("Beta"));
+        Assert.NotNull(list);
+        var all = list;
+        all.Should().Contain(i => i.Title.Contains("Alpha"));
+        all.Should().Contain(i => i.Title.Contains("Beta"));
     }
 
     [Fact]

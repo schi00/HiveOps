@@ -38,6 +38,20 @@ public sealed class DatabaseBackupService
             await using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
 
+            // Validate table exists before attempting backup
+            using (var existsCmd = connection.CreateCommand())
+            {
+                existsCmd.CommandText = "SELECT CASE WHEN OBJECT_ID(@tn) IS NOT NULL THEN 1 ELSE 0 END";
+                existsCmd.Parameters.AddWithValue("@tn", tableName);
+                var existsObj = await existsCmd.ExecuteScalarAsync(cancellationToken);
+                var exists = existsObj is not null && Convert.ToInt32(existsObj) == 1;
+                if (!exists)
+                {
+                    _logger.LogError("Table {TableName} does not exist, skipping backup.", tableName);
+                    throw new InvalidOperationException($"Table '{tableName}' does not exist.");
+                }
+            }
+
             using var cmd = connection.CreateCommand();
             cmd.CommandText = $@"
                 SELECT * INTO {backupTableName}

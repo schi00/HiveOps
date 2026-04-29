@@ -562,8 +562,7 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             "IncidentAutoWorkflow",
             cancellationToken);
 
-        // Use SupportPlugin to generate DB fix proposal
-        var fixProposal = await GenerateDatabaseFixProposalAsync(incident, cancellationToken);
+        string? fixProposal = null;
 
         // Get tenant connection string for external DB
         var tenant = await db.Tenants.FindAsync(incident.TenantId, cancellationToken);
@@ -578,6 +577,52 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
         if (string.IsNullOrEmpty(connectionString))
         {
             _logger.LogError("Tenant {TenantId} has no connection string for incident {IncidentId}", tenant.Id, incident.Id);
+            return;
+        }
+
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            fixProposal = await GenerateDatabaseFixProposalAsync(incident, cancellationToken);
+            var candidateTable = ExtractTableNameFromSql(fixProposal);
+
+            if (string.IsNullOrWhiteSpace(candidateTable))
+            {
+                await _messageHistory.AppendMessageToIncidentAsync(
+                    incident.Id,
+                    MessageRole.Assistant,
+                    $"Propuesta inválida (sin tabla). Reintentando ({attempt}/3)...",
+                    "IncidentAutoWorkflow",
+                    cancellationToken);
+                continue;
+            }
+
+            var exists = await CheckTableExistsAsync(connectionString, candidateTable, cancellationToken);
+            if (!exists)
+            {
+                await _messageHistory.AppendMessageToIncidentAsync(
+                    incident.Id,
+                    MessageRole.Assistant,
+                    $"Fix rechazado: La tabla '{candidateTable}' no fue encontrada. Solicitando nueva propuesta a la IA... ({attempt}/3)",
+                    "IncidentAutoWorkflow",
+                    cancellationToken);
+                _logger.LogWarning("Table {TableName} not found for incident {IncidentId}. Reprompting LLM (attempt {Attempt}/3).", candidateTable, incident.Id, attempt);
+                try {
+                    using var ns = _scopeFactory.CreateScope();
+                    var notifier = ns.ServiceProvider.GetRequiredService<ISupervisionNotifier>();
+                    await notifier.NotifyLlmRetryUpdatedAsync(incident.TenantId, incident.Id, attempt, cancellationToken);
+                } catch {}
+                continue;
+            }
+
+            break;
+        }
+
+        if (string.IsNullOrWhiteSpace(fixProposal))
+        {
+            incident.AssignedTo = "engineer";
+            incident.Status = IncidentStatus.Open;
+            incident.ResolutionNotes = "No se pudo generar una propuesta de SQL válida tras 3 intentos.";
+            await db.SaveChangesAsync(cancellationToken);
             return;
         }
 
@@ -623,15 +668,45 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
         string? backupTable = null;
         if (!string.IsNullOrEmpty(tableName))
         {
-            backupTable = await _databaseBackup.BackupTableAsync(connectionString, tableName, cancellationToken);
-            incident.BackupLocation = backupTable;
+            // Check if table exists before attempting backup to avoid failing on placeholders
+            var tableExists = false;
+            try
+            {
+                await using var cx = new SqlConnection(connectionString);
+                await cx.OpenAsync(cancellationToken);
+                await using var existsCmd = cx.CreateCommand();
+                existsCmd.CommandText = "SELECT CASE WHEN OBJECT_ID(@tn) IS NOT NULL THEN 1 ELSE 0 END";
+                existsCmd.Parameters.AddWithValue("@tn", tableName);
+                var obj = await existsCmd.ExecuteScalarAsync(cancellationToken);
+                tableExists = obj is not null && Convert.ToInt32(obj) == 1;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not verify existence of table {TableName} before backup.", tableName);
+            }
 
-            await _messageHistory.AppendMessageToIncidentAsync(
-                incident.Id,
-                MessageRole.Assistant,
-                $"Backup creado: {backupTable}",
-                "IncidentAutoWorkflow",
-                cancellationToken);
+            if (tableExists)
+            {
+                backupTable = await _databaseBackup.BackupTableAsync(connectionString, tableName, cancellationToken);
+                incident.BackupLocation = backupTable;
+
+                await _messageHistory.AppendMessageToIncidentAsync(
+                    incident.Id,
+                    MessageRole.Assistant,
+                    $"Backup creado: {backupTable}",
+                    "IncidentAutoWorkflow",
+                    cancellationToken);
+            }
+            else
+            {
+                _logger.LogWarning("Table {TableName} not found. Skipping backup step for incident {IncidentId}.", tableName, incident.Id);
+                await _messageHistory.AppendMessageToIncidentAsync(
+                    incident.Id,
+                    MessageRole.Assistant,
+                    $"Tabla '{tableName}' no existe. Se omite el backup y se intenta aplicar el fix.",
+                    "IncidentAutoWorkflow",
+                    cancellationToken);
+            }
         }
 
         incident.Status = IncidentStatus.InProgress;
@@ -1063,6 +1138,24 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
 
         // For other tenants, use the encrypted connection string from the database
         return tenant.EncryptedConnectionString;
+    }
+
+    private static async Task<bool> CheckTableExistsAsync(string connectionString, string tableName, CancellationToken ct)
+    {
+        try
+        {
+            await using var cx = new SqlConnection(connectionString);
+            await cx.OpenAsync(ct);
+            await using var cmd = cx.CreateCommand();
+            cmd.CommandText = "SELECT CASE WHEN OBJECT_ID(@tn) IS NOT NULL THEN 1 ELSE 0 END";
+            cmd.Parameters.AddWithValue("@tn", tableName);
+            var obj = await cmd.ExecuteScalarAsync(ct);
+            return obj is not null && Convert.ToInt32(obj) == 1;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }
 

@@ -65,4 +65,12 @@ public sealed class SupervisionNotificationService : ISupervisionNotifier
         var wh = _webhook.SendEventAsync(tenantId, "approval.required", payload, ct);
         return Task.WhenAll(hub, wh);
     }
+
+    public Task NotifyLlmRetryUpdatedAsync(Guid tenantId, Guid incidentId, int attempt, CancellationToken ct = default)
+    {
+        var payload = new { incidentId, attempt, at = DateTimeOffset.UtcNow };
+        return _hubContext.Clients
+            .Group($"tenant:{tenantId}")
+            .SendAsync("LlmRetryUpdated", payload, ct);
+    }
 }

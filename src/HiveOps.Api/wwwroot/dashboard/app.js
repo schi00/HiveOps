@@ -1,6 +1,54 @@
 ﻿const API='/api';
 const s={token:localStorage.getItem('token'),user:JSON.parse(localStorage.getItem('user')||'null'),isAdmin:false,incidents:[],tenantId:localStorage.getItem('tenantId')||null,tenants:[]};
 if(s.token&&s.user){showApp();}else{showLogin();}
+async function lb(){
+try{
+ if(!s.isAdmin){return;}
+ const el=document.getElementById('v-adm');
+ let card=document.getElementById('billing-card');
+ if(!card){
+   const wrap=document.createElement('div');
+   wrap.className='hive-card p-6';
+   wrap.id='billing-card';
+   wrap.innerHTML=`<h3 class="font-semibold text-lg mb-4">Billing & Suscripciones</h3>
+   <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+     <div class="col-span-1">
+       <label class="text-sm block mb-2" style="color:var(--text-secondary)">Tenant</label>
+       <select id="bill-tenant" class="input-field w-full px-3 py-2 rounded-xl text-sm"></select>
+     </div>
+     <div class="col-span-1">
+       <label class="text-sm block mb-2" style="color:var(--text-secondary)">Price Id</label>
+       <input id="bill-price" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="price_..."/>
+     </div>
+     <div class="col-span-1 flex items-end">
+       <button id="bill-ensure" class="btn-primary px-5 py-2.5 rounded-xl text-sm">Activar Suscripción</button>
+     </div>
+   </div>
+   <div id="bill-status" class="mt-4 text-sm" style="color:var(--text-secondary)"></div>`;
+   el.appendChild(wrap);
+ }
+ const sel=document.getElementById('bill-tenant');
+ sel.innerHTML='';
+ const ts=await api('GET','/admin/tenants');
+ ts.forEach(t=>{
+   const o=document.createElement('option');
+   o.value=t.id; o.textContent=`${t.name} ${t.subscriptionStatus?('· '+t.subscriptionStatus):''}`;
+   sel.appendChild(o);
+ });
+ if(s.tenantId) sel.value=s.tenantId;
+ document.getElementById('bill-ensure').onclick=async ()=>{
+   const tid=sel.value; const pid=(document.getElementById('bill-price').value||'').trim();
+   if(!tid){toast('Selecciona un tenant','error');return;}
+   if(!pid){toast('Ingresa un PriceId','error');return;}
+   try{await api('POST',`/admin/tenants/${tid}/billing/ensure-subscription`,{priceId:pid}); toast('Suscripción activada','success'); lb();}
+   catch(e){toast(e.message,'error');}
+ };
+ const st=document.getElementById('bill-status');
+ const cur=ts.find(x=>x.id===sel.value);
+ st.textContent=cur?`Estado actual: ${cur.subscriptionStatus||'—'} · Price: ${cur.stripePriceId||'—'}`:'Selecciona un tenant';
+ sel.onchange=()=>{ const c=ts.find(x=>x.id===sel.value); st.textContent=c?`Estado actual: ${c.subscriptionStatus||'—'} · Price: ${c.stripePriceId||'—'}`:'Selecciona un tenant'; };
+}catch(e){console.warn('billing ui error',e);}
+}
 document.getElementById('login-form').addEventListener('submit',async e=>{
 e.preventDefault();
 const el=document.getElementById('le');el.classList.add('hidden');
@@ -16,6 +64,32 @@ localStorage.setItem('token',s.token);localStorage.setItem('user',JSON.stringify
 showApp();
 }catch(x){el.textContent=x.message;el.classList.remove('hidden');}
 });
+let hubConn=null;
+async function initRealtime(){
+  try{
+    if(typeof signalR==='undefined')return;
+    if(hubConn){try{await hubConn.stop();}catch{}}
+    hubConn=new signalR.HubConnectionBuilder().withUrl('/hubs/supervision').withAutomaticReconnect().build();
+    hubConn.on('DeploymentUpdated',p=>{
+      const msg=`Deploy ${p.status}${p.progress?` (${p.progress}%)`:''}${p.eta?` · ETA ${p.eta}s`:''}`;
+      toast(msg, p.status==='SUCCESS'?'success':(p.status==='FAILED'?'error':'info'));
+      try{li();ld();}catch{}
+    });
+    hubConn.on('LlmRetryUpdated', async p=>{
+      try{
+        // Refresh only the badge for this incident
+        const token=s.token||''; const hdr={'Authorization':'Bearer '+token,'Content-Type':'application/json'}; if(s.tenantId) hdr['X-Tenant-Id']=s.tenantId;
+        const r=await fetch(`/api/support/incidents/${encodeURIComponent(p.incidentId)}/messages`,{headers:hdr,credentials:'include'});
+        if(!r.ok) return;
+        const msgs=await r.json(); const n=computeLlmRetries(msgs||[]);
+        const slot=document.getElementById('rt-'+p.incidentId);
+        if(slot){ slot.innerHTML = n>0?renderRetryBadge(n):''; slot.classList.add('status-pulse'); setTimeout(()=>slot.classList.remove('status-pulse'),1200); }
+      }catch{}
+    });
+    await hubConn.start();
+    if(s.tenantId){await hubConn.invoke('JoinTenantGroup', s.tenantId);}    
+  }catch(e){console.warn('Realtime init failed',e)}
+}
 function showLogin(){document.getElementById('login-screen').classList.remove('hidden');document.getElementById('app').classList.add('hidden');}
 function showApp(){
 try{
@@ -24,7 +98,7 @@ document.getElementById('app').classList.remove('hidden');
 s.isAdmin=s.user.role==='SuperAdmin'||s.user.role==='Admin';
 if(s.isAdmin){const adm=document.getElementById('n-adm');if(adm)adm.classList.remove('hidden');}
 else {const adm=document.getElementById('n-adm');if(adm)adm.classList.add('hidden');}
-setTimeout(()=>{loadTenants();n('dashboard');ld();},100);
+setTimeout(()=>{loadTenants();n('dashboard');ld();initRealtime();},100);
 }catch(e){console.error('Error in showApp:',e);showLogin();}
 }
 function logout(){localStorage.clear();s.token=null;s.user=null;showLogin();}
@@ -57,7 +131,7 @@ anime({targets:t,opacity:[0,1],translateY:[16,0],duration:450,easing:'easeOutCub
 else{console.warn('Dashboard view not found for',v,viewId);}
 const nb=document.getElementById('n-'+viewId)||document.getElementById('n-'+v);
 if(nb){nb.classList.add('active');}
-if(v==='incidents')li();if(v==='kb')lk();if(v==='config')lc();if(v==='admin'){lm();lh();}
+if(v==='incidents')li();if(v==='kb')lk();if(v==='config')lc();if(v==='admin'){lm();lh();lb();}
 }
 async function ld(){
 try{
@@ -96,6 +170,21 @@ const d=await api('GET',q);s.incidents=d||[];
 const el=document.getElementById('l-all');
 el.innerHTML=d?.length?d.map(x=>rRow(x)).join(''):'<div class="p-10 text-center" style="color:var(--text-secondary)"><svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>No hay incidentes</div>';
 anime({targets:el.children,translateY:[10,0],opacity:[0,1],delay:anime.stagger(30),duration:300,easing:'easeOutCubic'});
+
+ // Compute LLM retry badges by reading messages per-incident (non-blocking)
+ try{
+   const token=s.token||''; const hdr={'Authorization':'Bearer '+token,'Content-Type':'application/json'}; if(s.tenantId) hdr['X-Tenant-Id']=s.tenantId;
+   (s.incidents||[]).forEach(async it=>{
+     try{
+       const r=await fetch(`/api/support/incidents/${encodeURIComponent(it.id)}/messages`,{headers:hdr,credentials:'include'});
+       if(!r.ok) return;
+       const msgs=await r.json();
+       const n=computeLlmRetries(msgs||[]);
+       const slot=document.getElementById('rt-'+it.id);
+       if(slot && n>0){ slot.innerHTML=renderRetryBadge(n); }
+     }catch{}
+   });
+ }catch{}
 }catch(e){toast(e.message,'error');}
 }
 async function lk(){
@@ -148,7 +237,16 @@ const sevColors={Critical:'bg-red-500',High:'bg-amber-500',Medium:'bg-yellow-500
 const stColors={Open:'text-amber-500',InProgress:'text-amber-400',Resolved:'text-emerald-500',Closed:'text-neutral-400'};
 const sev=sevColors[i.severity]||'bg-neutral-500';
 const st=stColors[i.status]||'text-neutral-400';
-return `<div onclick="od('${i.id}')" class="p-4 hover:bg-amber-500/5 transition-all cursor-pointer flex items-center gap-4 group ${compact?'':'border-b'}" style="border-color:var(--border-color)"><div class="w-2 h-2 rounded-full ${sev} flex-shrink-0 status-pulse"></div><div class="flex-1 min-w-0"><div class="font-medium text-sm truncate" style="color:var(--text-primary)">${esc(i.title)}</div><div class="text-xs mt-0.5" style="color:var(--text-tertiary)">${esc(i.category||'Other')} · ${timeAgo(i.createdAt)}</div></div><div class="text-xs font-medium ${st}">${i.status}</div></div>`;
+// Derive deploy info from API if provided (server may add DeployStatus/LastCiResult soon)
+let dStatus=i.deployStatus||''; let badgeClass='bg-neutral-500'; let logUrl=null;
+if(i.lastCiResult){ try{ const o=JSON.parse(i.lastCiResult||'{}'); if(!dStatus && (o.status||o.action)) dStatus=((o.action?o.action+'_':'')+(o.status||'')).trim(); logUrl=o.logUrl||null; }catch{} }
+if(/DEPLOYING/i.test(dStatus)) badgeClass='bg-blue-500';
+else if(/SUCCESS/i.test(dStatus)) badgeClass='bg-emerald-500';
+else if(/FAILED|ROLLBACK/i.test(dStatus)) badgeClass='bg-red-500';
+let badgeHtml='';
+if(dStatus){ const inner=`<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] ${badgeClass} text-white align-middle">${esc(dStatus)}</span>`; badgeHtml=(s.isAdmin&&logUrl)?`<a href="${esc(logUrl)}" class="hover:opacity-90" target="_blank" rel="noopener noreferrer" title="Ver logs de despliegue">${inner}</a>`:inner; }
+const deployBadge=badgeHtml;
+return `<div onclick="od('${i.id}')" class="p-4 hover:bg-amber-500/5 transition-all cursor-pointer flex items-center gap-4 group ${compact?'':'border-b'}" style="border-color:var(--border-color)"><div class="w-2 h-2 rounded-full ${sev} flex-shrink-0 status-pulse"></div><div class="flex-1 min-w-0"><div class="font-medium text-sm truncate flex items-center gap-2" style="color:var(--text-primary)"><span>${esc(i.title)} ${deployBadge}</span><span id="rt-${i.id}" class="inline-block"></span></div><div class="text-xs mt-0.5" style="color:var(--text-tertiary)">${esc(i.category||'Other')} · ${timeAgo(i.createdAt)}</div></div><div class="text-xs font-medium ${st}">${i.status}</div></div>`;
 }
 function filterIncidents(filter){
 if(filter==='Open'||filter==='InProgress'||filter==='Resolved'||filter==='Closed'){
@@ -168,6 +266,33 @@ li(q);
 }
 function esc(t){const d=document.createElement('div');d.textContent=t||'';return d.innerHTML;}
 function timeAgo(d){if(!d)return'';const s=Math.floor((Date.now()-new Date(d))/1000);if(s<60)return'ahora';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'d';}
+function computeLlmRetries(messages){
+  let maxRetry=0; const re=/Reintentando \((\d)\/3\)/g; const re2=/\((\d)\/3\)/g;
+  for(const m of messages){
+    const txt=((m.content||'')+'');
+    let mt; while((mt=re.exec(txt))!==null){ const n=parseInt(mt[1]); if(n>maxRetry) maxRetry=n; }
+    if(maxRetry===0 && /Fix rechazado:/.test(txt)){
+      const m2=txt.match(re2); if(m2){ const n=parseInt((m2[0]||'').replace(/[^0-9]/g,'')); if(n>maxRetry) maxRetry=n; }
+    }
+  }
+  return isFinite(maxRetry)?maxRetry:0;
+}
+function renderRetryBadge(n){
+  const cls = n>=3? 'bg-red-600 text-white' : 'bg-amber-500 text-white';
+  return `<span class="px-1.5 py-0.5 rounded text-[10px] ${cls}">Reintentos LLM: ${n}/3</span>`;
+}
+function renderMessages(msgs){
+  const el=document.getElementById('ml');
+  if(!el) return;
+  if(!msgs.length){ el.innerHTML='<div class="text-sm" style="color:var(--text-secondary)">Sin mensajes</div>'; return; }
+  const isAutoFix=(c)=>/(Reintentando \(|Fix rechazado:|Iniciando diagnóstico|Backup creado:|SQL ejecutado exitosamente|Rollback ejecutado)/i.test(c||'');
+  el.innerHTML=msgs.map(m=>{
+    const auto=isAutoFix(m.content||'');
+    const pill= auto? '<span class="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-300 border border-white/10">Auto-Fix</span>':'';
+    const boxCls= auto? 'border-l-2 border-amber-500/60 bg-white/5' : '';
+    return `<div class="p-3 rounded-lg mb-2 ${boxCls}"><div class="text-xs mb-1" style="color:var(--text-tertiary)">${esc(m.role)} · ${new Date(m.createdAt).toLocaleString()} ${pill}</div><div class="text-sm" style="color:var(--text-secondary)">${esc(m.content||'')}</div></div>`;
+  }).join('');
+}
 async function od(id){
 try{
 const d=await api('GET','/support/incidents/'+id);
@@ -182,7 +307,14 @@ actions+=`<div class="flex gap-3 mt-5"><button onclick="upd('${id}','InProgress'
 if(d.suggestedFixSql){
 actions+=`<div class="mt-5 p-4 rounded-xl hive-card" style="background:rgba(245,158,11,0.05)"><div class="text-xs mb-2" style="color:var(--text-tertiary)">Fix sugerido (SQL)</div><pre class="text-xs text-amber-400 overflow-x-auto font-mono">${esc(d.suggestedFixSql)}</pre><div class="flex gap-2 mt-3"><button onclick="appr('${id}')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs">Aprobar</button><button onclick="rej('${id}')" class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs">Rechazar</button></div></div>`;
 }
-document.getElementById('db').innerHTML=`<div class="flex items-center gap-3 mb-5"><div class="w-3 h-3 rounded-full ${sev} status-pulse"></div><div class="text-2xl font-bold" style="color:var(--text-primary)">${esc(d.title)}</div></div><div class="text-sm mb-1" style="color:var(--text-secondary)">Estado: <span class="${st} font-medium">${d.status}</span></div><div class="text-sm mb-5" style="color:var(--text-tertiary)">Creado: ${new Date(d.createdAt).toLocaleString()}</div><div class="hive-card p-4 mb-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Descripcion</div><div class="text-sm leading-relaxed whitespace-pre-wrap" style="color:var(--text-secondary)">${esc(d.description)}</div></div>${d.resolutionNotes?`<div class="hive-card p-4 mb-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Notas de resolucion</div><div class="text-sm whitespace-pre-wrap" style="color:var(--text-secondary)">${esc(d.resolutionNotes)}</div></div>`:''}${d.reasoning?`<div class="hive-card p-4 mb-4 border-l-2 border-amber-500" style="background:rgba(245,158,11,0.03)"><div class="text-xs text-amber-500 uppercase tracking-wider mb-2">Analisis IA</div><div class="text-sm italic" style="color:var(--text-secondary)">${esc(d.reasoning)}</div></div>`:''}${d.gitBranch?`<div class="text-xs" style="color:var(--text-tertiary)">Branch: <code class="text-amber-500 font-mono">${esc(d.gitBranch)}</code> · Commit: <code class="font-mono" style="color:var(--text-secondary)">${esc((d.gitCommitHash||'').substring(0,8))}</code></div>`:''}${actions}`;
+document.getElementById('db').innerHTML=`<div class="flex items-center gap-3 mb-5"><div class="w-3 h-3 rounded-full ${sev} status-pulse"></div><div class="text-2xl font-bold" style="color:var(--text-primary)">${esc(d.title)}</div></div><div class="text-sm mb-1" style="color:var(--text-secondary)">Estado: <span class="${st} font-medium">${d.status}</span></div><div class="text-sm mb-5" style="color:var(--text-tertiary)">Creado: ${new Date(d.createdAt).toLocaleString()}</div><div class="hive-card p-4 mb-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Descripcion</div><div class="text-sm leading-relaxed whitespace-pre-wrap" style="color:var(--text-secondary)">${esc(d.description)}</div></div>${d.resolutionNotes?`<div class=\"hive-card p-4 mb-4\"><div class=\"text-xs uppercase tracking-wider mb-2\" style=\"color:var(--text-tertiary)\">Notas de resolucion</div><div class=\"text-sm whitespace-pre-wrap\" style=\"color:var(--text-secondary)\">${esc(d.resolutionNotes)}</div></div>`:''}${d.reasoning?`<div class=\"hive-card p-4 mb-4 border-l-2 border-amber-500\" style=\"background:rgba(245,158,11,0.03)\"><div class=\"text-xs text-amber-500 uppercase tracking-wider mb-2\">Analisis IA</div><div class=\"text-sm italic\" style=\"color:var(--text-secondary)\">${esc(d.reasoning)}</div></div>`:''}${d.gitBranch?`<div class=\"text-xs\" style=\"color:var(--text-tertiary)\">Branch: <code class=\"text-amber-500 font-mono\">${esc(d.gitBranch)}</code> · Commit: <code class=\"font-mono\" style=\"color:var(--text-secondary)\">${esc((d.gitCommitHash||'').substring(0,8))}</code></div>`:''}${actions}<div id=\"msgs\" class=\"hive-card p-4 mt-4\"><div class=\"text-xs uppercase tracking-wider mb-2\" style=\"color:var(--text-tertiary)\">Mensajes</div><div id=\"ml\"><div class=\"text-sm\" style=\"color:var(--text-secondary)\">Cargando mensajes...</div></div></div>`;
+
+ // Load and render messages with Auto-Fix labels
+ try{
+   const token=s.token||''; const hdr={'Authorization':'Bearer '+token,'Content-Type':'application/json'}; if(s.tenantId) hdr['X-Tenant-Id']=s.tenantId;
+   const r=await fetch(`/api/support/incidents/${encodeURIComponent(id)}/messages`,{headers:hdr,credentials:'include'});
+   if(r.ok){ const msgs=await r.json(); renderMessages(msgs||[]); } else { document.getElementById('ml').innerHTML='<div class="text-sm" style="color:var(--text-secondary)">No se pudieron cargar los mensajes.</div>'; }
+ }catch{ document.getElementById('ml').innerHTML='<div class="text-sm" style="color:var(--text-secondary)">No se pudieron cargar los mensajes.</div>'; }
 document.getElementById('dr').classList.add('open');
 anime({targets:'#db > *',translateX:[30,0],opacity:[0,1],delay:anime.stagger(60),duration:450,easing:'easeOutCubic'});
 }catch(e){toast(e.message,'error');}
@@ -219,6 +351,7 @@ s.tenantId=sel.value;
 if(s.tenantId){
 localStorage.setItem('tenantId',s.tenantId);
 ld();li();
+ if(hubConn&&hubConn.invoke){hubConn.invoke('JoinTenantGroup', s.tenantId).catch(()=>{});} 
 }else{
 localStorage.removeItem('tenantId');
 }

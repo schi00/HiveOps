@@ -6,4 +6,5 @@ public interface ISupervisionNotifier
     Task NotifyFrustrationAsync(Guid tenantId, Guid conversationId, CancellationToken ct = default);
     Task NotifyIncidentCreatedAsync(Guid tenantId, Guid incidentId, string title, string severity, CancellationToken ct = default);
     Task NotifyApprovalRequiredAsync(Guid tenantId, Guid incidentId, string branchName, CancellationToken ct = default);
+    Task NotifyLlmRetryUpdatedAsync(Guid tenantId, Guid incidentId, int attempt, CancellationToken ct = default);
 }

@@ -12,6 +12,8 @@ using HiveOps.Infrastructure.Messaging;
 using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
 using StackExchange.Redis;
+using HiveOps.Infrastructure.Secrets;
+using HiveOps.Infrastructure.Billing;
 
 namespace HiveOps.Infrastructure;
 
@@ -35,6 +37,22 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TenantSaveChangesInterceptor>();
         services.AddMemoryCache();
         services.AddScoped<ITenantConfigService, TenantConfigService>();
+
+        // ── Secrets (Env -> AWS -> Configuration) ─────────────────────────
+        services.Configure<SecretsOptions>(configuration.GetSection(SecretsOptions.SectionName));
+        services.AddSingleton<ISecretProvider>(sp =>
+        {
+            var cfg = sp.GetRequiredService<IConfiguration>();
+            var opts = cfg.GetSection(SecretsOptions.SectionName).Get<SecretsOptions>() ?? new SecretsOptions();
+            var providers = new List<ISecretProvider>
+            {
+                new EnvVarSecretProvider(),
+            };
+            if (opts.UseAws)
+                providers.Add(new AwsSecretsManagerProvider(opts));
+            providers.Add(new ConfigurationSecretProvider(cfg));
+            return new CompositeSecretProvider(providers.ToArray());
+        });
 
         // ── Tenant resolution pipeline ─────────────────────────────────────
         services.AddScoped<ITenantLookupService, TenantLookupService>();
@@ -84,6 +102,10 @@ public static class ServiceCollectionExtensions
 
         // ── Tenant Data Fixer ────────────────────────────────────────────────
         services.AddScoped<ITenantDataFixerService, TenantDataFixerService>();
+
+        // ── Billing (Stripe wiring placeholders) ─────────────────────────────
+        services.Configure<StripeOptions>(configuration.GetSection(StripeOptions.SectionName));
+        services.AddScoped<IStripeService, StripeService>();
 
         return services;
     }

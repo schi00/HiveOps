@@ -18,6 +18,8 @@ using HiveOps.Domain.Models;
 using HiveOps.Infrastructure;
 using HiveOps.Infrastructure.Services;
 using HiveOps.Workers;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,6 +39,23 @@ builder.Host.UseSerilog((context, services, configuration) =>
         .Enrich.With(services.GetRequiredService<TenantIdEnricher>())
         .Enrich.With(services.GetRequiredService<CorrelationIdEnricher>())
         .ReadFrom.Configuration(context.Configuration);
+});
+
+// -- Rate Limiting -------------------------------------------------------------
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("onboarding-policy", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? httpContext.Request.Headers.Host.ToString(),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }
+        )
+    );
 });
 
 // -- HttpContext accessor for enrichers -----------------------------------------
@@ -179,6 +198,7 @@ app.Use(async (context, next) =>
     logger.LogInformation("Webhook outbound {StatusCode} {Method} {Path}", context.Response.StatusCode, context.Request.Method, context.Request.Path);
 });
 app.UseRouting();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseMiddleware<TenantLogContextMiddleware>();

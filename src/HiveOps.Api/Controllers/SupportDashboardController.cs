@@ -12,6 +12,8 @@ using HiveOps.Domain.Interfaces;
 using HiveOps.Domain.Models;
 using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
+using Microsoft.AspNetCore.SignalR;
+using HiveOps.Api.Hubs;
 
 namespace HiveOps.Api.Controllers;
 
@@ -27,6 +29,7 @@ public sealed class SupportDashboardController : ControllerBase
     private readonly IDeploymentService _deploymentService;
     private readonly ITenantDataFixerService _dataFixer;
     private readonly ISupervisionNotifier _notifier;
+    private readonly IHubContext<SupervisionHub> _hub;
 
     public SupportDashboardController(
         AppDbContext db,
@@ -35,7 +38,8 @@ public sealed class SupportDashboardController : ControllerBase
         IGitService gitService,
         IDeploymentService deploymentService,
         ITenantDataFixerService dataFixer,
-        ISupervisionNotifier notifier)
+        ISupervisionNotifier notifier,
+        IHubContext<SupervisionHub> hub)
     {
         _db = db;
         _tenantContext = tenantContext;
@@ -44,6 +48,7 @@ public sealed class SupportDashboardController : ControllerBase
         _deploymentService = deploymentService;
         _dataFixer = dataFixer;
         _notifier = notifier;
+        _hub = hub;
     }
 
     private bool IsSuperAdmin => User.IsInRole(AppRoles.SuperAdmin);
@@ -138,7 +143,13 @@ public sealed class SupportDashboardController : ControllerBase
                 i.Status.ToString(),
                 i.AssignedTo,
                 i.CreatedAt,
-                i.UpdatedAt))
+                i.UpdatedAt,
+                i.DeployStatus,
+                _db.DiagnosticLogs
+                    .Where(l => l.IncidentId == i.Id && l.StepName == "ci.callback")
+                    .OrderByDescending(l => l.CreatedAt)
+                    .Select(l => l.Result)
+                    .FirstOrDefault()))
             .ToListAsync(ct);
 
         return Ok(items);
@@ -243,6 +254,21 @@ public sealed class SupportDashboardController : ControllerBase
             .Select(a => new AttachmentDto(a.Id, a.Type.ToString(), a.FileName, a.CreatedAt))
             .ToListAsync(ct);
 
+        // Extract latest CI info (runId, logUrl)
+        string? runId = null, logUrl = null;
+        foreach (var tl in logs.Where(t => string.Equals(t.Step, "ci.callback", StringComparison.OrdinalIgnoreCase)).Reverse())
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(tl.Result ?? "{}");
+                var root = doc.RootElement;
+                runId = root.TryGetProperty("runId", out var r) ? r.GetString() : null;
+                logUrl = root.TryGetProperty("logUrl", out var u) ? u.GetString() : null;
+                if (!string.IsNullOrWhiteSpace(runId) || !string.IsNullOrWhiteSpace(logUrl)) break;
+            }
+            catch { /* ignore parse errors */ }
+        }
+
         return Ok(new IncidentDetailDto(
             incident.Id,
             incident.Title,
@@ -258,7 +284,11 @@ public sealed class SupportDashboardController : ControllerBase
             incident.UpdatedAt,
             incident.ResolvedAt,
             logs,
-            attachments));
+            attachments,
+            null,
+            incident.DeployStatus,
+            runId,
+            logUrl));
     }
 
     [HttpGet("incidents/{id:guid}/messages")]
@@ -363,6 +393,74 @@ public sealed class SupportDashboardController : ControllerBase
         incident.UpdatedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
         return Ok(new { message = "Fix rejected. Incident reopened." });
+    }
+
+    [HttpPost("incidents/{id:guid}/rollback")]
+    public async Task<ActionResult> Rollback(Guid id, CancellationToken ct)
+    {
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue && !IsPrivileged) return Unauthorized();
+
+        // Only Admin/SuperAdmin can trigger rollback
+        if (!IsPrivileged) return StatusCode(StatusCodes.Status403Forbidden);
+
+        var incident = await _db.Incidents
+            .FirstOrDefaultAsync(i => i.Id == id && (IsPrivileged || i.TenantId == effectiveTenantId!.Value), ct);
+        if (incident is null) return NotFound();
+
+        // Plan gating: tenant must have rollback capability
+        var tenant = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == incident.TenantId, ct);
+        if (tenant is null) return NotFound();
+        if (!tenant.HasRollbackCapability)
+            return StatusCode(StatusCodes.Status403Forbidden, "El plan actual no permite realizar rollback.");
+
+        // Allow rollback only after SUCCESS or FAILED deploy states
+        var st = incident.DeployStatus ?? string.Empty;
+        if (!string.Equals(st, "SUCCESS", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(st, "FAILED", StringComparison.OrdinalIgnoreCase))
+            return BadRequest("Rollback is only available after a SUCCESS or FAILED deploy.");
+
+        // Find latest successful ci.callback (previous good state)
+        var logs = await _db.DiagnosticLogs.AsNoTracking()
+            .Where(l => l.IncidentId == id && l.StepName == "ci.callback" && l.IsSuccess)
+            .OrderByDescending(l => l.CreatedAt)
+            .ToListAsync(ct);
+
+        string? prevRunId = null;
+        string? prevLogUrl = null;
+        if (logs.Count > 0)
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(logs[0].Result ?? "{}");
+                var root = doc.RootElement;
+                prevRunId = root.TryGetProperty("runId", out var r) ? r.GetString() : null;
+                prevLogUrl = root.TryGetProperty("logUrl", out var u) ? u.GetString() : null;
+            }
+            catch { }
+        }
+
+        await _db.DiagnosticLogs.AddAsync(new DiagnosticLog
+        {
+            TenantId = incident.TenantId,
+            IncidentId = incident.Id,
+            StepName = "rollback.requested",
+            Result = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                previousRunId = prevRunId,
+                previousLogUrl = prevLogUrl,
+                requestedBy = User.Identity?.Name ?? "admin",
+                at = DateTimeOffset.UtcNow
+            }),
+            IsSuccess = true
+        }, ct);
+        await _db.SaveChangesAsync(ct);
+
+        // Notify realtime
+        await _hub.Clients.Group($"tenant:{incident.TenantId}")
+            .SendAsync("DeploymentUpdated", new { incidentId = incident.Id, status = "ROLLBACK_REQUESTED", progress = 0, eta = 0, at = DateTimeOffset.UtcNow, runId = prevRunId, logUrl = prevLogUrl }, ct);
+
+        return Accepted(new { message = "Rollback requested.", previousRunId = prevRunId });
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -522,7 +620,10 @@ public sealed class SupportDashboardController : ControllerBase
             i.ResolvedAt,
             [],
             [],
-            analysis is null ? null : analysis.Reasoning);
+            analysis is null ? null : analysis.Reasoning,
+            i.DeployStatus,
+            null,
+            null);
     }
 
     /// <summary>
@@ -730,7 +831,7 @@ public sealed class SupportDashboardController : ControllerBase
     // ═══════════════════════════════════════════════════════════════════════════
 
 public sealed record SupportSummaryDto(int OpenIncidents, int ResolvedThisMonth, int CriticalOpen, int AvgResolutionMinutes);
-public sealed record IncidentListItemDto(Guid Id, string Title, string Category, string Severity, string Status, string AssignedTo, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+public sealed record IncidentListItemDto(Guid Id, string Title, string Category, string Severity, string Status, string AssignedTo, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string? DeployStatus, string? LastCiResult);
 public sealed record TimelineItemDto(string Step, string Result, bool IsSuccess, DateTimeOffset CreatedAt);
 public sealed record AttachmentDto(Guid Id, string Type, string FileName, DateTimeOffset CreatedAt);
 public sealed record IncidentDetailDto(
@@ -749,7 +850,10 @@ public sealed record IncidentDetailDto(
     DateTimeOffset? ResolvedAt,
     IReadOnlyList<TimelineItemDto> Timeline,
     IReadOnlyList<AttachmentDto> Attachments,
-    string? LlmReasoning = null);
+    string? LlmReasoning = null,
+    string? DeployStatus = null,
+    string? DeployRunId = null,
+    string? DeployLogUrl = null);
 
 public sealed record MergeRequestDto(Guid IncidentId, string Title, string Branch, string CommitHash, Guid TenantId, DateTimeOffset CreatedAt);
 public sealed record SystemHealthDto(bool DbHealthy, bool PipelineHealthy, string LastTestRun);
