@@ -8,12 +8,47 @@ namespace HiveOps.Infrastructure.Persistence;
 public sealed class AppDbContext : DbContext
 {
     private readonly ITenantContext _tenantContext;
+    private readonly IDynamicConnectionStringResolver? _connectionStringResolver;
     private Guid CurrentTenantId => _tenantContext.IsResolved ? _tenantContext.TenantId : Guid.Empty;
 
     public AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext tenantContext)
         : base(options)
     {
         _tenantContext = tenantContext;
+    }
+
+    public AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext tenantContext, IDynamicConnectionStringResolver connectionStringResolver)
+        : base(options)
+    {
+        _tenantContext = tenantContext;
+        _connectionStringResolver = connectionStringResolver;
+    }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        base.OnConfiguring(optionsBuilder);
+
+        if (_tenantContext.IsResolved && _connectionStringResolver is not null)
+        {
+            // Only override when using a relational (SQL Server) provider.
+            // Skip for InMemory (used in tests) to avoid provider conflicts.
+            var relationalExtension = optionsBuilder.Options
+                .FindExtension<Microsoft.EntityFrameworkCore.Infrastructure.RelationalOptionsExtension>();
+            if (relationalExtension is null)
+                return;
+
+            var resolvedConnectionString = _connectionStringResolver.Resolve(_tenantContext.TenantId);
+            var defaultConnectionString = relationalExtension.ConnectionString;
+
+            if (!string.Equals(resolvedConnectionString, defaultConnectionString, StringComparison.OrdinalIgnoreCase))
+            {
+                optionsBuilder.UseSqlServer(resolvedConnectionString, sql =>
+                {
+                    sql.EnableRetryOnFailure(3);
+                    sql.CommandTimeout(30);
+                });
+            }
+        }
     }
 
     public DbSet<Tenant> Tenants => Set<Tenant>();

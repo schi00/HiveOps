@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Xunit;
 using Microsoft.Extensions.DependencyInjection;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
@@ -26,16 +27,20 @@ public sealed class InboxFlowTests : IClassFixture<DashboardWebApplicationFactor
 
         var alphaRows = await alphaClient.GetFromJsonAsync<List<InboxConversationDto>>("/api/inbox/conversations");
         alphaRows.Should().NotBeNull();
-        alphaRows!.Should().NotBeEmpty();
-        alphaRows.Should().OnlyContain(x => x.ChannelUserId.Contains("alpha") || x.ChannelUserId.Contains("5491155517000"));
+        Assert.NotNull(alphaRows);
+        var aRows = alphaRows;
+        aRows.Should().NotBeEmpty();
+        aRows.Should().OnlyContain(x => x.ChannelUserId.Contains("alpha") || x.ChannelUserId.Contains("5491155517000"));
 
         using var betaClient = _factory.CreateClient();
         betaClient.DefaultRequestHeaders.Add("X-Api-Key", "TENANT-BETA-KEY");
 
         var betaRows = await betaClient.GetFromJsonAsync<List<InboxConversationDto>>("/api/inbox/conversations");
         betaRows.Should().NotBeNull();
-        betaRows!.Should().NotBeEmpty();
-        betaRows.Should().OnlyContain(x => x.ChannelUserId.Contains("beta"));
+        Assert.NotNull(betaRows);
+        var bRows = betaRows;
+        bRows.Should().NotBeEmpty();
+        bRows.Should().OnlyContain(x => x.ChannelUserId.Contains("beta"));
     }
 
     [Fact]
@@ -45,19 +50,25 @@ public sealed class InboxFlowTests : IClassFixture<DashboardWebApplicationFactor
         await LoginAsTenantAsync(client, "tenant_alpha");
 
         var rows = await client.GetFromJsonAsync<List<InboxConversationDto>>("/api/inbox/conversations");
-        var conversationId = rows!.First().Id;
+        rows.Should().NotBeNull();
+        Assert.NotNull(rows);
+        var conversationId = rows.First().Id;
 
         var takeover = await client.PostAsync($"/api/inbox/conversations/{conversationId}/takeover", content: null);
         takeover.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var afterTakeover = await client.GetFromJsonAsync<InboxConversationDetailDto>($"/api/inbox/conversations/{conversationId}");
-        afterTakeover!.Status.Should().Be(ConversationStatus.AwaitingHuman);
+        afterTakeover.Should().NotBeNull();
+        Assert.NotNull(afterTakeover);
+        afterTakeover.Status.Should().Be(ConversationStatus.AwaitingHuman);
 
         var release = await client.PostAsync($"/api/inbox/conversations/{conversationId}/release", content: null);
         release.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var afterRelease = await client.GetFromJsonAsync<InboxConversationDetailDto>($"/api/inbox/conversations/{conversationId}");
-        afterRelease!.Status.Should().Be(ConversationStatus.Active);
+        afterRelease.Should().NotBeNull();
+        Assert.NotNull(afterRelease);
+        afterRelease.Status.Should().Be(ConversationStatus.Active);
     }
 
     [Fact]
@@ -67,7 +78,9 @@ public sealed class InboxFlowTests : IClassFixture<DashboardWebApplicationFactor
         await LoginAsTenantAsync(client, "tenant_alpha");
 
         var rows = await client.GetFromJsonAsync<List<InboxConversationDto>>("/api/inbox/conversations");
-        var conversationId = rows!.First().Id;
+        rows.Should().NotBeNull();
+        Assert.NotNull(rows);
+        var conversationId = rows.First().Id;
 
         var send = await client.PostAsJsonAsync($"/api/inbox/conversations/{conversationId}/messages", new
         {
@@ -78,7 +91,8 @@ public sealed class InboxFlowTests : IClassFixture<DashboardWebApplicationFactor
 
         var detail = await client.GetFromJsonAsync<InboxConversationDetailDto>($"/api/inbox/conversations/{conversationId}");
         detail.Should().NotBeNull();
-        detail!.Messages.Should().Contain(x => x.Content == "Te atiende un asesor humano." && x.AgentName == "tenant_alpha");
+        Assert.NotNull(detail);
+        detail.Messages.Should().Contain(x => x.Content == "Te atiende un asesor humano." && x.AgentName == "tenant_alpha");
 
         using var scope = _factory.Services.CreateScope();
         var channel = scope.ServiceProvider.GetRequiredService<IMessagingChannel>().Should().BeOfType<FakeMessagingChannel>().Subject;
@@ -92,25 +106,30 @@ public sealed class InboxFlowTests : IClassFixture<DashboardWebApplicationFactor
         await LoginAsTenantAsync(client, "tenant_alpha");
 
         var rows = await client.GetFromJsonAsync<List<InboxConversationDto>>("/api/inbox/conversations");
-        var conversationId = rows!.First().Id;
+        rows.Should().NotBeNull();
+        Assert.NotNull(rows);
+        var conversationId = rows.First().Id;
 
         var assign = await client.PostAsJsonAsync($"/api/inbox/conversations/{conversationId}/assign", new { agent = "agente-1" });
         assign.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var filtered = await client.GetFromJsonAsync<List<InboxConversationDto>>("/api/inbox/conversations?assignedTo=tenant_alpha");
         filtered.Should().NotBeNull();
-        filtered!.Should().Contain(x => x.Id == conversationId && x.AssignedAgent == "tenant_alpha");
+        Assert.NotNull(filtered);
+        filtered.Should().Contain(x => x.Id == conversationId && x.AssignedAgent == "tenant_alpha");
 
         var detail = await client.GetFromJsonAsync<InboxConversationDetailDto>($"/api/inbox/conversations/{conversationId}");
         detail.Should().NotBeNull();
-        detail!.AssignedAgent.Should().Be("tenant_alpha");
+        Assert.NotNull(detail);
+        detail.AssignedAgent.Should().Be("tenant_alpha");
 
         var unassign = await client.PostAsync($"/api/inbox/conversations/{conversationId}/unassign", content: null);
         unassign.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var detailAfterUnassign = await client.GetFromJsonAsync<InboxConversationDetailDto>($"/api/inbox/conversations/{conversationId}");
         detailAfterUnassign.Should().NotBeNull();
-        detailAfterUnassign!.AssignedAgent.Should().BeNull();
+        Assert.NotNull(detailAfterUnassign);
+        detailAfterUnassign.AssignedAgent.Should().BeNull();
     }
 
     [Fact]
@@ -120,7 +139,9 @@ public sealed class InboxFlowTests : IClassFixture<DashboardWebApplicationFactor
         await LoginAsTenantAsync(client, "tenant_alpha");
 
         var rows = await client.GetFromJsonAsync<List<InboxConversationDto>>("/api/inbox/conversations");
-        var conversationId = rows!.First().Id;
+        rows.Should().NotBeNull();
+        Assert.NotNull(rows);
+        var conversationId = rows.First().Id;
 
         var addNote = await client.PostAsJsonAsync($"/api/inbox/conversations/{conversationId}/notes", new
         {
@@ -130,11 +151,13 @@ public sealed class InboxFlowTests : IClassFixture<DashboardWebApplicationFactor
 
         var defaultDetail = await client.GetFromJsonAsync<InboxConversationDetailDto>($"/api/inbox/conversations/{conversationId}");
         defaultDetail.Should().NotBeNull();
-        defaultDetail!.Messages.Should().NotContain(x => x.IsInternal);
+        Assert.NotNull(defaultDetail);
+        defaultDetail.Messages.Should().NotContain(x => x.IsInternal);
 
         var withInternal = await client.GetFromJsonAsync<InboxConversationDetailDto>($"/api/inbox/conversations/{conversationId}?includeInternal=true");
         withInternal.Should().NotBeNull();
-        withInternal!.Messages.Should().Contain(x => x.IsInternal && x.Content.Contains("Cliente sensible al precio."));
+        Assert.NotNull(withInternal);
+        withInternal.Messages.Should().Contain(x => x.IsInternal && x.Content.Contains("Cliente sensible al precio."));
     }
 
     [Fact]
@@ -167,9 +190,11 @@ public sealed class InboxFlowTests : IClassFixture<DashboardWebApplicationFactor
 
         // Assert
         rows.Should().NotBeNull();
-        var overdue = rows!.FirstOrDefault(r => r.Id == overdueConversationId);
+        Assert.NotNull(rows);
+        var overdue = rows.FirstOrDefault(r => r.Id == overdueConversationId);
         overdue.Should().NotBeNull("the overdue conversation must appear in the list");
-        overdue!.IsOverdue.Should().BeTrue("last activity was 2h ago, exceeding the 60-min SLA threshold");
+        Assert.NotNull(overdue);
+        overdue.IsOverdue.Should().BeTrue("last activity was 2h ago, exceeding the 60-min SLA threshold");
     }
 
     [Fact]
@@ -194,7 +219,8 @@ public sealed class InboxFlowTests : IClassFixture<DashboardWebApplicationFactor
 
         var rows = await client.GetFromJsonAsync<List<InboxConversationDto>>("/api/inbox/conversations");
         rows.Should().NotBeNull();
-        var conversationId = rows!.First().Id;
+        Assert.NotNull(rows);
+        var conversationId = rows.First().Id;
 
         var takeover = await client.PostAsync($"/api/inbox/conversations/{conversationId}/takeover", content: null);
         takeover.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -216,7 +242,9 @@ public sealed class InboxFlowTests : IClassFixture<DashboardWebApplicationFactor
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var detail = await client.GetFromJsonAsync<InboxConversationDetailDto>($"/api/inbox/conversations/{target.Id}");
-        detail!.Status.Should().Be(ConversationStatus.Resolved);
+        detail.Should().NotBeNull();
+        Assert.NotNull(detail);
+        detail.Status.Should().Be(ConversationStatus.Resolved);
     }
 
     [Fact]
@@ -228,7 +256,8 @@ public sealed class InboxFlowTests : IClassFixture<DashboardWebApplicationFactor
         var analytics = await client.GetFromJsonAsync<InboxAnalyticsDto>("/api/inbox/analytics");
 
         analytics.Should().NotBeNull();
-        analytics!.Total.Should().BeGreaterThan(0);
+        Assert.NotNull(analytics);
+        analytics.Total.Should().BeGreaterThan(0);
         analytics.ByStatus.Should().NotBeEmpty();
         analytics.ByChannel.Should().NotBeEmpty();
         analytics.SlaThresholdMinutes.Should().BeGreaterThan(0);

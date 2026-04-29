@@ -1,0 +1,31 @@
+name: Preview Environment
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Test (smoke)
+        run: dotnet test --no-build -c Release --filter TestCategory!=LongRunning --verbosity minimal
+
+      # Placeholder for ephemeral preview infra (containers or functions)
+      - name: Provision preview (placeholder)
+        run: |
+          echo "Preview env for PR #${{ github.event.pull_request.number }}"

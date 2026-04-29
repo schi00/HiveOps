@@ -9,5 +9,7 @@ public enum IntentType
     IncidentQuery,
     IncidentApprove,
     IncidentReject,
-    DeployRequest
+    DeployRequest,
+    ThankYou,
+    Farewell
 }

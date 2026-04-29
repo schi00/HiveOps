@@ -17,7 +17,10 @@ namespace HiveOps.Api.Controllers;
 
 [ApiController]
 [Route("api/inbox")]
-[Authorize(Roles = AppRoles.Tenant + "," + AppRoles.Admin)]
+[Authorize(Roles = AppRoles.Tenant + "," + AppRoles.Admin,
+    AuthenticationSchemes = Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme
+        + "," + Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme
+        + "," + HiveOps.Api.Authentication.ApiKeyAuthScheme.SchemeName)]
 public sealed class InboxController : ControllerBase
 {
     private const string AssignedAgentKey = "assignedAgent";
@@ -267,6 +270,10 @@ public sealed class InboxController : ControllerBase
     {
         if (!_tenantContext.IsResolved) return Unauthorized();
 
+        var actor = GetAuthenticatedAgentName();
+        if (string.IsNullOrWhiteSpace(actor))
+            return Unauthorized("Authenticated agent identity is required.");
+
         var conversation = await _db.Conversations.FirstOrDefaultAsync(c => c.Id == conversationId, ct);
         if (conversation is null) return NotFound();
 
@@ -473,6 +480,10 @@ public sealed class InboxController : ControllerBase
     private string? GetAuthenticatedAgentName()
     {
         if (User?.Identity?.IsAuthenticated != true)
+            return null;
+
+        // ApiKey-authenticated identities are not human agents
+        if (User.Identity?.AuthenticationType == HiveOps.Api.Authentication.ApiKeyAuthScheme.SchemeName)
             return null;
 
         var username = User.FindFirstValue(AppClaimTypes.Username);

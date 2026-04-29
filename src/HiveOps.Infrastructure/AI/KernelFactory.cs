@@ -30,17 +30,40 @@ public sealed class KernelFactory
         if (!profile.Enabled)
             throw new InvalidOperationException($"SemanticKernel profile '{_options.ActiveProfile}' is disabled.");
 
+        var secretProvider = _provider.GetService<HiveOps.Infrastructure.Secrets.ISecretProvider>();
+        var chatApiKey = _options.OpenRouter.ApiKey;
+        try
+        {
+            if (secretProvider is not null)
+            {
+                var resolved = secretProvider.TryGetSecret("SemanticKernel:OpenRouter:ApiKey", out var key, out _);
+                if (resolved && !string.IsNullOrWhiteSpace(key)) chatApiKey = key!;
+            }
+        }
+        catch { /* fallback to options */ }
+
         builder.AddOpenAIChatCompletion(
             modelId: profile.ModelId,
-            apiKey: _options.OpenRouter.ApiKey,
+            apiKey: chatApiKey,
             endpoint: new Uri(_options.OpenRouter.Endpoint),
             httpClient: CreateOpenRouterHttpClient());
 
-        if (!string.IsNullOrWhiteSpace(_options.Embeddings.ApiKey) && !string.IsNullOrWhiteSpace(_options.Embeddings.ModelId))
+        var embeddingApiKey = _options.Embeddings.ApiKey;
+        try
+        {
+            if (secretProvider is not null)
+            {
+                var resolved = secretProvider.TryGetSecret("SemanticKernel:Embeddings:ApiKey", out var key, out _);
+                if (resolved && !string.IsNullOrWhiteSpace(key)) embeddingApiKey = key!;
+            }
+        }
+        catch { /* fallback to options */ }
+
+        if (!string.IsNullOrWhiteSpace(embeddingApiKey) && !string.IsNullOrWhiteSpace(_options.Embeddings.ModelId))
         {
             builder.AddOpenAITextEmbeddingGeneration(
                 modelId: _options.Embeddings.ModelId,
-                apiKey: _options.Embeddings.ApiKey,
+                apiKey: embeddingApiKey,
                 dimensions: _options.Embeddings.Dimensions);
         }
 

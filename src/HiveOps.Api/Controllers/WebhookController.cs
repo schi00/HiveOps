@@ -8,6 +8,7 @@ using HiveOps.Domain.Models;
 using HiveOps.Api.Utilities;
 using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
+using HiveOps.Infrastructure.Secrets;
 
 namespace HiveOps.Api.Controllers;
 
@@ -27,6 +28,7 @@ public sealed class WebhookController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<WebhookController> _logger;
+    private readonly ISecretProvider _secretProvider;
 
     public WebhookController(
         IMediator mediator,
@@ -34,7 +36,8 @@ public sealed class WebhookController : ControllerBase
         TenantContext tenantContext,
         IConfiguration configuration,
         IWebHostEnvironment environment,
-        ILogger<WebhookController> logger)
+        ILogger<WebhookController> logger,
+        ISecretProvider secretProvider)
     {
         _mediator = mediator;
         _db = db;
@@ -42,6 +45,7 @@ public sealed class WebhookController : ControllerBase
         _configuration = configuration;
         _environment = environment;
         _logger = logger;
+        _secretProvider = secretProvider;
     }
 
     [HttpGet("whatsapp")]
@@ -76,6 +80,12 @@ public sealed class WebhookController : ControllerBase
         if (!ShouldSkipSignatureValidation())
         {
             var appSecret = _configuration["WhatsApp:AppSecret"];
+            try
+            {
+                if (_secretProvider.TryGetSecret("WhatsApp:AppSecret", out var s, out _))
+                    appSecret = string.IsNullOrWhiteSpace(s) ? appSecret : s;
+            }
+            catch { /* fallback to configuration */ }
             if (string.IsNullOrWhiteSpace(appSecret))
             {
                 _logger.LogWarning("WhatsApp webhook rejected because AppSecret is not configured.");
@@ -95,14 +105,14 @@ public sealed class WebhookController : ControllerBase
 
         if (WhatsAppWebhookParsing.TryParseSimplifiedPayload(payload, out var simplified))
         {
-            _logger.LogInformation("Webhook parsed as simplified payload. From={From} To={To} MessageId={MessageId}", simplified.From, simplified.To, simplified.MessageId);
+            _logger.LogInformation("Webhook parsed as simplified payload. From={From} To={To} MessageId={MessageId}", Mask(simplified.From), Mask(simplified.To), Mask(simplified.MessageId));
             return await HandleInboundAsync(simplified.From, simplified.To, simplified.Text, simplified.MessageId, null, null, null, null, null, null, ct);
         }
 
         if (WhatsAppWebhookParsing.TryParseMetaPayload(payload, out var meta))
         {
             _logger.LogInformation("Webhook parsed as Meta payload. From={From} DisplayPhone={DisplayPhone} PhoneNumberId={PhoneNumberId} MessageId={MessageId}",
-                meta.From, meta.DisplayPhoneNumber, meta.PhoneNumberId, meta.MessageId);
+                Mask(meta.From), Mask(meta.DisplayPhoneNumber), Mask(meta.PhoneNumberId), Mask(meta.MessageId));
             return await HandleInboundAsync(
                 meta.From,
                 meta.DisplayPhoneNumber,
@@ -121,10 +131,10 @@ public sealed class WebhookController : ControllerBase
         {
             _logger.LogInformation(
                 "Webhook received as WhatsApp status update. Recipient={RecipientId} Status={Status} PhoneNumberId={PhoneNumberId} MessageId={MessageId}",
-                statusUpdate.RecipientId,
+                Mask(statusUpdate.RecipientId),
                 statusUpdate.Status,
-                statusUpdate.PhoneNumberId,
-                statusUpdate.MessageId);
+                Mask(statusUpdate.PhoneNumberId),
+                Mask(statusUpdate.MessageId));
             return Ok(new { received = true, status = true });
         }
 
@@ -133,7 +143,7 @@ public sealed class WebhookController : ControllerBase
         if (WhatsAppWebhookParsing.TryExtractMinimalMetaPayload(payload, out var minimal))
         {
             _logger.LogInformation("Webhook parsed as minimal Meta payload. From={From} DisplayPhone={DisplayPhone} PhoneNumberId={PhoneNumberId} MessageId={MessageId}",
-                minimal.From, minimal.DisplayPhoneNumber, minimal.PhoneNumberId, minimal.MessageId);
+                Mask(minimal.From), Mask(minimal.DisplayPhoneNumber), Mask(minimal.PhoneNumberId), Mask(minimal.MessageId));
             return await HandleInboundAsync(
                 minimal.From,
                 minimal.DisplayPhoneNumber,
@@ -148,7 +158,7 @@ public sealed class WebhookController : ControllerBase
                 ct);
         }
 
-        _logger.LogWarning("WhatsApp webhook payload could not be parsed. Raw: {PayloadText}", payload.GetRawText());
+        _logger.LogWarning("WhatsApp webhook payload could not be parsed. Raw omitted for privacy. Length={Len}", payload.GetRawText().Length);
         // Bot introduces itself even when payload is malformed
         return Ok(new { received = true, message = "Webhook received but format not recognized. Bot should still respond." });
     }
@@ -196,8 +206,7 @@ public sealed class WebhookController : ControllerBase
 
         if (tenant is null)
         {
-            _logger.LogWarning("Webhook received but tenant not found for destinationNumber={DestNum}, phoneNumberId={PhoneId}. " +
-                "Will attempt generic tenant processing.", destinationNumber, phoneNumberId);
+            _logger.LogWarning("Webhook received but tenant not found for destinationNumber={DestNum}, phoneNumberId={PhoneId}. Will attempt generic tenant processing.", Mask(destinationNumber), Mask(phoneNumberId));
             
             // Fallback: Use first active tenant if available (for testing/single-tenant scenarios)
             tenant = tenants.FirstOrDefault();
@@ -220,7 +229,7 @@ public sealed class WebhookController : ControllerBase
 
         _tenantContext.SetTenant(tenant.Id);
         _logger.LogInformation("Webhook tenant resolved. TenantId={TenantId} From={From} NormalizedFrom={NormalizedFrom} MessageId={MessageId}",
-            tenant.Id, from, WhatsAppWebhookParsing.NormalizeSender(from), messageId);
+            tenant.Id, Mask(from), Mask(WhatsAppWebhookParsing.NormalizeSender(from)), Mask(messageId));
 
         var message = new IncomingMessage
         {
@@ -251,6 +260,14 @@ public sealed class WebhookController : ControllerBase
         await using var buffer = new MemoryStream();
         await Request.Body.CopyToAsync(buffer, ct);
         return buffer.ToArray();
+    }
+
+    private static string Mask(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var v = new string(value.Where(char.IsLetterOrDigit).ToArray());
+        if (v.Length <= 4) return "****";
+        return new string('*', Math.Max(0, v.Length - 4)) + v[^4..];
     }
 
     /// <summary>Generic channel webhook for non-WhatsApp integrations (requires X-Api-Key header).</summary>

@@ -1,110 +1,1389 @@
 <!DOCTYPE html>
-<html lang="es" class="dark"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HiveOps Support</title>
+<html lang="es" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiveOps Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
-<script>tailwind.config={darkMode:'class',theme:{extend:{colors:{slate:{950:'#020617',900:'#0f172a',800:'#1e293b'},indigo:{500:'#6366f1',600:'#4f46e5'},emerald:{500:'#10b981'},rose:{500:'#f43f5e'},amber:{500:'#f59e0b'}}}}}</script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        amber: {
+          50: '#fffbeb',
+          100: '#fef3c7',
+          200: '#fde68a',
+          300: '#fcd34d',
+          400: '#fbbf24',
+          500: '#f59e0b',
+          600: '#d97706',
+          700: '#b45309',
+          800: '#92400e',
+          900: '#78350f',
+          950: '#451a03',
+        },
+        hive: {
+          dark: '#0a0a0a',
+          darker: '#050505',
+          card: '#111111',
+          border: '#222222',
+          amber: '#f59e0b',
+          amberLight: '#fbbf24',
+          amberDark: '#d97706',
+        }
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+      }
+    }
+  }
+}
+</script>
 <style>
-body{font-family:Inter,system-ui,sans-serif;}
-.glass{background:rgba(30,41,59,0.5);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.08);}
-.glass-strong{background:rgba(15,23,42,0.85);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.1);}
-.drawer{transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);}
-.drawer.open{transform:translateX(0);}
-.modal-overlay{opacity:0;pointer-events:none;transition:opacity .25s;}
-.modal-overlay.open{opacity:1;pointer-events:auto;}
-.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
-.view-section{display:none;opacity:0;}
-.view-section.active{display:block;}
+:root {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111111;
+  --bg-tertiary: #1a1a1a;
+  --border-color: #222222;
+  --text-primary: #fafafa;
+  --text-secondary: #a3a3a3;
+  --text-tertiary: #737373;
+  --amber-primary: #f59e0b;
+  --amber-glow: rgba(245, 158, 11, 0.15);
+}
+
+html.light {
+  --bg-primary: #f9fafb;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f3f4f6;
+  --border-color: #e5e7eb;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-tertiary: #6b7280;
+  --amber-primary: #ffb800;
+  --amber-glow: rgba(255, 184, 0, 0.12);
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+.hex-pattern {
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 5l21.65 12.5v25L30 55 8.35 42.5v-25z' fill='none' stroke='%23f59e0b' stroke-width='0.5' opacity='0.08'/%3E%3C/svg%3E");
+}
+html.light .hex-pattern {
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 5l21.65 12.5v25L30 55 8.35 42.5v-25z' fill='none' stroke='%23d97706' stroke-width='0.5' opacity='0.10'/%3E%3C/svg%3E");
+}
+
+.preset-selected {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+  border-color: #f59e0b !important;
+  color: #000000 !important;
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+}
+.preset-selected div {
+  color: #000000 !important;
+}
+.preset-selected:hover {
+  box-shadow: 0 6px 25px rgba(245, 158, 11, 0.4);
+}
+
+.glass {
+  background: rgba(17, 17, 17, 0.6);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.light .glass {
+  background: #ffffff;
+  border-color: rgba(229, 231, 235, 0.9);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.glass-hover:hover {
+  background: rgba(245, 158, 11, 0.05);
+  border-color: rgba(245, 158, 11, 0.3);
+  box-shadow: 0 0 30px var(--amber-glow);
+  transform: translateY(-2px);
+}
+
+.glass-strong {
+  background: rgba(10, 10, 10, 0.95);
+  backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid #333;
+}
+
+.light .glass-strong {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: #ddd;
+}
+
+.hive-card {
+  background: var(--bg-secondary);
+  border: 1px solid rgba(245, 158, 11, 0.6);
+  border-radius: 16px;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.light .hive-card {
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+}
+
+.hive-card:hover {
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 8px 40px rgba(245, 158, 11, 0.12), 0 4px 12px rgba(0, 0, 0, 0.2);
+  transform: translateY(-3px);
+}
+
+.light .hive-card:hover {
+  box-shadow: 0 15px 35px rgba(17, 24, 39, 0.08);
+}
+
+.hive-glow {
+  box-shadow: 0 0 40px rgba(245, 158, 11, 0.15);
+}
+
+.drawer {
+  transform: translateX(100%);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.drawer.open {
+  transform: translateX(0);
+}
+
+.modal-overlay {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.modal-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.view-section {
+  display: none;
+  opacity: 0;
+}
+
+.view-section.active {
+  display: block;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-pulse {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-12px) rotate(0.5deg); }
+}
+
+.float {
+  animation: float 6s ease-in-out infinite;
+}
+.float-delayed {
+  animation: float 6s ease-in-out 2s infinite;
+}
+.float-delayed-2 {
+  animation: float 6s ease-in-out 4s infinite;
+}
+
+.nav-item {
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.nav-item::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #f59e0b, transparent);
+  transition: all 0.3s ease;
+  transform: translateX(-50%);
+}
+
+.light .nav-item::after {
+  background: linear-gradient(90deg, transparent, #ffb800, transparent);
+}
+
+.nav-item:hover::after,
+.nav-item.active::after {
+  width: 60%;
+}
+
+.nav-item.active {
+  color: #f59e0b;
+}
+
+.light .nav-item.active {
+  color: #ffb800;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #0a0a0a;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: left 0.5s ease;
+}
+
+.btn-primary:hover::before {
+  left: 100%;
+}
+
+.btn-primary:hover {
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.4);
+  transform: translateY(-1px);
+}
+
+.light .btn-primary {
+  background: #b45309;
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(180, 83, 9, 0.25);
+}
+
+.light .btn-primary:hover {
+  box-shadow: 0 10px 25px rgba(180, 83, 9, 0.35);
+}
+
+.btn-secondary {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  transition: all 0.3s ease;
+}
+
+.btn-secondary:hover {
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.05);
+}
+
+.light .btn-secondary {
+  background: #ffffff;
+  border-color: #d1d5db;
+  color: #4b5563;
+}
+
+.light .btn-secondary:hover {
+  background: #f3f4f6;
+  border-color: #b45309;
+}
+
+.input-field {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  transition: all 0.3s ease;
+}
+
+.light .input-field {
+  background: #ffffff;
+  border-color: #d1d5db;
+  color: #111827;
+}
+
+.input-field:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+  outline: none;
+}
+
+.light .input-field:focus {
+  border-color: #ffb800;
+  box-shadow: 0 0 0 3px rgba(255, 184, 0, 0.2);
+}
+
+.hive-logo {
+  filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.3));
+  transition: all 0.3s ease;
+}
+
+.hive-logo:hover {
+  filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.5));
+  transform: scale(1.05);
+}
+
+.theme-toggle {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+}
+
+.theme-toggle:hover {
+  border-color: rgba(245, 158, 11, 0.5);
+  transform: rotate(15deg);
+}
+
+.shimmer {
+  background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.toast-container {
+  transform: translateY(100px) scale(0.9);
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.toast-container.show {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-glow {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.08) 0%, transparent 70%);
+  top: -200px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.light .hero-glow {
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.04) 0%, transparent 70%);
+}
+
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 180px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 6px;
+  opacity: 0;
+  transform: translateY(-8px) scale(0.95);
+  pointer-events: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 50;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+.user-dropdown.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.user-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.user-dropdown-item:hover {
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--text-primary);
+}
+
+.user-dropdown-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+.meta-text {
+  color: #6b7280;
+}
+
+.delete-link {
+  color: #9ca3af;
+  transition: color 0.2s ease;
+}
+
+.delete-link:hover {
+  color: #b45309;
+}
+
+.stock-alert {
+  background: #fef2f2;
+  border: 1px solid #b91c1c;
+  color: #b91c1c;
+}
+
+.light #user-avatar-btn {
+  background: #ffb800;
+  color: #111827;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+}
 </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-<div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950">
-<div class="glass-strong rounded-2xl p-10 w-full max-w-md">
-<div class="flex items-center gap-3 mb-8"><div class="w-10 h-10 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-xl">S</div><h1 class="text-2xl font-bold">HiveOps Support</h1></div>
-<form id="login-form" class="space-y-4">
-<input id="lu" type="text" class="w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-700 focus:border-indigo-500 outline-none" placeholder="admin" value="admin"/>
-<input id="lp" type="password" class="w-full px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-700 focus:border-indigo-500 outline-none" placeholder="password" value="admin123"/>
-<button type="submit" class="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-all">Ingresar</button>
-<div id="le" class="text-rose-400 text-sm hidden"></div>
-</form></div></div>
+<body class="hex-pattern min-h-screen antialiased">
+
+<!-- Login Screen -->
+<div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center">
+  <div class="hero-glow"></div>
+  <div class="absolute top-6 right-6 z-20">
+    <a href="/onboarding/index.html" class="btn-primary px-5 py-2 rounded-xl text-sm">Crear Organización</a>
+  </div>
+  <div class="hive-card w-full max-w-md p-8 relative z-10">
+    <div class="flex flex-col items-center gap-6 mb-8">
+      <div class="hive-logo">
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M32 4L36 10L32 16L28 10L32 4Z" fill="#f59e0b" class="hex-cell"/>
+          <path d="M44 10L48 16L44 22L40 16L44 10Z" fill="#d97706" class="hex-cell"/>
+          <path d="M20 10L24 16L20 22L16 16L20 10Z" fill="#d97706" class="hex-cell"/>
+          <path d="M32 16L36 22L32 28L28 22L32 16Z" fill="#fbbf24" class="hex-cell"/>
+          <path d="M44 22L48 28L44 34L40 28L44 22Z" fill="#f59e0b" class="hex-cell"/>
+          <path d="M20 22L24 28L20 34L16 28L20 22Z" fill="#f59e0b" class="hex-cell"/>
+          <path d="M32 28L36 34L32 40L28 34L32 28Z" fill="#fcd34d" class="hex-cell"/>
+          <path d="M44 34L48 40L44 46L40 40L44 34Z" fill="#fbbf24" class="hex-cell"/>
+          <path d="M20 34L24 40L20 46L16 40L20 34Z" fill="#fbbf24" class="hex-cell"/>
+          <path d="M32 40L36 46L32 52L28 46L32 40Z" fill="#f59e0b" class="hex-cell"/>
+        </svg>
+      </div>
+      <div class="text-center">
+        <h1 class="text-3xl font-bold gradient-text mb-1">HiveOps</h1>
+        <p class="text-sm" style="color: var(--text-secondary)">Dashboard</p>
+      </div>
+    </div>
+    <form id="login-form" class="space-y-5">
+      <div>
+        <input id="lu" type="text" class="input-field w-full px-4 py-3 rounded-xl text-sm" placeholder="Usuario" value="admin00"/>
+      </div>
+      <div>
+        <input id="lp" type="password" class="input-field w-full px-4 py-3 rounded-xl text-sm" placeholder="Contraseña" value="123456"/>
+      </div>
+      <button type="submit" class="btn-primary w-full py-3 rounded-xl text-sm">
+        Ingresar
+      </button>
+      <div id="le" class="text-center text-sm text-red-500 hidden"></div>
+      <div class="mt-6 border-t border-gray-200 pt-4 text-center">
+        <span class="text-sm" style="color: var(--text-tertiary)">¿Nuevo en HiveOps?</span>
+        <a href="/onboarding/index.html"
+           class="ml-1 text-sm font-semibold text-indigo-400 hover:text-indigo-300 transition-colors">
+          Crea una cuenta de organización
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- App -->
 <div id="app" class="hidden">
-<nav class="fixed top-0 left-0 right-0 h-16 glass z-40 flex items-center justify-between px-6">
-<div class="flex items-center gap-3"><div class="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center text-white font-bold">S</div><span class="font-semibold">HiveOps Support</span><span id="rb" class="ml-2 px-2 py-0.5 rounded text-xs bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"></span></div>
-<div class="flex items-center gap-1">
-<button onclick="n('dashboard')" id="n-dash" class="px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all">Dashboard</button>
-<button onclick="n('incidents')" id="n-inc" class="px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all">Incidentes</button>
-<button onclick="n('kb')" id="n-kb" class="px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all">KB</button>
-<button onclick="n('admin')" id="n-adm" class="px-3 py-1.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all hidden">Admin</button>
-<button onclick="logout()" class="ml-2 px-3 py-1.5 rounded-lg text-sm text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-all">Salir</button>
-</div></nav>
-<main class="pt-20 pb-10 px-6 max-w-7xl mx-auto">
-<div id="v-dash" class="view-section space-y-6">
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-<div class="glass rounded-xl p-6"><div class="flex justify-between mb-2"><span class="text-sm text-slate-400">Abiertos</span><div class="status-dot bg-amber-500 animate-pulse"></div></div><div class="text-3xl font-bold" id="c-open">0</div></div>
-<div class="glass rounded-xl p-6"><div class="flex justify-between mb-2"><span class="text-sm text-slate-400">Criticos</span><div class="status-dot bg-rose-500 animate-pulse"></div></div><div class="text-3xl font-bold" id="c-crit">0</div></div>
-<div class="glass rounded-xl p-6"><div class="flex justify-between mb-2"><span class="text-sm text-slate-400">Resueltos</span><div class="status-dot bg-emerald-500"></div></div><div class="text-3xl font-bold" id="c-res">0</div></div>
-<div class="glass rounded-xl p-6"><div class="flex justify-between mb-2"><span class="text-sm text-slate-400">Tiempo medio</span><svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div><div class="text-3xl font-bold" id="c-avg">0</div></div>
-</div>
-<div class="flex gap-3">
-<button onclick="om('mc')" class="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">+ Nuevo Incidente</button>
-<button onclick="ld()" class="px-5 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium">Actualizar</button>
-</div>
-<div class="glass rounded-xl overflow-hidden"><div class="px-6 py-4 border-b border-white/5 flex justify-between"><h2 class="font-semibold text-lg">Recientes</h2><button onclick="n('incidents')" class="text-sm text-indigo-400 hover:text-indigo-300">Ver todos &#8594;</button></div><div id="l-rec" class="divide-y divide-white/5"><div class="p-8 text-center text-slate-500">Cargando...</div></div></div>
-</div>
-<div id="v-inc" class="view-section space-y-4">
-<div class="flex justify-between"><h2 class="text-2xl font-bold">Incidentes</h2>
-<div class="flex gap-2"><select id="fs" onchange="li()" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm"><option value="">Todos</option><option value="Open">Abierto</option><option value="InProgress">En progreso</option><option value="Resolved">Resuelto</option><option value="Closed">Cerrado</option></select><select id="fv" onchange="li()" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm"><option value="">Severidad</option><option value="Low">Baja</option><option value="Medium">Media</option><option value="High">Alta</option><option value="Critical">Critica</option></select><button onclick="om('mc')" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">+ Nuevo</button></div></div>
-<div class="glass rounded-xl overflow-hidden"><div id="l-all" class="divide-y divide-white/5"><div class="p-8 text-center text-slate-500">Cargando...</div></div></div>
-</div>
-<div id="v-adm" class="view-section space-y-6">
-<h2 class="text-2xl font-bold">Administracion</h2>
-<div class="glass rounded-xl p-6"><h3 class="font-semibold text-lg mb-4">Cola de Merge</h3><div id="l-mer" class="space-y-3"><div class="text-center text-slate-500 py-8">Cargando...</div></div></div>
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-<div class="glass rounded-xl p-5 flex items-center gap-4"><div id="hd" class="w-3 h-3 rounded-full bg-emerald-500"></div><div><div class="text-sm text-slate-400">Base de Datos</div><div id="td" class="font-semibold">Healthy</div></div></div>
-<div class="glass rounded-xl p-5 flex items-center gap-4"><div id="hp" class="w-3 h-3 rounded-full bg-emerald-500"></div><div><div class="text-sm text-slate-400">Pipeline</div><div id="tp" class="font-semibold">Healthy</div></div></div>
-<div class="glass rounded-xl p-5 flex items-center gap-4"><div class="w-3 h-3 rounded-full bg-indigo-500"></div><div><div class="text-sm text-slate-400">Tests</div><div id="tt" class="font-semibold">Pendiente</div></div></div>
-</div></div>
-<div id="v-kb" class="view-section space-y-4">
-<div class="flex justify-between"><h2 class="text-2xl font-bold">Base de Conocimientos</h2>
-<div class="flex gap-2"><input id="kq" type="text" placeholder="Buscar..." class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm w-56" onkeyup="if(event.key==='Enter')sk()"/><button onclick="sk()" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">Buscar</button><button onclick="om('mk')" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm font-medium">+ Articulo</button></div></div>
-<div id="l-kb" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"><div class="glass rounded-xl p-8 text-center text-slate-500">Cargando...</div></div>
-</div>
-</main></div>
+  <!-- Navbar -->
+  <nav class="fixed top-0 left-0 right-0 h-20 glass z-40 flex items-center justify-between px-6">
+    <div class="flex items-center gap-6">
+      <div class="flex items-center gap-3">
+        <div class="hive-logo">
+          <svg width="40" height="40" viewBox="0 0 64 64" fill="none">
+            <path d="M32 4L36 10L32 16L28 10L32 4Z" fill="#f59e0b"/>
+            <path d="M44 10L48 16L44 22L40 16L44 10Z" fill="#d97706"/>
+            <path d="M20 10L24 16L20 22L16 16L20 10Z" fill="#d97706"/>
+            <path d="M32 16L36 22L32 28L28 22L32 16Z" fill="#fbbf24"/>
+            <path d="M44 22L48 28L44 34L40 28L44 22Z" fill="#f59e0b"/>
+            <path d="M20 22L24 28L20 34L16 28L20 22Z" fill="#f59e0b"/>
+            <path d="M32 28L36 34L32 40L28 34L32 28Z" fill="#fcd34d"/>
+            <path d="M44 34L48 40L44 46L40 40L44 34Z" fill="#fbbf24"/>
+            <path d="M20 34L24 40L20 46L16 40L20 34Z" fill="#fbbf24"/>
+            <path d="M32 40L36 46L32 52L28 46L32 40Z" fill="#f59e0b"/>
+          </svg>
+        </div>
+        <div>
+          <span class="font-bold text-lg gradient-text">HiveOps</span>
+          <span class="text-xs block" style="color: var(--text-secondary)">Dashboard</span>
+        </div>
+      </div>
+      <div class="hidden md:flex items-center gap-1 ml-6 border-l pl-6" style="border-color: var(--border-color)">
+        <button onclick="n('dashboard')" id="n-dash" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Resumen</button>
+        <button onclick="n('incidents')" id="n-inc" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Conversaciones</button>
+        <button onclick="n('kb')" id="n-kb" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Knowledge Base</button>
+        <button onclick="n('config')" id="n-cfg" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Configuración</button>
+        <button onclick="n('admin')" id="n-adm" class="nav-item px-4 py-2 text-sm font-medium hidden" style="color: var(--text-secondary)">Admin</button>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-3">
+      <!-- Tenant Selector -->
+      <select id="tenant-select" onchange="changeTenant()" class="input-field px-4 py-2 rounded-xl text-sm hidden md:block" style="width: 200px;">
+        <option value="">Seleccionar Tenant...</option>
+      </select>
+      
+      <!-- Theme Toggle -->
+      <div class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema">
+        <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #f59e0b">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+        </svg>
+        <svg id="moon-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #f59e0b">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+        </svg>
+      </div>
+      
+      <!-- Search -->
+      <div class="relative hidden md:block">
+        <input type="text" id="global-search" placeholder="Buscar incidentes..." class="input-field w-64 px-4 py-2 rounded-xl text-sm pl-10" onkeyup="if(event.key==='Enter')searchIncidents()"/>
+        <svg onclick="searchIncidents()" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-tertiary)">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+      </div>
+      
+      <!-- Notifications -->
+      <div class="relative">
+        <button onclick="toggleNotifications()" class="theme-toggle relative" style="width: 40px; height: 40px;">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-secondary)">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+          </svg>
+          <span id="notif-badge" class="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 status-pulse"></span>
+        </button>
+        <div id="notif-dropdown" class="hidden absolute right-0 mt-2 w-80 hive-card rounded-xl shadow-2xl border border-[var(--border-color)] z-50 overflow-hidden" style="background: var(--bg-card); backdrop-filter: blur(12px);">
+          <div class="px-4 py-3 border-b flex justify-between items-center" style="border-color: var(--border-color)">
+            <span class="font-semibold text-sm" style="color: var(--text-primary)">Notificaciones</span>
+            <button onclick="markAllRead()" class="text-xs" style="color: var(--text-tertiary)">Marcar leídas</button>
+          </div>
+          <div id="notif-list" class="max-h-80 overflow-y-auto">
+            <div class="p-4 text-center text-sm" style="color: var(--text-secondary)">Cargando...</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- User -->
+      <div class="flex items-center gap-3 ml-2 relative" id="user-menu-container">
+        <div onclick="toggleUserDropdown()" class="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-white font-bold text-sm cursor-pointer hover:shadow-lg hover:shadow-amber-500/30 transition-all select-none" id="user-avatar-btn">
+          A
+        </div>
+        <div id="user-dropdown" class="user-dropdown">
+          <div class="user-dropdown-item" onclick="openChangePasswordModal()">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+            Cambiar contraseña
+          </div>
+          <div class="user-dropdown-divider"></div>
+          <div class="user-dropdown-item" onclick="logout()">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+            Cerrar sesion
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
 
-<div id="mc" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-<div class="modal-content glass-strong rounded-2xl w-full max-w-lg mx-4 p-6">
-<div class="flex justify-between mb-6"><h3 class="text-xl font-bold">Nuevo Incidente</h3><button onclick="cm('mc')" class="text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
-<form id="fc" class="space-y-4">
-<input id="ct" type="text" placeholder="Titulo" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-indigo-500 outline-none" required/>
-<textarea id="cd" rows="4" placeholder="Descripcion" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 focus:border-indigo-500 outline-none resize-none" required></textarea>
-<div class="grid grid-cols-2 gap-3"><select id="cv" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none"><option value="Low">Baja</option><option value="Medium" selected>Media</option><option value="High">Alta</option><option value="Critical">Critica</option></select><select id="cc" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none"><option value="Other">Otro</option><option value="CodeBug">Bug</option><option value="DbCorruption">BD</option><option value="ConfigError">Config</option><option value="Performance">Perf</option><option value="Security">Seg</option></select></div>
-<div class="flex justify-end gap-3"><button type="button" onclick="cm('mc')" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white">Cancelar</button><button type="submit" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">Crear</button></div>
-</form></div></div>
+  <!-- Main -->
+  <div class="fixed inset-0 pointer-events-none overflow-hidden" style="z-index:0;">
+    <svg class="absolute float" style="top:10%;left:6%;width:140px;height:140px;opacity:0.36;" viewBox="0 0 100 100"><path fill="#f59e0b" fill-opacity="0.48" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float-delayed" style="top:35%;right:10%;width:180px;height:180px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#ffb800" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float-delayed-2" style="bottom:15%;left:18%;width:110px;height:110px;opacity:0.36;" viewBox="0 0 100 100"><path fill="#d97706" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float" style="top:55%;right:28%;width:90px;height:90px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#f59e0b" fill-opacity="0.4" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float-delayed" style="bottom:25%;right:5%;width:160px;height:160px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#b45309" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float-delayed-2" style="top:8%;right:40%;width:70px;height:70px;opacity:0.24;" viewBox="0 0 100 100"><path fill="#ffb800" fill-opacity="0.48" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+  </div>
+  <main class="pt-24 pb-10 px-6 max-w-7xl mx-auto" style="position:relative; z-index:1;">
+    
+    <!-- Dashboard View -->
+    <div id="v-dash" class="view-section space-y-8">
+      <!-- Hero Stats -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div onclick="filterIncidents('Open')" class="hive-card p-6 relative overflow-hidden group cursor-pointer">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-amber-500/10 to-transparent rounded-bl-full"></div>
+          <div class="flex justify-between items-start mb-4">
+            <span class="text-sm font-medium" style="color: var(--text-secondary)">Abiertos</span>
+            <div class="status-dot bg-amber-500 status-pulse"></div>
+          </div>
+          <div class="text-4xl font-bold" id="c-open">0</div>
+          <div class="mt-2 text-xs" style="color: var(--text-tertiary)">Incidentes activos</div>
+        </div>
 
-<div id="mk" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-<div class="modal-content glass-strong rounded-2xl w-full max-w-2xl mx-4 p-6">
-<div class="flex justify-between mb-6"><h3 class="text-xl font-bold">Nuevo Articulo KB</h3><button onclick="cm('mk')" class="text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
-<form id="fk" class="space-y-4">
-<input id="kt" type="text" placeholder="Titulo" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none" required/>
-<input id="kc" type="text" placeholder="Categoria" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none"/>
-<input id="ktg" type="text" placeholder="Tags (coma separados)" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none"/>
-<textarea id="kb" rows="4" placeholder="Contenido" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none resize-none" required></textarea>
-<textarea id="ks" rows="3" placeholder="Pasos de resolucion" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 outline-none resize-none"></textarea>
-<div class="flex items-center gap-2"><input id="kp" type="checkbox" class="rounded bg-slate-800 border-slate-700"/><label class="text-sm text-slate-400">Publicado</label></div>
-<div class="flex justify-end gap-3"><button type="button" onclick="cm('mk')" class="px-4 py-2 rounded-lg text-slate-400 hover:text-white">Cancelar</button><button type="submit" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium">Guardar</button></div>
-</form></div></div>
+        <div onclick="filterIncidents('Critical')" class="hive-card p-6 relative overflow-hidden group cursor-pointer">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-red-500/10 to-transparent rounded-bl-full"></div>
+          <div class="flex justify-between items-start mb-4">
+            <span class="text-sm font-medium" style="color: var(--text-secondary)">Criticos</span>
+            <div class="status-dot bg-red-500 status-pulse"></div>
+          </div>
+          <div class="text-4xl font-bold text-red-500" id="c-crit">0</div>
+          <div class="mt-2 text-xs" style="color: var(--text-tertiary)">Requieren atencion</div>
+        </div>
 
+        <div onclick="filterIncidents('Resolved')" class="hive-card p-6 relative overflow-hidden group cursor-pointer">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-emerald-500/10 to-transparent rounded-bl-full"></div>
+          <div class="flex justify-between items-start mb-4">
+            <span class="text-sm font-medium" style="color: var(--text-secondary)">Resueltos</span>
+            <div class="status-dot bg-emerald-500"></div>
+          </div>
+          <div class="text-4xl font-bold text-emerald-500" id="c-res">0</div>
+          <div class="mt-2 text-xs" style="color: var(--text-tertiary)">Este mes</div>
+        </div>
+
+        <div class="hive-card p-6 relative overflow-hidden group">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-amber-500/10 to-transparent rounded-bl-full"></div>
+          <div class="flex justify-between items-start mb-4">
+            <span class="text-sm font-medium" style="color: var(--text-secondary)">Tiempo medio</span>
+            <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <div class="text-4xl font-bold" id="c-avg">0</div>
+          <div class="mt-2 text-xs" style="color: var(--text-tertiary)">Minutos</div>
+        </div>
+      </div>
+      
+      <!-- Actions -->
+      <div class="flex flex-wrap gap-3">
+        <button onclick="om('mc')" class="btn-primary px-6 py-3 rounded-xl text-sm flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          Nuevo Incidente
+        </button>
+        <button onclick="ld()" class="btn-secondary px-6 py-3 rounded-xl text-sm flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Actualizar
+        </button>
+      </div>
+      
+      <!-- Recent List -->
+      <div class="hive-card overflow-hidden">
+        <div class="px-6 py-5 border-b flex justify-between items-center" style="border-color: var(--border-color)">
+          <h2 class="font-semibold text-lg">Recientes</h2>
+          <button onclick="n('incidents')" class="text-sm flex items-center gap-1 hover:gap-2 transition-all" style="color: #f59e0b">
+            Ver todos
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+          </button>
+        </div>
+        <div id="l-rec" class="divide-y" style="border-color: var(--border-color)">
+          <div class="p-8 text-center" style="color: var(--text-secondary)">Cargando...</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Incidents View -->
+    <div id="v-inc" class="view-section space-y-6">
+      <div class="flex flex-wrap justify-between items-center gap-4">
+        <h2 class="text-2xl font-bold">Conversaciones</h2>
+        <div class="flex gap-3">
+          <select id="fs" onchange="li()" class="input-field px-4 py-2.5 rounded-xl text-sm">
+            <option value="">Todos los estados</option>
+            <option value="Open">Abierto</option>
+            <option value="InProgress">En progreso</option>
+            <option value="Resolved">Resuelto</option>
+            <option value="Closed">Cerrado</option>
+          </select>
+          <select id="fv" onchange="li()" class="input-field px-4 py-2.5 rounded-xl text-sm">
+            <option value="">Todas las prioridades</option>
+            <option value="Low">Baja</option>
+            <option value="Medium">Media</option>
+            <option value="High">Alta</option>
+            <option value="Critical">Critica</option>
+          </select>
+          <button onclick="om('mc')" class="btn-primary px-5 py-2.5 rounded-xl text-sm">
+            + Nuevo
+          </button>
+        </div>
+      </div>
+      <div class="hive-card overflow-hidden">
+        <div id="l-all" class="divide-y" style="border-color: var(--border-color)">
+          <div class="p-8 text-center" style="color: var(--text-secondary)">Cargando...</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Admin View -->
+    <div id="v-adm" class="view-section space-y-6">
+      <h2 class="text-2xl font-bold">Configuracion</h2>
+      <div class="hive-card p-6">
+        <h3 class="font-semibold text-lg mb-4">Cola de Merge</h3>
+        <div id="l-mer" class="space-y-3">
+          <div class="text-center py-8" style="color: var(--text-secondary)">Cargando...</div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div class="hive-card p-5 flex items-center gap-4">
+          <div id="hd" class="w-3 h-3 rounded-full bg-emerald-500"></div>
+          <div>
+            <div class="text-sm" style="color: var(--text-secondary)">Base de Datos</div>
+            <div id="td" class="font-semibold">Healthy</div>
+          </div>
+        </div>
+        <div class="hive-card p-5 flex items-center gap-4">
+          <div id="hp" class="w-3 h-3 rounded-full bg-emerald-500"></div>
+          <div>
+            <div class="text-sm" style="color: var(--text-secondary)">Pipeline</div>
+            <div id="tp" class="font-semibold">Healthy</div>
+          </div>
+        </div>
+        <div class="hive-card p-5 flex items-center gap-4">
+          <div class="w-3 h-3 rounded-full bg-amber-500"></div>
+          <div>
+            <div class="text-sm" style="color: var(--text-secondary)">Tests</div>
+            <div id="tt" class="font-semibold">Pendiente</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- KB View -->
+    <div id="v-kb" class="view-section space-y-6">
+      <div class="flex flex-wrap justify-between items-center gap-4">
+        <h2 class="text-2xl font-bold">Knowledge Base</h2>
+        <div class="flex gap-3">
+          <div class="relative">
+            <input type="text" id="kq" placeholder="Buscar articulos..." class="input-field w-64 px-4 py-2.5 rounded-xl text-sm pl-10" onkeyup="if(event.key==='Enter')sk()"/>
+            <svg onclick="sk()" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-tertiary)">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </div>
+          <button onclick="om('mk')" class="btn-primary px-5 py-2.5 rounded-xl text-sm">
+            + Nuevo Articulo
+          </button>
+        </div>
+      </div>
+      <div id="l-kb" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div class="hive-card p-8 text-center col-span-full" style="color: var(--text-secondary)">Cargando...</div>
+      </div>
+    </div>
+    
+    <!-- Config View -->
+    <div id="v-config" class="view-section space-y-6">
+      <h2 class="text-2xl font-bold">Configuración del Tenant</h2>
+      
+      <!-- Presets -->
+      <div class="hive-card p-6">
+        <h3 class="font-semibold text-lg mb-4">Preconfiguración Rápida</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <button id="preset-basic" onclick="applyPreset('basic')" class="hive-card p-4 text-left hover:border-amber-500/50 transition-all">
+            <div class="font-semibold mb-2" style="color:var(--text-primary)">Básico</div>
+            <div class="text-sm" style="color:var(--text-secondary)">Configuración simple para empezar</div>
+          </button>
+          <button id="preset-standard" onclick="applyPreset('standard')" class="hive-card p-4 text-left hover:border-amber-500/50 transition-all">
+            <div class="font-semibold mb-2" style="color:var(--text-primary)">Estándar</div>
+            <div class="text-sm" style="color:var(--text-secondary)">Configuración recomendada</div>
+          </button>
+          <button id="preset-advanced" onclick="applyPreset('advanced')" class="hive-card p-4 text-left hover:border-amber-500/50 transition-all">
+            <div class="font-semibold mb-2" style="color:var(--text-primary)">Avanzado</div>
+            <div class="text-sm" style="color:var(--text-secondary)">Todas las opciones disponibles</div>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Agent Configuration -->
+      <div class="hive-card p-6">
+        <h3 class="font-semibold text-lg mb-4">Configuración del Agente</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="text-sm font-medium block mb-2" style="color:var(--text-secondary)">Modelo LLM</label>
+            <select id="cfg-model" class="input-field w-full px-4 py-2.5 rounded-xl text-sm">
+              <option value="gpt-4">GPT-4</option>
+              <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+              <option value="claude-3">Claude 3</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm font-medium block mb-2" style="color:var(--text-secondary)">Temperatura (0-1)</label>
+            <input id="cfg-temp" type="range" min="0" max="1" step="0.1" value="0.7" class="w-full"/>
+            <div class="text-xs mt-1" style="color:var(--text-tertiary)">Valor actual: <span id="temp-value">0.7</span></div>
+          </div>
+          <div>
+            <label class="text-sm font-medium block mb-2" style="color:var(--text-secondary)">Max Tokens</label>
+            <input id="cfg-tokens" type="number" value="2000" class="input-field w-full px-4 py-2.5 rounded-xl text-sm"/>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Database Configuration -->
+      <div class="hive-card p-6">
+        <h3 class="font-semibold text-lg mb-4">Acceso a Base de Datos</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="text-sm font-medium block mb-2" style="color:var(--text-secondary)">Conexión</label>
+            <input id="cfg-db-conn" type="text" placeholder="Server=...;Database=..." class="input-field w-full px-4 py-2.5 rounded-xl text-sm"/>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="cfg-db-enabled" type="checkbox" class="w-4 h-4 rounded accent-amber-500"/>
+            <label class="text-sm" style="color:var(--text-secondary)">Permitir ejecución de SQL</label>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Save Button -->
+      <div class="flex gap-3">
+        <button onclick="saveConfig()" class="btn-primary px-6 py-3 rounded-xl text-sm">Guardar Configuración</button>
+        <button onclick="resetConfig()" class="btn-secondary px-6 py-3 rounded-xl text-sm">Descartar Cambios</button>
+      </div>
+    </div>
+    
+  </main>
+</div>
+
+<!-- Create Incident Modal -->
+<div id="mc" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(8px)">
+  <div class="modal-content hive-card w-full max-w-lg p-6">
+    <div class="flex justify-between items-center mb-6">
+      <h3 class="text-xl font-bold">Nuevo Incidente</h3>
+      <button onclick="cm('mc')" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <form id="fc" class="space-y-4">
+      <input id="ct" type="text" placeholder="Titulo del incidente" class="input-field w-full px-4 py-3 rounded-xl text-sm" required/>
+      <textarea id="cd" rows="4" placeholder="Descripcion detallada..." class="input-field w-full px-4 py-3 rounded-xl text-sm resize-none" required></textarea>
+      <div class="grid grid-cols-2 gap-4">
+        <select id="cv" class="input-field w-full px-4 py-3 rounded-xl text-sm">
+          <option value="Low">Prioridad: Baja</option>
+          <option value="Medium" selected>Prioridad: Media</option>
+          <option value="High">Prioridad: Alta</option>
+          <option value="Critical">Prioridad: Critica</option>
+        </select>
+        <select id="cc" class="input-field w-full px-4 py-3 rounded-xl text-sm">
+          <option value="Other">Categoria: Otro</option>
+          <option value="CodeBug">Bug de Codigo</option>
+          <option value="DbCorruption">Base de Datos</option>
+          <option value="ConfigError">Configuracion</option>
+          <option value="Performance">Performance</option>
+          <option value="Security">Seguridad</option>
+        </select>
+      </div>
+      <div class="flex justify-end gap-3 pt-2">
+        <button type="button" onclick="cm('mc')" class="btn-secondary px-5 py-2.5 rounded-xl text-sm">Cancelar</button>
+        <button type="submit" class="btn-primary px-6 py-2.5 rounded-xl text-sm">Crear Incidente</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Create KB Modal -->
+<div id="mk" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(8px)">
+  <div class="modal-content hive-card w-full max-w-2xl p-6">
+    <div class="flex justify-between items-center mb-6">
+      <h3 class="text-xl font-bold">Nuevo Articulo KB</h3>
+      <button onclick="cm('mk')" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <form id="fk" class="space-y-4">
+      <input id="kt" type="text" placeholder="Titulo del articulo" class="input-field w-full px-4 py-3 rounded-xl text-sm" required/>
+      <div class="grid grid-cols-2 gap-4">
+        <input id="kc" type="text" placeholder="Categoria" class="input-field w-full px-4 py-3 rounded-xl text-sm"/>
+        <input id="ktg" type="text" placeholder="Tags (separados por coma)" class="input-field w-full px-4 py-3 rounded-xl text-sm"/>
+      </div>
+      <textarea id="kb" rows="4" placeholder="Contenido del articulo..." class="input-field w-full px-4 py-3 rounded-xl text-sm resize-none" required></textarea>
+      <textarea id="ks" rows="3" placeholder="Pasos de resolucion..." class="input-field w-full px-4 py-3 rounded-xl text-sm resize-none"></textarea>
+      <div class="flex items-center gap-2">
+        <input id="kp" type="checkbox" class="w-4 h-4 rounded border-amber-500/50 accent-amber-500"/>
+        <label class="text-sm" style="color: var(--text-secondary)">Publicar articulo</label>
+      </div>
+      <div class="flex justify-end gap-3 pt-2">
+        <button type="button" onclick="cm('mk')" class="btn-secondary px-5 py-2.5 rounded-xl text-sm">Cancelar</button>
+        <button type="submit" class="btn-primary px-6 py-2.5 rounded-xl text-sm">Guardar Articulo</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Detail Drawer -->
 <div id="dr" class="fixed top-0 right-0 bottom-0 w-full max-w-xl glass-strong z-50 drawer overflow-y-auto">
-<div class="p-6">
-<div class="flex justify-between mb-6"><h3 class="text-xl font-bold">Detalle</h3><button onclick="cd()" class="text-slate-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
-<div id="db"><div class="text-center text-slate-500 py-10">Cargando...</div></div>
-</div></div>
+  <div class="p-6">
+    <div class="flex justify-between items-center mb-6">
+      <h3 class="text-xl font-bold">Detalle del Incidente</h3>
+      <button onclick="cd()" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div id="db">
+      <div class="text-center py-10" style="color: var(--text-secondary)">Cargando...</div>
+    </div>
+  </div>
+</div>
 
-<div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300">
-<div class="glass-strong rounded-lg px-5 py-3 flex items-center gap-3 shadow-xl border border-white/10">
-<div id="ti" class="w-5 h-5 rounded-full flex items-center justify-center"></div><span id="tm" class="font-medium"></span>
-</div></div>
+<!-- Change Password Modal -->
+<div id="m-pwd" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(8px)">
+  <div class="modal-content hive-card w-full max-w-sm p-6">
+    <div class="flex justify-between items-center mb-6">
+      <h3 class="text-xl font-bold">Cambiar contraseña</h3>
+      <button onclick="cm('m-pwd')" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form id="f-pwd" class="space-y-4" onsubmit="event.preventDefault(); changePassword();">
+      <div>
+        <label class="text-xs font-medium block mb-1.5" style="color:var(--text-tertiary)">Contraseña actual</label>
+        <input id="pwd-current" type="password" class="input-field w-full px-4 py-3 rounded-xl text-sm" required/>
+      </div>
+      <div>
+        <label class="text-xs font-medium block mb-1.5" style="color:var(--text-tertiary)">Nueva contraseña</label>
+        <input id="pwd-new" type="password" class="input-field w-full px-4 py-3 rounded-xl text-sm" required minlength="6"/>
+      </div>
+      <div>
+        <label class="text-xs font-medium block mb-1.5" style="color:var(--text-tertiary)">Confirmar nueva contraseña</label>
+        <input id="pwd-confirm" type="password" class="input-field w-full px-4 py-3 rounded-xl text-sm" required minlength="6"/>
+      </div>
+      <div id="pwd-error" class="text-center text-sm text-red-500 hidden"></div>
+      <div class="flex justify-end gap-3 pt-2">
+        <button type="button" onclick="cm('m-pwd')" class="btn-secondary px-5 py-2.5 rounded-xl text-sm">Cancelar</button>
+        <button type="submit" class="btn-primary px-6 py-2.5 rounded-xl text-sm">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
 
+<!-- Toast -->
+<div id="toast" class="fixed bottom-6 right-6 z-50 toast-container">
+  <div class="glass-strong rounded-xl px-5 py-4 flex items-center gap-3 shadow-2xl" style="border-color: var(--border-color)">
+    <div id="ti" class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"></div>
+    <span id="tm" class="font-medium text-sm"></span>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.5/signalr.min.js"></script>
 <script src="app.js"></script>
-</body></html>
+<script>
+// Theme Toggle
+function initTheme() {
+  const saved = localStorage.getItem('theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDark = saved ? saved === 'dark' : prefersDark;
+  
+  if (!isDark) {
+    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.add('light');
+    document.getElementById('sun-icon').classList.remove('hidden');
+    document.getElementById('moon-icon').classList.add('hidden');
+  }
+}
+
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.classList.contains('dark');
+  
+  if (isDark) {
+    html.classList.remove('dark');
+    html.classList.add('light');
+    localStorage.setItem('theme', 'light');
+    document.getElementById('sun-icon').classList.remove('hidden');
+    document.getElementById('moon-icon').classList.add('hidden');
+  } else {
+    html.classList.remove('light');
+    html.classList.add('dark');
+    localStorage.setItem('theme', 'dark');
+    document.getElementById('sun-icon').classList.add('hidden');
+    document.getElementById('moon-icon').classList.remove('hidden');
+  }
+  
+  // Animate transition
+  anime({
+    targets: 'body',
+    opacity: [0.8, 1],
+    duration: 300,
+    easing: 'easeOutCubic'
+  });
+}
+
+// User dropdown
+function toggleUserDropdown() {
+  const dd = document.getElementById('user-dropdown');
+  dd.classList.toggle('open');
+}
+
+function closeUserDropdown(e) {
+  const container = document.getElementById('user-menu-container');
+  if (!container.contains(e.target)) {
+    document.getElementById('user-dropdown').classList.remove('open');
+  }
+}
+document.addEventListener('click', closeUserDropdown);
+
+function openChangePasswordModal() {
+  document.getElementById('user-dropdown').classList.remove('open');
+  document.getElementById('pwd-error').classList.add('hidden');
+  document.getElementById('f-pwd').reset();
+  om('m-pwd');
+}
+
+async function changePassword() {
+  const current = document.getElementById('pwd-current').value;
+  const nueva = document.getElementById('pwd-new').value;
+  const confirm = document.getElementById('pwd-confirm').value;
+  const err = document.getElementById('pwd-error');
+
+  if (nueva !== confirm) {
+    err.textContent = 'Las contraseñas no coinciden';
+    err.classList.remove('hidden');
+    return;
+  }
+
+  try {
+    await api('POST', '/auth/change-password', { currentPassword: current, newPassword: nueva });
+    cm('m-pwd');
+    toast('Contraseña actualizada', 'success');
+  } catch (e) {
+    err.textContent = e.message || 'Error al cambiar contraseña';
+    err.classList.remove('hidden');
+  }
+}
+
+// Init theme on load
+initTheme();
+</script>
+<script>
+// Augment incident detail to show deployment status, logs (RBAC) and Rollback button (admins)
+(function(){
+  const originalOd = window.od;
+  window.od = async function(id){
+    try {
+      // Call original renderer first
+      await originalOd.call(window, id);
+      // Fetch fresh details to render deploy block
+      const token = localStorage.getItem('token')||'';
+      const tenantId = localStorage.getItem('tenantId');
+      const headers = {'Content-Type':'application/json','Authorization':'Bearer '+token};
+      if (tenantId) headers['X-Tenant-Id']=tenantId;
+      const res = await fetch('/api/support/incidents/'+id,{headers,credentials:'include'});
+      if(!res.ok) return;
+      const d = await res.json();
+      const isAdmin = (function(){ try{const u=JSON.parse(localStorage.getItem('user')||'null'); return u && (u.role==='SuperAdmin'||u.role==='Admin');}catch{return false;} })();
+      if(!(d.deployStatus||d.deployRunId||d.deployLogUrl)) return;
+      const statusClass = d.deployStatus==='SUCCESS'?'text-emerald-500':(d.deployStatus==='FAILED'?'text-red-500':'text-amber-500');
+      const runSpan = d.deployRunId?` <span class="ml-2 text-xs" style="color:var(--text-tertiary)">(Run: ${escapeHtml(d.deployRunId)})</span>`:'';
+      const logLink = (isAdmin && d.deployLogUrl)?`<div class="mt-2"><a href="${escapeAttr(d.deployLogUrl)}" target="_blank" class="text-amber-500 hover:underline text-sm">Ver Logs de Ejecución</a>${runSpan}</div>`:'';
+      let rollbackBtn = '';
+      if (isAdmin && (d.deployStatus==='SUCCESS' || d.deployStatus==='FAILED')) {
+        // Visual gating: check plan capability for current tenant via admin list
+        let allowRb = true; let planNote = '';
+        try {
+          const adminRes = await fetch('/api/admin/tenants', { headers: { 'Authorization':'Bearer '+token }});
+          if (adminRes.ok) {
+            const list = await adminRes.json();
+            const selTid = tenantId;
+            const cur = Array.isArray(list)? list.find(x=>x.id===selTid) : null;
+            if (cur && cur.hasRollbackCapability===false) { allowRb = false; planNote = 'Tu plan actual no incluye reversión automática. Mejora tu plan para activar esta función.'; }
+          }
+        } catch {}
+        if (allowRb) {
+          rollbackBtn = `<div class="mt-3"><button data-incident="${escapeAttr(d.id)}" class="px-3 py-1.5 text-xs rounded-lg bg-red-600 hover:bg-red-500 text-white" id="rb-${escapeAttr(d.id)}">Rollback</button></div>`;
+        } else {
+          rollbackBtn = `<div class="mt-3 space-y-1">
+            <button class="px-3 py-1.5 text-xs rounded-lg bg-neutral-700 text-neutral-300 cursor-not-allowed flex items-center gap-1" disabled title="Disponible en Plan Pro">
+              <span>Rollback</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V6a5 5 0 00-5-5zm-3 8V6a3 3 0 016 0v3H9z"/></svg>
+            </button>
+            <div class="text-[11px]" style="color:var(--text-tertiary)">Tu plan actual (Starter) no incluye reversión automática. <span class="text-amber-500">Mejora tu plan</span> para activar esta función.</div>
+          </div>`;
+        }
+      }
+      const card = document.createElement('div');
+      card.className = 'hive-card p-4 mb-4';
+      card.innerHTML = `<div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Despliegue</div>
+        <div class="text-sm" style="color:var(--text-secondary)">Estado: <span class="font-medium ${statusClass}">${escapeHtml(d.deployStatus||'PENDING')}</span></div>
+        ${logLink}
+        ${rollbackBtn}`;
+      const container = document.getElementById('db');
+      if(!container) return;
+      // Insert before the first content card (Descripcion)
+      const firstCard = container.querySelector('.hive-card');
+      if(firstCard) container.insertBefore(card, firstCard);
+      else container.appendChild(card);
+
+      // Wire rollback button if present
+      if (isAdmin) {
+        const btn = document.getElementById(`rb-${escapeAttr(d.id)}`);
+        if (btn) btn.addEventListener('click', async () => {
+          if (!confirm('Esta acción revertirá los cambios al último estado estable conocido. ¿Proceder?')) return;
+          try {
+            const token2 = localStorage.getItem('token')||'';
+            const tid2 = localStorage.getItem('tenantId');
+            const hdr = {'Content-Type':'application/json','Authorization':'Bearer '+token2};
+            if (tid2) hdr['X-Tenant-Id']=tid2;
+            const resp = await fetch(`/api/support/incidents/${encodeURIComponent(d.id)}/rollback`, { method:'POST', headers: hdr, credentials:'include' });
+            if (!resp.ok) throw new Error(await resp.text());
+            toast('Rollback solicitado', 'info');
+            try { window.li && li(); window.ld && ld(); } catch {}
+          } catch (e) {
+            toast((e&&e.message)||'Error al solicitar rollback','error');
+          }
+        });
+      }
+    } catch(e) { console.warn('Deploy info render failed', e); }
+  };
+  function escapeHtml(t){ const d=document.createElement('div'); d.textContent=t||''; return d.innerHTML; }
+  function escapeAttr(t){ try{ return String(t).replace(/"/g,'&quot;'); }catch{return '';} }
+})();
+</script>
+<script>
+// UI Enhancer: Add "Abrir Portal de Pagos" button to Admin Billing card
+(function(){
+  function enhance(){
+    try{
+      var card = document.getElementById('billing-card');
+      if(!card) return; // card not present yet
+      if(card.querySelector('#bill-portal')) return; // already added
+
+      var ensureBtn = card.querySelector('#bill-ensure');
+      if(!ensureBtn || !ensureBtn.parentElement) return;
+      // Style gap between buttons
+      ensureBtn.parentElement.classList.add('gap-2');
+
+      // Create Portal button with Stripe-like color
+      var portalBtn = document.createElement('button');
+      portalBtn.id = 'bill-portal';
+      portalBtn.className = 'px-5 py-2.5 rounded-xl text-sm';
+      portalBtn.style.background = '#635BFF';
+      portalBtn.style.color = '#fff';
+      portalBtn.style.border = '1px solid var(--border-color)';
+      portalBtn.textContent = 'Abrir Portal de Pagos';
+      portalBtn.title = 'Abrir el portal de pagos de Stripe para este tenant';
+      ensureBtn.parentElement.appendChild(portalBtn);
+
+      var sel = document.getElementById('bill-tenant');
+      function updateEnabled(){
+        // Heurística: si la opción no muestra estado (no contiene "· "), asumimos que no tiene suscripción activa aún
+        try{
+          var opt = sel && sel.options && sel.options[sel.selectedIndex];
+          var hasStatus = !!(opt && /\u00B7|·/.test(opt.text));
+          portalBtn.disabled = false; // Permitimos click; manejamos error con mensaje
+          portalBtn.title = hasStatus ? 'Abrir el portal de pagos de Stripe para este tenant' : 'Si falla, primero activa la suscripción';
+          portalBtn.style.opacity = hasStatus ? '1' : '0.9';
+        }catch{}
+      }
+      if(sel){ sel.addEventListener('change', updateEnabled); updateEnabled(); }
+
+      portalBtn.addEventListener('click', async function(){
+        try{
+          var selEl = document.getElementById('bill-tenant');
+          var tid = selEl && selEl.value;
+          if(!tid){ if(window.toast) toast('Selecciona un tenant','error'); return; }
+          var original = portalBtn.textContent;
+          portalBtn.textContent = 'Abriendo…';
+          portalBtn.disabled = true;
+          var token = localStorage.getItem('token')||'';
+          var res = await fetch('/api/billing/stripe/portal-link?tenantId='+encodeURIComponent(tid), { headers: { 'Authorization':'Bearer '+token } });
+          if(!res.ok){ if(window.toast) toast('Portal no disponible o no configurado','error'); return; }
+          var data = await res.json();
+          if(data && data.url){ window.open(data.url, '_blank', 'noopener'); }
+          else { if(window.toast) toast('Portal no configurado','error'); }
+        } catch(e) {
+          if(window.toast) toast((e&&e.message)||'Error al abrir portal','error');
+        } finally {
+          portalBtn.disabled = false;
+          portalBtn.textContent = 'Abrir Portal de Pagos';
+        }
+      });
+    }catch(e){ console.warn('portal enhancer failed', e); }
+  }
+  // Observe DOM to add the button once the billing card appears
+  var obs = new MutationObserver(function(){ enhance(); });
+  obs.observe(document.body, { childList:true, subtree:true });
+  // Also attempt shortly after load
+  window.addEventListener('load', function(){ setTimeout(enhance, 800); });
+})();
+</script>
+<script>
+// Admin Widget: Deploys exitosos (últimos 30 días)
+(function(){
+  async function fetchUsage(){
+    const token = localStorage.getItem('token')||'';
+    const sel = document.getElementById('bill-tenant');
+    const tid = sel && sel.value ? sel.value : null;
+    const q = tid ? ('?tenantId='+encodeURIComponent(tid)) : '';
+    const res = await fetch('/api/admin/tenants/usage/deploy-success'+q, { headers: { 'Authorization':'Bearer '+token }});
+    if(!res.ok) throw new Error('No se pudo obtener métricas');
+    return res.json();
+  }
+  function renderSparkline(container, points){
+    // very small inline bars
+    container.innerHTML = '';
+    if(!points || points.length===0){ container.textContent='—'; return; }
+    const max = Math.max(...points.map(p=>p.value||0), 1);
+    const wrap = document.createElement('div');
+    wrap.className='flex items-end gap-1 h-10';
+    points.slice(-20).forEach(p=>{
+      const bar = document.createElement('div');
+      const h = Math.max(2, Math.round((p.value||0)/max*36));
+      bar.style.height = h+'px';
+      bar.style.width = '6px';
+      bar.style.borderRadius = '3px';
+      bar.style.background = (p.value>0)?'#10B981':'#4B5563';
+      bar.title = `${p.label}: ${p.value}`;
+      wrap.appendChild(bar);
+    });
+    container.appendChild(wrap);
+  }
+  async function ensureWidget(){
+    try{
+      const adm = document.getElementById('v-adm');
+      if(!adm) return;
+      let card = document.getElementById('usage-card');
+      if(!card){
+        card = document.createElement('div');
+        card.id = 'usage-card';
+        card.className = 'hive-card p-5';
+        card.innerHTML = '<div class="flex items-center justify-between mb-2">\
+          <h3 class="font-semibold text-lg">Deploys exitosos (30 días)</h3>\
+          <button id="usage-refresh" class="btn-secondary px-3 py-1.5 rounded-lg text-xs">Refrescar</button>\
+        </div>\
+        <div class="text-sm mb-2" id="usage-total" style="color:var(--text-secondary)">Cargando...</div>\
+        <div id="usage-spark"></div>';
+        adm.appendChild(card);
+      }
+      const btn = document.getElementById('usage-refresh');
+      const totalEl = document.getElementById('usage-total');
+      const sparkEl = document.getElementById('usage-spark');
+      async function load(){
+        try{
+          btn.disabled = true; btn.textContent='...';
+          const data = await fetchUsage();
+          totalEl.textContent = `Total: ${data.total ?? 0}`;
+          renderSparkline(sparkEl, data.perDay || []);
+        }catch(e){ totalEl.textContent = e.message || 'Error al cargar'; sparkEl.innerHTML=''; }
+        finally{ btn.disabled=false; btn.textContent='Refrescar'; }
+      }
+      btn.onclick = load;
+      await load();
+    }catch(e){ console.warn('usage widget failed', e); }
+  }
+  // Refresh when navigating to Admin and also when tenant selection changes (if present)
+  const obs = new MutationObserver(()=>ensureWidget());
+  obs.observe(document.body,{childList:true,subtree:true});
+  window.addEventListener('load', ()=> setTimeout(ensureWidget, 900));
+})();
+</script>
+<script>
+// Admin: badge de Deploys (30d) al lado de Pipeline
+(function(){
+  async function loadBadge(){
+    try{
+      const adm = document.getElementById('v-adm'); if(!adm) return;
+      const pipelineCard = document.getElementById('tp'); if(!pipelineCard) return;
+      let badge = document.getElementById('deploy-30-badge');
+      if(!badge){
+        badge = document.createElement('span');
+        badge.id = 'deploy-30-badge';
+        badge.className = 'ml-2 px-2 py-0.5 rounded-full text-[10px] bg-amber-500 text-black align-middle';
+        badge.title = 'Deploys exitosos en los últimos 30 días';
+        // insert next to the Pipeline status value
+        pipelineCard.parentElement?.appendChild(badge);
+      }
+      const token = localStorage.getItem('token')||'';
+      const sel = document.getElementById('bill-tenant');
+      const tid = sel && sel.value ? sel.value : null;
+      const q = tid ? ('?tenantId='+encodeURIComponent(tid)) : '';
+      const res = await fetch('/api/admin/tenants/usage/deploy-success'+q, { headers: { 'Authorization':'Bearer '+token }});
+      if(!res.ok){ badge.textContent='(30d: —)'; return; }
+      const data = await res.json();
+      badge.textContent = `(30d: ${data?.total ?? 0})`;
+    }catch(e){ /* silent */ }
+  }
+  const obs = new MutationObserver(()=>loadBadge());
+  obs.observe(document.body,{childList:true,subtree:true});
+  window.addEventListener('load', ()=> setTimeout(loadBadge, 1200));
+})();
+</script>
+<script>
+// Admin header: show current tenant Plan badge (Starter/Pro/Enterprise)
+(function(){
+  async function loadPlan(){
+    try{
+      const adm = document.getElementById('v-adm'); if(!adm) return;
+      // Mount near System Health (tp/td labels)
+      const anchor = document.getElementById('td')?.parentElement || adm.querySelector('.hive-card');
+      if(!anchor) return;
+      let badge = document.getElementById('tenant-plan-badge');
+      if(!badge){
+        badge = document.createElement('span');
+        badge.id = 'tenant-plan-badge';
+        badge.className = 'ml-2 px-2 py-0.5 rounded-full text-[10px] bg-neutral-800 border';
+        badge.style.borderColor = 'var(--border-color)';
+        anchor.appendChild(badge);
+      }
+      const token = localStorage.getItem('token')||'';
+      const selTid = localStorage.getItem('tenantId');
+      if(!selTid){ badge.textContent='Plan: —'; return; }
+      const res = await fetch('/api/admin/tenants', { headers: { 'Authorization':'Bearer '+token }});
+      if(!res.ok){ badge.textContent='Plan: —'; return; }
+      const list = await res.json();
+      const cur = Array.isArray(list)? list.find(x=>x.id===selTid) : null;
+      if(!cur){ badge.textContent='Plan: —'; return; }
+      const plan = (cur.plan===0?'Starter':(cur.plan===1?'Pro':(cur.plan===2?'Enterprise':String(cur.plan))));
+      // Color by plan
+      let bg = '#374151';
+      if(plan==='Pro') bg = '#10B981';
+      if(plan==='Enterprise') bg = '#6366F1';
+      badge.style.background = bg;
+      badge.style.color = '#fff';
+      badge.textContent = `Plan: ${plan}`;
+    }catch(e){ /* silent */ }
+  }
+  const obs = new MutationObserver(()=>loadPlan());
+  obs.observe(document.body,{childList:true,subtree:true});
+  window.addEventListener('load', ()=> setTimeout(loadPlan, 1000));
+  window.addEventListener('storage', (e)=>{ if(e.key==='tenantId') loadPlan(); });
+})();
+</script>
+</body>
+</html>

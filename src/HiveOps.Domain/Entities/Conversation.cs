@@ -1,8 +1,9 @@
 using HiveOps.Domain.Enums;
+using HiveOps.Domain.Interfaces;
 
 namespace HiveOps.Domain.Entities;
 
-public sealed class Conversation
+public sealed class Conversation : ITenantScoped
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public Guid TenantId { get; set; }

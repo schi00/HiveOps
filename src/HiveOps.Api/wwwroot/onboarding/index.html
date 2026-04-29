@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HiveOps · Onboarding</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0a0a0a;--card:#111111;--text:#f5f5f5;--muted:#9ca3af;--amber:#f59e0b;--border:#1f1f1f}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--text)}
+    .wrap{max-width:560px;margin:6rem auto;padding:0 1rem}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    h1{font-size:20px;margin:0 0 12px}
+    p{margin:0 0 16px;color:var(--muted)}
+    label{display:block;font-size:12px;margin:12px 0 6px;color:var(--muted)}
+    input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#0c0c0c;color:var(--text)}
+    button{width:100%;margin-top:16px;padding:12px 14px;border-radius:10px;border:0;background:var(--amber);color:#111;font-weight:600;cursor:pointer}
+    .ok{margin-top:16px;padding:12px;border-radius:10px;background:#064e3b;color:#d1fae5;border:1px solid #065f46;display:none}
+    .warn{margin-top:16px;padding:12px;border-radius:10px;background:#3f1d0b;color:#f59e0b;border:1px solid #78350f;display:none}
+    .muted{font-size:12px;color:var(--muted)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Comienza en HiveOps</h1>
+      <p>Crearemos tu espacio y te enviaremos un enlace de verificación. Luego podrás elegir un plan.</p>
+      <form id="f">
+        <label>Empresa</label>
+        <input id="company" required>
+        <div class="row">
+          <div>
+            <label>Nombre</label>
+            <input id="admin" required>
+          </div>
+          <div>
+            <label>Subdominio (opcional)</label>
+            <input id="sub">
+          </div>
+        </div>
+        <label>Email</label>
+        <input id="email" type="email" required>
+        <label>Password</label>
+        <input id="pwd" type="password" minlength="6" required>
+        <button type="submit">Crear cuenta</button>
+        <div class="ok" id="ok"></div>
+        <div class="warn" id="warn"></div>
+        <p class="muted">Al continuar aceptas nuestros Términos y Política de Privacidad.</p>
+      </form>
+    </div>
+  </div>
+  <script>
+    const f = document.getElementById('f');
+    const ok = document.getElementById('ok');
+    const warn = document.getElementById('warn');
+    f.addEventListener('submit', async (e)=>{
+      e.preventDefault(); ok.style.display='none'; warn.style.display='none';
+      const body = {
+        companyName: document.getElementById('company').value.trim(),
+        adminName: document.getElementById('admin').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        password: document.getElementById('pwd').value,
+        subdomain: document.getElementById('sub').value.trim()||null
+      };
+      try{
+        const r = await fetch('/api/onboarding/start', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        if(r.status===202){
+          const j = await r.json();
+          ok.style.display='block';
+          ok.textContent = 'Enlace enviado. Token (dev): ' + j.token;
+        } else {
+          warn.style.display='block';
+          warn.textContent = 'No pudimos iniciar el onboarding. Intenta más tarde.';
+        }
+      }catch(err){
+        warn.style.display='block';
+        warn.textContent = 'Error de red.';
+      }
+    });
+  </script>
+</body>
+</html>

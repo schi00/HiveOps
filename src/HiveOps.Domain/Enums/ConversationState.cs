@@ -9,5 +9,7 @@ public enum ConversationState
     InIncidentAnalysis,
     InIncidentResolution,
     AwaitingIncidentApproval,
-    InSupport
+    InSupport,
+    InOrderFlow,
+    InInventoryQuery
 }

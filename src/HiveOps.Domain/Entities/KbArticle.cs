@@ -1,4 +1,5 @@
 using HiveOps.Domain.Enums;
+using HiveOps.Domain.Interfaces;
 
 namespace HiveOps.Domain.Entities;
 
@@ -6,7 +7,7 @@ namespace HiveOps.Domain.Entities;
 /// Knowledge-base article generated from resolved incidents or curated manually.
 /// Used to ground the LLM during triage so proven fixes are suggested first.
 /// </summary>
-public sealed class KbArticle
+public sealed class KbArticle : ITenantScoped
 {
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }

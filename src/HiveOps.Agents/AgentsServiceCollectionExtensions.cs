@@ -30,6 +30,9 @@ public static class AgentsServiceCollectionExtensions
         services.AddScoped<IAgentPlanner, HybridAgentPlanner>();
         services.AddScoped<IAgentRuntime, AgentRuntime>();
 
+        // ── Support engine (incident triage) ───────────────────────────────
+        services.AddScoped<IncidentAnalysisEngine>();
+
         // ── MediatR — scan this assembly for handlers ──────────────────────
         services.AddMediatR(cfg =>
             cfg.RegisterServicesFromAssembly(typeof(IncomingMessageHandler).Assembly));

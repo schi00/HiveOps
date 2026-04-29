@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HiveOps · Verificación</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0a0a0a;--card:#111111;--text:#f5f5f5;--muted:#9ca3af;--amber:#f59e0b;--border:#1f1f1f}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;color:var(--text)}
+    .wrap{max-width:640px;margin:6rem auto;padding:0 1rem}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    h1{font-size:20px;margin:0 0 12px}
+    p{margin:0 0 16px;color:var(--muted)}
+    label{display:block;font-size:12px;margin:12px 0 6px;color:var(--muted)}
+    input,select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#0c0c0c;color:var(--text)}
+    button{width:100%;margin-top:16px;padding:12px 14px;border-radius:10px;border:0;background:var(--amber);color:#111;font-weight:600;cursor:pointer}
+    .ok{margin-top:16px;padding:12px;border-radius:10px;background:#064e3b;color:#d1fae5;border:1px solid #065f46;display:none}
+    .warn{margin-top:16px;padding:12px;border-radius:10px;background:#3f1d0b;color:#f59e0b;border:1px solid #78350f;display:none}
+    .muted{font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Verificación de cuenta</h1>
+      <p id="status">Verificando tu enlace…</p>
+      <div id="details" style="display:none">
+        <p>Empresa: <b id="company"></b></p>
+        <p>Administrador: <b id="admin"></b></p>
+        <p>Email: <b id="email"></b></p>
+        <label>Selecciona un plan</label>
+        <select id="price">
+          <option value="price_starter">Starter</option>
+          <option value="price_pro">Pro</option>
+          <option value="price_enterprise">Enterprise</option>
+        </select>
+        <button id="choose">Elegir plan</button>
+        <div class="ok" id="ok"></div>
+        <div class="warn" id="warn"></div>
+        <p class="muted">Te redirigiremos al portal de cliente para gestionar tu suscripción.</p>
+      </div>
+    </div>
+  </div>
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const token = qs.get('token');
+    const status = document.getElementById('status');
+    const details = document.getElementById('details');
+    const ok = document.getElementById('ok');
+    const warn = document.getElementById('warn');
+    const company = document.getElementById('company');
+    const admin = document.getElementById('admin');
+    const email = document.getElementById('email');
+    let tenantId = null;
+
+    async function verify(){
+      if(!token){ status.textContent='Falta el token de verificación.'; return; }
+      try{
+        const r = await fetch('/api/onboarding/verify', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({token})});
+        if(!r.ok){ status.textContent = 'Enlace inválido o vencido.'; return; }
+        const j = await r.json();
+        tenantId = j.tenantId;
+        company.textContent = j.companyName;
+        admin.textContent = j.adminName;
+        email.textContent = j.email;
+        status.textContent = 'Cuenta verificada. Selecciona tu plan para activar tu espacio.';
+        details.style.display = 'block';
+      }catch(e){ status.textContent = 'Error de red.'; }
+    }
+
+    document.getElementById('choose').addEventListener('click', async ()=>{
+      ok.style.display='none'; warn.style.display='none';
+      if(!tenantId){ warn.style.display='block'; warn.textContent='Verificación pendiente.'; return; }
+      const priceId = document.getElementById('price').value;
+      try{
+        const r = await fetch('/api/onboarding/plan', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tenantId, priceId})});
+        if(!r.ok){ warn.style.display='block'; warn.textContent='No pudimos activar el plan.'; return; }
+        const j = await r.json();
+        ok.style.display='block';
+        if(j.portalUrl){
+          ok.innerHTML='Plan activado. Te redirigimos al portal para gestionar tu suscripción…';
+          location.href = j.portalUrl;
+          return;
+        }
+        ok.innerHTML = '¡Tu organización está lista! <a href="/dashboard/" class="underline font-semibold">Ir al Dashboard</a> o <a href="/dashboard/#v-config" class="underline">configurar WhatsApp</a>.';
+      }catch(e){ warn.style.display='block'; warn.textContent='Error de red.'; }
+    });
+
+    verify();
+  </script>
+</body>
+</html>

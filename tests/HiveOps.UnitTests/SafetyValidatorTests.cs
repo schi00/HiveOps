@@ -1,5 +1,5 @@
 using Xunit;
-using HiveOps.Agents.Support;
+using HiveOps.Domain.Validation;
 
 namespace HiveOps.UnitTests;
 

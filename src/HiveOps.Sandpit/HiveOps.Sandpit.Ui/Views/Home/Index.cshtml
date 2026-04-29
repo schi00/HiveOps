@@ -1,0 +1,227 @@
+﻿@{
+    ViewData["Title"] = "HiveOps Sandpit";
+}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HiveOps Sandpit - Control Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .sandpit-card {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            transition: all 0.2s ease;
+        }
+        .sandpit-card:hover {
+            border-color: #f59e0b;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
+        }
+        .btn-fault {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            color: white;
+            transition: all 0.2s ease;
+        }
+        .btn-fault:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+        }
+        .btn-mock {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: #0a0a0a;
+            transition: all 0.2s ease;
+        }
+        .btn-mock:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+        }
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 999px;
+        }
+        .status-active {
+            background: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+        }
+        .status-idle {
+            background: #f3f4f6;
+            color: #6b7280;
+            border: 1px solid #e5e7eb;
+        }
+        .response-box {
+            background: #111827;
+            color: #10b981;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.8rem;
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-white border-b border-gray-200 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-gradient-to-br from-amber-400 to-orange-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">S</div>
+                <div>
+                    <h1 class="text-lg font-bold text-gray-900">HiveOps Sandpit</h1>
+                    <p class="text-xs text-gray-500">Entorno de pruebas con fallos controlados</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="status-badge status-active">SANDBOX ACTIVE</span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-6 py-8">
+        <div class="mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-2">Panel de Control de Fallos</h2>
+            <p class="text-sm text-gray-500">Cada botón activa un escenario de fallo intencional para probar la resiliencia del agente.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <!-- Database Faults -->
+            <div class="sandpit-card p-5">
+                <div class="flex items-center gap-2 mb-4">
+                    <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg>
+                    <h3 class="font-semibold text-gray-800">Fallos de Base de Datos</h3>
+                </div>
+                <div class="space-y-3">
+                    <button onclick="triggerFault('/api/sandpit/db-faults/simulate-timeout')" class="btn-fault w-full py-2 px-3 rounded-lg text-sm font-medium">
+                        Simular Timeout SQL
+                    </button>
+                    <button onclick="triggerFault('/api/sandpit/db-faults/insert-corrupt-record')" class="btn-fault w-full py-2 px-3 rounded-lg text-sm font-medium">
+                        Insertar Registro Corrupto
+                    </button>
+                    <button onclick="triggerFault('/api/sandpit/db-faults/simulate-blocking-lock')" class="btn-fault w-full py-2 px-3 rounded-lg text-sm font-medium">
+                        Simular Blocking Lock
+                    </button>
+                    <button onclick="triggerFault('/api/sandpit/db-faults/drop-foreign-key')" class="btn-fault w-full py-2 px-3 rounded-lg text-sm font-medium">
+                        Romper Integridad Referencial
+                    </button>
+                    <button onclick="triggerFault('/api/sandpit/db-faults/seed-invalid-json')" class="btn-fault w-full py-2 px-3 rounded-lg text-sm font-medium">
+                        Seed JSON Inválido
+                    </button>
+                </div>
+            </div>
+
+            <!-- GitHub Mock Faults -->
+            <div class="sandpit-card p-5">
+                <div class="flex items-center gap-2 mb-4">
+                    <svg class="w-5 h-5 text-amber-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                    <h3 class="font-semibold text-gray-800">Mock GitHub (Código Roto)</h3>
+                </div>
+                <div class="space-y-3">
+                    <button onclick="triggerMock('/api/sandpit/github-mock/repos/acme/hiveops/pulls/42/files')" class="btn-mock w-full py-2 px-3 rounded-lg text-sm font-medium">
+                        PR Diff Malformado
+                    </button>
+                    <button onclick="triggerMock('/api/sandpit/github-mock/repos/acme/hiveops/commits/abc123')" class="btn-mock w-full py-2 px-3 rounded-lg text-sm font-medium">
+                        Commit JSON Roto
+                    </button>
+                    <button onclick="triggerMock('/api/sandpit/github-mock/repos/acme/hiveops/contents/Program.cs')" class="btn-mock w-full py-2 px-3 rounded-lg text-sm font-medium">
+                        Código: DivideByZero
+                    </button>
+                    <button onclick="triggerMock('/api/sandpit/github-mock/repos/acme/hiveops/contents/UserService.cs')" class="btn-mock w-full py-2 px-3 rounded-lg text-sm font-medium">
+                        Código: SQL Injection
+                    </button>
+                    <button onclick="triggerMock('/api/sandpit/github-mock/repos/acme/hiveops/pulls/42/merge')" class="btn-mock w-full py-2 px-3 rounded-lg text-sm font-medium">
+                        Merge Conflict Simulado
+                    </button>
+                    <button onclick="triggerMock('/api/sandpit/github-mock/trigger-bad-webhook', 'POST')" class="btn-mock w-full py-2 px-3 rounded-lg text-sm font-medium">
+                        Webhook Malformado
+                    </button>
+                </div>
+            </div>
+
+            <!-- Response Log -->
+            <div class="sandpit-card p-5 md:col-span-2 lg:col-span-1">
+                <div class="flex items-center gap-2 mb-4">
+                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    <h3 class="font-semibold text-gray-800">Respuesta del Sandpit</h3>
+                </div>
+                <div id="responseBox" class="response-box p-3 text-xs">
+                    <span class="text-gray-500">// Haz clic en cualquier botón para ver la respuesta del endpoint...</span>
+                </div>
+                <div class="mt-3 flex items-center gap-2">
+                    <span id="statusIndicator" class="status-badge status-idle">IDLE</span>
+                    <span id="endpointLabel" class="text-xs text-gray-500"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-8 sandpit-card p-5">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="font-semibold text-gray-800">Configuración de Conexión</h3>
+                <button onclick="triggerMock('/api/sandpit/health')" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-lg border border-gray-200 transition-colors">
+                    Verificar Health
+                </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <span class="text-gray-500">Base de Datos Aislada:</span>
+                    <span class="font-mono text-amber-700 ml-2">HiveOps_Sandpit</span>
+                </div>
+                <div>
+                    <span class="text-gray-500">GitHub Mock Endpoint:</span>
+                    <span class="font-mono text-amber-700 ml-2">/api/sandpit/github-mock</span>
+                </div>
+                <div>
+                    <span class="text-gray-500">DB Fault Endpoint:</span>
+                    <span class="font-mono text-amber-700 ml-2">/api/sandpit/db-faults</span>
+                </div>
+                <div>
+                    <span class="text-gray-500">Health Check:</span>
+                    <span class="font-mono text-amber-700 ml-2">/api/sandpit/health</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        async function triggerFault(url) {
+            await callEndpoint(url, 'POST');
+        }
+
+        async function triggerMock(url, method = 'GET') {
+            await callEndpoint(url, method);
+        }
+
+        async function callEndpoint(url, method) {
+            const box = document.getElementById('responseBox');
+            const status = document.getElementById('statusIndicator');
+            const label = document.getElementById('endpointLabel');
+
+            status.textContent = 'EXECUTING...';
+            status.className = 'status-badge bg-amber-100 text-amber-700 border border-amber-200';
+            label.textContent = `${method} ${url}`;
+            box.innerHTML = '<span class="text-amber-400">// Ejecutando...</span>';
+
+            try {
+                const response = await fetch(url, {
+                    method,
+                    headers: { 'X-Sandpit-Key': 'dev-sandbox' }
+                });
+                const data = await response.json();
+                const pretty = JSON.stringify(data, null, 2);
+
+                box.innerHTML = `<pre>${pretty.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</pre>`;
+                status.textContent = response.ok ? 'SUCCESS' : 'ERROR';
+                status.className = response.ok
+                    ? 'status-badge bg-green-100 text-green-700 border border-green-200'
+                    : 'status-badge status-active';
+            } catch (err) {
+                box.innerHTML = `<span class="text-red-400">Error: ${err.message}</span>`;
+                status.textContent = 'FAILED';
+                status.className = 'status-badge status-active';
+            }
+        }
+    </script>
+</body>
+</html>

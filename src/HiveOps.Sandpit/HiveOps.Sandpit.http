@@ -1,0 +1,6 @@
+@HiveOps.Sandpit_HostAddress = http://localhost:5115
+
+GET {{HiveOps.Sandpit_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

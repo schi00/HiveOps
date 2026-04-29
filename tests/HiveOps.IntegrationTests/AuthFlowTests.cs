@@ -1,8 +1,8 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using HiveOps.Application.Models;
-
+using Xunit;
 namespace HiveOps.IntegrationTests;
 
 public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory>
@@ -24,7 +24,8 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
 
         var me = await client.GetFromJsonAsync<AuthMeDto>("/api/auth/me");
         me.Should().NotBeNull();
-        me!.Authenticated.Should().BeTrue();
+        Assert.NotNull(me);
+        me.Authenticated.Should().BeTrue();
         me.Role.Should().Be("Tenant");
         me.TenantName.Should().Be("Alpha");
 
@@ -42,12 +43,14 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
 
         var me = await client.GetFromJsonAsync<AuthMeDto>("/api/auth/me");
         me.Should().NotBeNull();
-        me!.Authenticated.Should().BeTrue();
+        Assert.NotNull(me);
+        me.Authenticated.Should().BeTrue();
         me.Role.Should().Be("Admin");
 
         var tenants = await client.GetFromJsonAsync<List<AdminTenantDto>>("/api/admin/tenants");
         tenants.Should().NotBeNull();
-        tenants!.Should().HaveCount(2);
+        Assert.NotNull(tenants);
+        tenants.Should().HaveCount(2);
         tenants.Should().Contain(t => t.Name == "Alpha");
         tenants.Should().Contain(t => t.Name == "Beta");
     }
@@ -60,7 +63,7 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
         var forgotResponse = await client.PostAsJsonAsync("/api/auth/forgot-password", new { usernameOrEmail = "tenant_alpha" });
         forgotResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // Token is no longer returned in the response — it is sent via email.
+        // Token is no longer returned in the response â€” it is sent via email.
         // The FakeEmailService captures the reset link for test verification.
         var token = _factory.FakeEmail.ExtractToken();
         token.Should().NotBeNullOrWhiteSpace("the fake email service should have captured the reset link");
@@ -86,12 +89,15 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
 
         var tenants = await client.GetFromJsonAsync<List<AdminTenantDto>>("/api/admin/tenants");
         tenants.Should().NotBeNull();
-        var tenantId = tenants![0].Id;
+        Assert.NotNull(tenants);
+        var tenantId = tenants[0].Id;
 
         var settingsEnvelope = await client.GetFromJsonAsync<TenantSettingsEnvelope>($"/api/admin/tenants/{tenantId}/settings");
         settingsEnvelope.Should().NotBeNull();
 
-        var settings = settingsEnvelope!.Settings;
+        Assert.NotNull(settingsEnvelope);
+
+        var settings = settingsEnvelope.Settings;
         settings.WhatsApp.Enabled = true;
         settings.WhatsApp.PhoneNumber = "+15556689857";
         settings.WhatsApp.Provider = "MetaCloud";
@@ -103,7 +109,8 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
 
         var afterFirstSave = await client.GetFromJsonAsync<TenantSettingsEnvelope>($"/api/admin/tenants/{tenantId}/settings");
         afterFirstSave.Should().NotBeNull();
-        afterFirstSave!.Settings.WhatsApp.ApiKey.Should().Be("WA_ROTATE_TOKEN_1");
+        Assert.NotNull(afterFirstSave);
+        afterFirstSave.Settings.WhatsApp.ApiKey.Should().Be("WA_ROTATE_TOKEN_1");
 
         settings.WhatsApp.ApiKey = "WA_ROTATE_TOKEN_2";
         settings.WhatsApp.ApiKeyUpdatedAtUtc = DateTimeOffset.UtcNow;
@@ -113,7 +120,8 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
 
         var afterSecondSave = await client.GetFromJsonAsync<TenantSettingsEnvelope>($"/api/admin/tenants/{tenantId}/settings");
         afterSecondSave.Should().NotBeNull();
-        afterSecondSave!.Settings.WhatsApp.ApiKey.Should().Be("WA_ROTATE_TOKEN_2");
+        Assert.NotNull(afterSecondSave);
+        afterSecondSave.Settings.WhatsApp.ApiKey.Should().Be("WA_ROTATE_TOKEN_2");
     }
 
     [Fact]
@@ -126,7 +134,8 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
 
         var tenants = await client.GetFromJsonAsync<List<AdminTenantDto>>("/api/admin/tenants");
         tenants.Should().NotBeNull();
-        var tenantId = tenants!.First().Id;
+        Assert.NotNull(tenants);
+        var tenantId = tenants.First().Id;
 
         var invalidResponse = await client.PostAsJsonAsync($"/api/admin/tenants/{tenantId}/whatsapp/access-token", new
         {
@@ -136,7 +145,8 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
 
         var settingsAfterInvalid = await client.GetFromJsonAsync<TenantSettingsEnvelope>($"/api/admin/tenants/{tenantId}/settings");
         settingsAfterInvalid.Should().NotBeNull();
-        settingsAfterInvalid!.Settings.WhatsApp.ApiKey.Should().NotBe("INVALID_TOKEN");
+        Assert.NotNull(settingsAfterInvalid);
+        settingsAfterInvalid.Settings.WhatsApp.ApiKey.Should().NotBe("INVALID_TOKEN");
 
         var validResponse = await client.PostAsJsonAsync($"/api/admin/tenants/{tenantId}/whatsapp/access-token", new
         {
@@ -146,7 +156,8 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
 
         var settingsAfterValid = await client.GetFromJsonAsync<TenantSettingsEnvelope>($"/api/admin/tenants/{tenantId}/settings");
         settingsAfterValid.Should().NotBeNull();
-        settingsAfterValid!.Settings.WhatsApp.ApiKey.Should().Be("VALID_META_TOKEN");
+        Assert.NotNull(settingsAfterValid);
+        settingsAfterValid.Settings.WhatsApp.ApiKey.Should().Be("VALID_META_TOKEN");
     }
 
     [Fact]
@@ -159,7 +170,8 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
 
         var tenants = await client.GetFromJsonAsync<List<AdminTenantDto>>("/api/admin/tenants");
         tenants.Should().NotBeNull();
-        var tenantId = tenants!.First().Id;
+        Assert.NotNull(tenants);
+        var tenantId = tenants.First().Id;
 
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var username = $"tenant_new_{suffix}";
@@ -176,7 +188,8 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
 
         var created = await createResponse.Content.ReadFromJsonAsync<TenantUserDto>();
         created.Should().NotBeNull();
-        created!.Username.Should().Be(username);
+        Assert.NotNull(created);
+        created.Username.Should().Be(username);
 
         var updateResponse = await client.PutAsJsonAsync($"/api/admin/tenants/{tenantId}/users/{created.Id}", new
         {
@@ -194,14 +207,16 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
 
         var list = await client.GetFromJsonAsync<List<TenantUserDto>>($"/api/admin/tenants/{tenantId}/users");
         list.Should().NotBeNull();
-        list!.Should().Contain(x => x.Id == created.Id && x.Username == $"{username}_edit" && !x.IsActive);
+        Assert.NotNull(list);
+        list.Should().Contain(x => x.Id == created.Id && x.Username == $"{username}_edit" && !x.IsActive);
 
         var deleteResponse = await client.DeleteAsync($"/api/admin/tenants/{tenantId}/users/{created.Id}");
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var listAfterDelete = await client.GetFromJsonAsync<List<TenantUserDto>>($"/api/admin/tenants/{tenantId}/users");
         listAfterDelete.Should().NotBeNull();
-        listAfterDelete!.Should().NotContain(x => x.Id == created.Id);
+        Assert.NotNull(listAfterDelete);
+        listAfterDelete.Should().NotContain(x => x.Id == created.Id);
     }
 
     [Fact]
@@ -214,7 +229,8 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
 
         var metrics = await client.GetFromJsonAsync<AdminBotMetricsDto>("/api/admin/tenants/metrics/bot");
         metrics.Should().NotBeNull();
-        metrics!.ActiveConversations.Should().BeGreaterThan(0);
+        Assert.NotNull(metrics);
+        metrics.ActiveConversations.Should().BeGreaterThan(0);
         metrics.FallbackCount.Should().BeGreaterThanOrEqualTo(0);
     }
 
@@ -240,3 +256,5 @@ public sealed class AuthFlowTests : IClassFixture<DashboardWebApplicationFactory
 
     private sealed record MetricPointDto(string Label, double Value);
 }
+
+

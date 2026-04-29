@@ -7,6 +7,7 @@ using HiveOps.Application.Interfaces;
 using HiveOps.Application.Models;
 using HiveOps.Domain.Entities;
 using HiveOps.Infrastructure.Multitenancy;
+using HiveOps.Infrastructure.Secrets;
 using HiveOps.Infrastructure.Persistence;
 
 namespace HiveOps.Api.Controllers;
@@ -18,23 +19,32 @@ public sealed class AdminTenantsController : ControllerBase
     private readonly AppDbContext _db;
     private readonly IConfiguration _configuration;
     private readonly TenantContext _tenantContext;
+    private readonly IWebHostEnvironment _environment;
+    private readonly ISecretProvider _secretProvider;
     private readonly IndustrySettingsService _industrySettings;
     private readonly IWhatsAppAccessTokenValidator _whatsAppAccessTokenValidator;
     private readonly ILogger<AdminTenantsController> _logger;
+    private readonly IStripeService _stripe;
 
     public AdminTenantsController(
         AppDbContext db,
         IConfiguration configuration,
         TenantContext tenantContext,
+        IWebHostEnvironment environment,
+        ISecretProvider secretProvider,
         IndustrySettingsService industrySettings,
         IWhatsAppAccessTokenValidator whatsAppAccessTokenValidator,
+        IStripeService stripe,
         ILogger<AdminTenantsController> logger)
     {
         _db = db;
         _configuration = configuration;
         _tenantContext = tenantContext;
+        _environment = environment;
+        _secretProvider = secretProvider;
         _industrySettings = industrySettings;
         _whatsAppAccessTokenValidator = whatsAppAccessTokenValidator;
+        _stripe = stripe;
         _logger = logger;
     }
 
@@ -52,11 +62,44 @@ public sealed class AdminTenantsController : ControllerBase
                 t.Name,
                 t.WhatsAppNumber,
                 t.IsActive,
-                t.CreatedAt
+                t.CreatedAt,
+                t.HasRollbackCapability,
+                t.Plan,
+                t.SubscriptionStatus,
+                t.StripePriceId
             })
             .ToListAsync(ct);
 
         return Ok(tenants);
+    }
+
+    /// <summary>
+    /// Debug-only: shows where critical secrets are being read from (Vault/Env/Config/None).
+    /// Does not return secret values. Only available for Admins in Development.
+    /// </summary>
+    [HttpGet("secrets/source")]
+    public IActionResult GetSecretSources()
+    {
+        if (!IsAdminRequest()) return Unauthorized("Admin credentials required.");
+        if (!_environment.IsDevelopment()) return Forbid();
+
+        var keys = new[]
+        {
+            "SemanticKernel:OpenRouter:ApiKey",
+            "SemanticKernel:Embeddings:ApiKey",
+            "WhatsApp:ApiKey",
+            "Email:Password",
+            "Admin:ApiKey"
+        };
+
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var k in keys)
+        {
+            _ = _secretProvider.TryGetSecret(k, out _, out var source);
+            result[k.Replace(":", ".")] = source.ToString();
+        }
+
+        return Ok(new { environment = _environment.EnvironmentName, sources = result });
     }
 
     [HttpGet("{tenantId:guid}/settings")]
@@ -375,6 +418,25 @@ public sealed class AdminTenantsController : ControllerBase
         return Ok(new AdminBotMetricsDto(active, awaitingHuman, fallbackCount, avgResponseSeconds, responsesPerDay, fallbackPerDay));
     }
 
+    [HttpPost("{tenantId:guid}/billing/ensure-subscription")]
+    public async Task<IActionResult> EnsureSubscription(Guid tenantId, [FromBody] EnsureSubscriptionRequest request, CancellationToken ct)
+    {
+        if (!IsAdminRequest()) return Unauthorized("Admin credentials required.");
+        if (request is null || string.IsNullOrWhiteSpace(request.PriceId)) return BadRequest("PriceId is required.");
+
+        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+        if (tenant is null) return NotFound();
+
+        await _stripe.EnsureCustomerAsync(tenant.Id, tenant.Name, ct);
+        await _stripe.EnsureSubscriptionAsync(tenant.Id, request.PriceId, ct);
+
+        tenant.StripePriceId = request.PriceId;
+        tenant.SubscriptionStatus = tenant.SubscriptionStatus ?? "active";
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new { message = "Subscription ensured", tenantId, priceId = request.PriceId });
+    }
+
     [HttpGet("{tenantId:guid}/catalog/attributes")]
     public async Task<IActionResult> GetCatalogAttributes(Guid tenantId, CancellationToken ct)
     {
@@ -390,6 +452,53 @@ public sealed class AdminTenantsController : ControllerBase
             return NotFound();
 
         return BadRequest("Catalog management is no longer supported.");
+    }
+
+    [HttpGet("usage/deploy-success")]
+    public async Task<IActionResult> GetDeployUsage([FromQuery] Guid? tenantId, [FromQuery] int days = 30, CancellationToken ct = default)
+    {
+        if (!IsAdminRequest()) return Unauthorized("Admin credentials required.");
+        if (days <= 0 || days > 365) days = 30;
+
+        var since = DateTimeOffset.UtcNow.AddDays(-days);
+        var logs = _db.DiagnosticLogs
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(l => l.StepName == "ci.callback" && l.IsSuccess && l.CreatedAt >= since);
+        if (tenantId.HasValue)
+            logs = logs.Where(l => l.TenantId == tenantId.Value);
+
+        var total = await logs.CountAsync(ct);
+
+        var perDay = await logs
+            .GroupBy(l => l.CreatedAt.Date)
+            .Select(g => new { Date = g.Key, Count = g.Count() })
+            .OrderBy(x => x.Date)
+            .ToListAsync(ct);
+
+        return Ok(new
+        {
+            windowDays = days,
+            total,
+            perDay = perDay.Select(x => new { label = x.Date.ToString("yyyy-MM-dd"), value = x.Count }).ToList()
+        });
+    }
+
+    [HttpPost("usage/simulate")]
+    public async Task<IActionResult> SimulateUsage([FromQuery] Guid tenantId, [FromQuery] int qty = 1, CancellationToken ct = default)
+    {
+        if (!IsAdminRequest()) return Unauthorized("Admin credentials required.");
+        if (tenantId == Guid.Empty) return BadRequest("tenantId is required");
+        if (qty <= 0) qty = 1;
+
+        var tenant = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+        if (tenant is null) return NotFound();
+        if (string.IsNullOrWhiteSpace(tenant.StripeSubscriptionItemId))
+            return BadRequest("Tenant is not subscribed or missing SubscriptionItemId");
+
+        var idem = $"sim-{Guid.NewGuid():N}";
+        await _stripe.ReportUsageAsync(tenantId, "deploy.success", qty, DateTimeOffset.UtcNow, idem, ct);
+        return Ok(new { ok = true, quantity = qty, idempotencyKey = idem });
     }
 
     private bool IsAdminRequest()
@@ -444,3 +553,5 @@ public sealed record AdminBotMetricsDto(
     double AvgResponseSeconds,
     IReadOnlyList<MetricPointDto> ResponsesPerDay,
     IReadOnlyList<MetricPointDto> FallbacksPerDay);
+
+public sealed record EnsureSubscriptionRequest(string PriceId);

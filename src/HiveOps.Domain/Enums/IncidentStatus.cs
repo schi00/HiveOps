@@ -5,6 +5,7 @@ public enum IncidentStatus
     Open,
     InProgress,
     PendingInfo,
+    AwaitingApproval,
     Resolved,
     Closed
 }
