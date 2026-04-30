@@ -10,5 +10,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/HiveOps.IntegrationTests/HiveOps.IntegrationTests.csproj" />
+    <Project Path="tests/HiveOps.UnitTests/HiveOps.UnitTests.csproj" />
   </Folder>
 </Solution>

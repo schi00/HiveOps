@@ -49,6 +49,30 @@ public static class TenantConfigurationValidator
                 errors.Add("Policies contains rule with empty Action.");
         }
 
+        if (config.ConfigurationSchemaVersion is < 1 or > TenantConfigurationSchema.MaxKnown)
+            errors.Add($"Configuration schema version invalid (received {config.ConfigurationSchemaVersion}).");
+
+        if (config.ConfigurationSchemaVersion > TenantConfigurationSchema.Current)
+            errors.Add($"Configuration schema newer than supported (max {TenantConfigurationSchema.Current}).");
+
+        if (string.IsNullOrWhiteSpace(config.Llm.Provider))
+            errors.Add("Llm.Provider cannot be empty.");
+        if (string.IsNullOrWhiteSpace(config.Llm.Model))
+            errors.Add("Llm.Model cannot be empty.");
+
+        if (double.IsNaN(config.Llm.Temperature) || config.Llm.Temperature is < 0 or > 2)
+            errors.Add("Llm.Temperature must be between 0 and 2.");
+
+        if (config.Llm.TopP is double topP && (double.IsNaN(topP) || topP is <= 0 or > 1))
+            errors.Add("Llm.TopP must be between 0 and 1.");
+
+        if (config.Llm.MaxOutputTokens is < 128 or > 32000)
+            errors.Add("Llm.MaxOutputTokens must be between 128 and 32000.");
+
+        if (!string.IsNullOrWhiteSpace(config.DeployGit.GitRepositoryUrl)
+            && !Uri.TryCreate(config.DeployGit.GitRepositoryUrl, UriKind.Absolute, out _))
+            errors.Add("DeployGit.GitRepositoryUrl must be an absolute URI when supplied.");
+
         return errors;
     }
 }

@@ -5,6 +5,7 @@ using Microsoft.SemanticKernel;
 using HiveOps.Agents.Planning;
 using HiveOps.Application.Configuration;
 using HiveOps.Application.Interfaces;
+using HiveOps.Application.Models;
 using HiveOps.Domain.Enums;
 
 namespace HiveOps.UnitTests;
@@ -160,11 +161,17 @@ public sealed class AgentRuntimeTests
         public Task<TenantConfiguration> UpsertConfigurationAsync(Guid tenantId, TenantConfiguration configuration, CancellationToken ct = default)
             => Task.FromResult(configuration);
 
+        public Task<TenantConfiguration> UpsertConfigurationAsync(Guid tenantId, TenantConfiguration configuration, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+            => UpsertConfigurationAsync(tenantId, configuration, ct);
+
         public Task<TenantConfiguration> PatchAgentConfigAsync(Guid tenantId, AgentConfig patch, CancellationToken ct = default)
         {
             Default.Agent = patch;
             return Task.FromResult(Default);
         }
+
+        public Task<TenantConfiguration> PatchAgentConfigAsync(Guid tenantId, AgentConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+            => PatchAgentConfigAsync(tenantId, patch, ct);
 
         public Task<TenantConfiguration> PatchToolConfigAsync(Guid tenantId, ToolConfig patch, CancellationToken ct = default)
         {
@@ -172,11 +179,62 @@ public sealed class AgentRuntimeTests
             return Task.FromResult(Default);
         }
 
+        public Task<TenantConfiguration> PatchToolConfigAsync(Guid tenantId, ToolConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+            => PatchToolConfigAsync(tenantId, patch, ct);
+
         public Task<TenantConfiguration> PatchBusinessConfigAsync(Guid tenantId, BusinessConfig patch, CancellationToken ct = default)
         {
             Default.Business = patch;
             return Task.FromResult(Default);
         }
+
+        public Task<TenantConfiguration> PatchBusinessConfigAsync(Guid tenantId, BusinessConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+            => PatchBusinessConfigAsync(tenantId, patch, ct);
+
+        public Task<TenantConfiguration> PatchLlmConfigAsync(Guid tenantId, LlmConfig patch, CancellationToken ct = default)
+        {
+            Default.Llm = patch;
+            return Task.FromResult(Default);
+        }
+
+        public Task<TenantConfiguration> PatchLlmConfigAsync(Guid tenantId, LlmConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+            => PatchLlmConfigAsync(tenantId, patch, ct);
+
+        public Task<TenantConfiguration> PatchDeployGitConfigAsync(Guid tenantId, DeployGitConfig patch, CancellationToken ct = default)
+        {
+            Default.DeployGit = patch;
+            return Task.FromResult(Default);
+        }
+
+        public Task<TenantConfiguration> PatchDeployGitConfigAsync(Guid tenantId, DeployGitConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+            => PatchDeployGitConfigAsync(tenantId, patch, ct);
+
+        public Task<TenantConfiguration> PatchPoliciesAsync(Guid tenantId, List<PolicyRule> policies, CancellationToken ct = default)
+        {
+            Default.Policies = policies;
+            return Task.FromResult(Default);
+        }
+
+        public Task<TenantConfiguration> PatchPoliciesAsync(Guid tenantId, List<PolicyRule> policies, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+            => PatchPoliciesAsync(tenantId, policies, ct);
+
+        public Task<TenantConfiguration> PatchChannelConfigAsync(Guid tenantId, ChannelConfig patch, CancellationToken ct = default)
+        {
+            Default.Channel = patch;
+            return Task.FromResult(Default);
+        }
+
+        public Task<TenantConfiguration> PatchChannelConfigAsync(Guid tenantId, ChannelConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+            => PatchChannelConfigAsync(tenantId, patch, ct);
+
+        public Task<TenantConfiguration> PatchEscalationConfigAsync(Guid tenantId, EscalationConfig patch, CancellationToken ct = default)
+        {
+            Default.Escalation = patch;
+            return Task.FromResult(Default);
+        }
+
+        public Task<TenantConfiguration> PatchEscalationConfigAsync(Guid tenantId, EscalationConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+            => PatchEscalationConfigAsync(tenantId, patch, ct);
 
         public Task InvalidateAsync(Guid tenantId, CancellationToken ct = default)
             => Task.CompletedTask;

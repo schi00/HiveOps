@@ -1,6 +1,10 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
+using HiveOps.Application.Configuration;
+using HiveOps.Application.Interfaces;
+using HiveOps.Infrastructure.AI;
 
 namespace HiveOps.Agents.Planning;
 
@@ -14,11 +18,19 @@ public sealed class LlmPlanner : IAgentPlanner
 
     private readonly ILogger<LlmPlanner> _logger;
     private readonly IPromptBuilder _promptBuilder;
+    private readonly ITenantConfigService _tenantConfigService;
+    private readonly IOptions<HiveOpsDeploymentOptions> _deploymentOptions;
 
-    public LlmPlanner(ILogger<LlmPlanner> logger, IPromptBuilder promptBuilder)
+    public LlmPlanner(
+        ILogger<LlmPlanner> logger,
+        IPromptBuilder promptBuilder,
+        ITenantConfigService tenantConfigService,
+        IOptions<HiveOpsDeploymentOptions> deploymentOptions)
     {
         _logger = logger;
         _promptBuilder = promptBuilder;
+        _tenantConfigService = tenantConfigService;
+        _deploymentOptions = deploymentOptions;
     }
 
     public async Task<PlannerDecision> PlanNextStepAsync(
@@ -30,7 +42,16 @@ public sealed class LlmPlanner : IAgentPlanner
 
         try
         {
-            var result = await kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
+            var exec = await TenantLlmExecutionHelper.GetChatExecutionSettingsAsync(
+                context.TenantId, _tenantConfigService, _deploymentOptions, cancellationToken);
+            var args = new KernelArguments
+            {
+                ExecutionSettings = new Dictionary<string, PromptExecutionSettings>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [PromptExecutionSettings.DefaultServiceId] = exec
+                }
+            };
+            var result = await kernel.InvokePromptAsync(prompt, args, cancellationToken: cancellationToken);
             var raw = result.GetValue<string>()?.Trim();
             if (string.IsNullOrWhiteSpace(raw))
             {

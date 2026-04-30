@@ -10,6 +10,7 @@ using HiveOps.Api.Logging;
 using HiveOps.Api.Middleware;
 using HiveOps.Api.Services;
 using HiveOps.Api.Validation;
+using HiveOps.Application.Configuration;
 using HiveOps.Agents;
 using HiveOps.Agents.Support;
 using HiveOps.Application.Interfaces;
@@ -71,7 +72,34 @@ builder.Services.AddHiveOpsAgents();
 
 // -- ASP.NET Core -------------------------------------------------------------
 builder.Services.AddControllers();
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "HiveOpsSecretKey12345678901234567890";
+
+var deploymentForJwt = builder.Configuration.GetSection(HiveOpsDeploymentOptions.SectionPath).Get<HiveOpsDeploymentOptions>()
+    ?? new HiveOpsDeploymentOptions();
+var jwtFromConfig = builder.Configuration["Jwt:Key"];
+string jwtKey;
+if (string.IsNullOrWhiteSpace(jwtFromConfig))
+{
+    if (deploymentForJwt.Mode == HiveOpsDeploymentMode.SelfHosted)
+        throw new InvalidOperationException("Jwt:Key is required when HiveOps:Deployment:Mode is SelfHosted.");
+    if (builder.Environment.IsDevelopment()
+        || (deploymentForJwt.Mode == HiveOpsDeploymentMode.Ephemeral && deploymentForJwt.AllowInsecureJwtForTests))
+        jwtKey = HiveOpsSecurityDefaults.InsecureDevelopmentJwtKey;
+    else
+        throw new InvalidOperationException("Jwt:Key must be set, or run in Development with a supported deployment profile.");
+}
+else
+{
+    jwtKey = jwtFromConfig;
+    if (jwtKey == HiveOpsSecurityDefaults.InsecureDevelopmentJwtKey)
+    {
+        if (deploymentForJwt.Mode == HiveOpsDeploymentMode.SelfHosted)
+            throw new InvalidOperationException("Jwt:Key must not use the insecure development default when Mode is SelfHosted.");
+        if (!builder.Environment.IsDevelopment()
+            && !(deploymentForJwt.Mode == HiveOpsDeploymentMode.Ephemeral && deploymentForJwt.AllowInsecureJwtForTests))
+            throw new InvalidOperationException("Jwt:Key must not use the insecure development default outside Development or unsecured Ephemeral test runs.");
+    }
+}
+
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "HiveOps";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "HiveOpsUsers";
 

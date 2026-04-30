@@ -11,6 +11,7 @@ using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
 using HiveOps.Domain.Interfaces;
 using HiveOps.Domain.Models;
+using HiveOps.Infrastructure.Cache;
 using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
 
@@ -31,7 +32,9 @@ public sealed class DashboardWebApplicationFactory : WebApplicationFactory<Progr
             {
                 ["Git:RepoPath"] = Path.GetTempPath(),
                 ["Admin:ApiKey"] = "test-admin-api-key-1234567890-abcdef",
-                ["HiveOps:DataProtectionKeysPath"] = Path.Combine(Path.GetTempPath(), "hiveops-dp-keys")
+                ["HiveOps:DataProtectionKeysPath"] = Path.Combine(Path.GetTempPath(), "hiveops-dp-keys"),
+                ["HiveOps:Deployment:Mode"] = "SaaS",
+                ["HiveOps:Deployment:Billing"] = "None"
             });
         });
 
@@ -54,7 +57,7 @@ public sealed class DashboardWebApplicationFactory : WebApplicationFactory<Progr
             services.AddSingleton<IMessagingChannel, FakeMessagingChannel>();
             services.AddSingleton<IConversationStateManager, InMemoryConversationStateManager>();
             services.RemoveAll(typeof(IGitService));
-            services.AddScoped<IGitService, FakeGitService>();
+            services.AddSingleton<IGitService, FakeGitService>();
             services.RemoveAll(typeof(ITenantLookupService));
             services.AddScoped<ITenantLookupService, FakeTenantLookupService>();
             services.RemoveAll(typeof(IDynamicConnectionStringResolver));
@@ -247,82 +250,6 @@ public sealed class DashboardWebApplicationFactory : WebApplicationFactory<Progr
     }
 }
 
-public sealed class InMemoryConversationStateManager : IConversationStateManager
-{
-    private readonly Dictionary<string, ConversationStateContext> _state = new(StringComparer.Ordinal);
-    private readonly object _sync = new();
-
-    public Task<ConversationStateContext?> GetStateAsync(Guid tenantId, Guid conversationId, CancellationToken ct = default)
-    {
-        var key = BuildKey(tenantId, conversationId);
-        lock (_sync)
-        {
-            if (!_state.TryGetValue(key, out var context))
-                return Task.FromResult<ConversationStateContext?>(null);
-
-            return Task.FromResult<ConversationStateContext?>(Clone(context));
-        }
-    }
-
-    public Task SetStateAsync(Guid tenantId, Guid conversationId, ConversationStateContext context, CancellationToken ct = default)
-    {
-        var key = BuildKey(tenantId, conversationId);
-        lock (_sync)
-        {
-            context.ConversationId = conversationId;
-            context.TenantId = tenantId;
-            context.LastUpdatedAt = DateTimeOffset.UtcNow;
-            _state[key] = Clone(context);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    public async Task PauseFlowAsync(Guid tenantId, Guid conversationId, CancellationToken ct = default)
-    {
-        var current = await GetStateAsync(tenantId, conversationId, ct)
-            ?? new ConversationStateContext { ConversationId = conversationId, TenantId = tenantId };
-        current.PausedState = current.State;
-        current.State = ConversationState.AwaitingHuman;
-        await SetStateAsync(tenantId, conversationId, current, ct);
-    }
-
-    public async Task ResumeFlowAsync(Guid tenantId, Guid conversationId, CancellationToken ct = default)
-    {
-        var current = await GetStateAsync(tenantId, conversationId, ct)
-            ?? new ConversationStateContext { ConversationId = conversationId, TenantId = tenantId };
-        current.State = current.PausedState ?? ConversationState.Idle;
-        current.PausedState = null;
-        await SetStateAsync(tenantId, conversationId, current, ct);
-    }
-
-    public Task ClearAsync(Guid tenantId, Guid conversationId, CancellationToken ct = default)
-    {
-        var key = BuildKey(tenantId, conversationId);
-        lock (_sync)
-        {
-            _state.Remove(key);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    private static string BuildKey(Guid tenantId, Guid conversationId) => $"{tenantId:N}:{conversationId:N}";
-
-    private static ConversationStateContext Clone(ConversationStateContext source)
-        => new()
-        {
-            ConversationId = source.ConversationId,
-            TenantId = source.TenantId,
-            State = source.State,
-            PausedState = source.PausedState,
-            FailedClassificationCount = source.FailedClassificationCount,
-            HasGreeted = source.HasGreeted,
-            LastUpdatedAt = source.LastUpdatedAt,
-            FlowData = source.FlowData.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal)
-        };
-}
-
 public sealed class FakeWhatsAppAccessTokenValidator : IWhatsAppAccessTokenValidator
 {
     public Task<WhatsAppAccessTokenValidationResult> ValidateAsync(string accessToken, CancellationToken ct = default)
@@ -411,12 +338,12 @@ public sealed class FakeEmailService : IEmailService
 
 internal sealed class FakeGitService : IGitService
 {
-    public Task<string> CreateBranchAsync(string b, CancellationToken ct = default) => Task.FromResult(b);
-    public Task<string> CommitAsync(string m, IEnumerable<string> f, CancellationToken ct = default) => Task.FromResult("ok");
-    public Task PushAsync(string b, CancellationToken ct = default) => Task.CompletedTask;
-    public Task<string> GetDiffAsync(string b, CancellationToken ct = default) => Task.FromResult("");
-    public Task<bool> BranchExistsAsync(string b, CancellationToken ct = default) => Task.FromResult(false);
-    public Task<string> MergePullRequestAsync(string b, CancellationToken ct = default) => Task.FromResult($"MERGED:{b}");
+    public Task<string> CreateBranchAsync(Guid _, string b, CancellationToken ct = default) => Task.FromResult(b);
+    public Task<string> CommitAsync(Guid _, string m, IEnumerable<string> f, CancellationToken ct = default) => Task.FromResult("ok");
+    public Task PushAsync(Guid _, string b, CancellationToken ct = default) => Task.CompletedTask;
+    public Task<string> GetDiffAsync(Guid _, string b, CancellationToken ct = default) => Task.FromResult("");
+    public Task<bool> BranchExistsAsync(Guid _, string b, CancellationToken ct = default) => Task.FromResult(false);
+    public Task<string> MergePullRequestAsync(Guid _, string b, CancellationToken ct = default) => Task.FromResult($"MERGED:{b}");
 }
 
 internal sealed class FakeDynamicConnectionStringResolver : IDynamicConnectionStringResolver

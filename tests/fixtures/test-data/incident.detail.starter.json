@@ -1,0 +1,11 @@
+{
+  "id": "11111111-1111-1111-1111-111111111111",
+  "title": "Deploy fallo en API",
+  "status": "Open",
+  "severity": "High",
+  "deployStatus": "FAILED",
+  "gitBranch": null,
+  "gitCommitHash": null,
+  "description": "Detalle starter sin rollback",
+  "resolutionNotes": null
+}

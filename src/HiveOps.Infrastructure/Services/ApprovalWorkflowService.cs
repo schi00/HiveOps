@@ -1,5 +1,6 @@
 using HiveOps.Application.Interfaces;
 using HiveOps.Application.Services;
+using HiveOps.Application.Support;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
 using HiveOps.Domain.Interfaces;
@@ -122,6 +123,22 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         // Execute based on incident category
         if (incident.Category == IncidentCategory.Code && !string.IsNullOrEmpty(incident.GitBranch))
         {
+            var cfg = scope.ServiceProvider.GetRequiredService<ITenantConfigService>();
+            if (!await TenantDeployPolicy.IsManualDeployAllowedAsync(cfg, incident.TenantId, cancellationToken))
+            {
+                await _messageHistory.AppendMessageToIncidentAsync(
+                    incidentId,
+                    MessageRole.Assistant,
+                    "Despliegue manual deshabilitado para este tenant (configuración DeployGit).",
+                    "ApprovalWorkflow",
+                    cancellationToken);
+                incident.Status = IncidentStatus.InProgress;
+                incident.RequiresHumanApproval = false;
+                incident.UpdatedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(cancellationToken);
+                return true;
+            }
+
             // Deploy code fix
             if (!string.IsNullOrEmpty(incident.GitCommitHash))
             {
@@ -131,7 +148,7 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             else
             {
                 // Push branch first
-                await _gitService.PushAsync(incident.GitBranch, cancellationToken);
+                await _gitService.PushAsync(incident.TenantId, incident.GitBranch, cancellationToken);
                 var deployId = await _deploymentService.TriggerDeployAsync(incident.GitBranch, "", cancellationToken);
                 incident.DeployStatus = deployId;
             }

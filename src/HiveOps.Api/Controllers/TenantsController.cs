@@ -1,9 +1,11 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using HiveOps.Api.Authentication;
 using HiveOps.Application.Configuration;
 using HiveOps.Application.Interfaces;
+using HiveOps.Application.Models;
 using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
 
@@ -76,9 +78,78 @@ public sealed class TenantsController : ControllerBase
         if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId)
             return Forbid();
 
-        var config = await _configService.UpsertConfigurationAsync(id, configDto, ct);
+        var config = await _configService.UpsertConfigurationAsync(id, configDto, Audit(nameof(TenantConfiguration)), ct);
         return Ok(config);
     }
+
+    [HttpPatch("{id:guid}/config/agent")]
+    public async Task<ActionResult<TenantConfiguration>> PatchTenantAgent(Guid id, [FromBody] AgentConfig body, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var cfg = await _configService.GetConfigurationAsync(id, ct);
+        cfg.Agent = body;
+        var errors = TenantConfigurationValidator.Validate(cfg);
+        if (errors.Count > 0) return BadRequest(new { errors });
+        return Ok(await _configService.PatchAgentConfigAsync(id, body, Audit(nameof(AgentConfig)), ct));
+    }
+
+    [HttpPatch("{id:guid}/config/llm")]
+    public async Task<ActionResult<TenantConfiguration>> PatchTenantLlm(Guid id, [FromBody] LlmConfig body, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var cfg = await _configService.GetConfigurationAsync(id, ct);
+        cfg.Llm = body;
+        var errors = TenantConfigurationValidator.Validate(cfg);
+        if (errors.Count > 0) return BadRequest(new { errors });
+        return Ok(await _configService.PatchLlmConfigAsync(id, body, Audit(nameof(LlmConfig)), ct));
+    }
+
+    [HttpPatch("{id:guid}/config/deploy-git")]
+    public async Task<ActionResult<TenantConfiguration>> PatchTenantDeployGit(Guid id, [FromBody] DeployGitConfig body, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var cfg = await _configService.GetConfigurationAsync(id, ct);
+        cfg.DeployGit = body;
+        var errors = TenantConfigurationValidator.Validate(cfg);
+        if (errors.Count > 0) return BadRequest(new { errors });
+        return Ok(await _configService.PatchDeployGitConfigAsync(id, body, Audit(nameof(DeployGitConfig)), ct));
+    }
+
+    [HttpPatch("{id:guid}/config/policies")]
+    public async Task<ActionResult<TenantConfiguration>> PatchTenantPolicies(Guid id, [FromBody] List<PolicyRule> body, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var cfg = await _configService.GetConfigurationAsync(id, ct);
+        cfg.Policies = body ?? [];
+        var errors = TenantConfigurationValidator.Validate(cfg);
+        if (errors.Count > 0) return BadRequest(new { errors });
+        return Ok(await _configService.PatchPoliciesAsync(id, body ?? [], Audit(nameof(TenantConfiguration.Policies)), ct));
+    }
+
+    [HttpPatch("{id:guid}/config/channel")]
+    public async Task<ActionResult<TenantConfiguration>> PatchTenantChannel(Guid id, [FromBody] ChannelConfig body, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var cfg = await _configService.GetConfigurationAsync(id, ct);
+        cfg.Channel = body;
+        var errors = TenantConfigurationValidator.Validate(cfg);
+        if (errors.Count > 0) return BadRequest(new { errors });
+        return Ok(await _configService.PatchChannelConfigAsync(id, body, Audit(nameof(ChannelConfig)), ct));
+    }
+
+    [HttpPatch("{id:guid}/config/escalation")]
+    public async Task<ActionResult<TenantConfiguration>> PatchTenantEscalation(Guid id, [FromBody] EscalationConfig body, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var cfg = await _configService.GetConfigurationAsync(id, ct);
+        cfg.Escalation = body;
+        var errors = TenantConfigurationValidator.Validate(cfg);
+        if (errors.Count > 0) return BadRequest(new { errors });
+        return Ok(await _configService.PatchEscalationConfigAsync(id, body, Audit(nameof(EscalationConfig)), ct));
+    }
+
+    private TenantConfigAuditInfo Audit(string section) =>
+        new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name, section);
 }
 
 // DTOs

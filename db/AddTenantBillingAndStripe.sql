@@ -1,5 +1,7 @@
 /* Adds billing, packaging and Stripe columns to Tenants table if missing */
 SET NOCOUNT ON;
+USE Hive;
+GO
 
 IF COL_LENGTH('dbo.Tenants','Plan') IS NULL
 BEGIN

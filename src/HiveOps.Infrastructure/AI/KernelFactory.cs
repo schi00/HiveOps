@@ -3,6 +3,8 @@ using System.Net.Http.Headers;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
+using HiveOps.Application.Configuration;
+using HiveOps.Application.Interfaces;
 using HiveOps.Domain.Interfaces;
 
 namespace HiveOps.Infrastructure.AI;
@@ -15,11 +17,19 @@ public sealed class KernelFactory
 {
     private readonly IServiceProvider _provider;
     private readonly SemanticKernelOptions _options;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly HiveOpsDeploymentOptions _deployment;
 
-    public KernelFactory(IServiceProvider provider, IOptions<SemanticKernelOptions> options)
+    public KernelFactory(
+        IServiceProvider provider,
+        IOptions<SemanticKernelOptions> options,
+        IServiceScopeFactory scopeFactory,
+        IOptions<HiveOpsDeploymentOptions> deploymentOptions)
     {
         _provider = provider;
         _options = options.Value;
+        _scopeFactory = scopeFactory;
+        _deployment = deploymentOptions.Value;
     }
 
     public Kernel CreateForTenant(Guid tenantId)
@@ -27,7 +37,22 @@ public sealed class KernelFactory
         var builder = Kernel.CreateBuilder();
         var profile = _options.GetActiveProfile();
 
-        if (!profile.Enabled)
+        var useTenantChatModel = false;
+        string chatModelId = profile.ModelId;
+
+        if (tenantId != Guid.Empty && _deployment.Mode == HiveOpsDeploymentMode.SelfHosted)
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var tenantConfigs = scope.ServiceProvider.GetRequiredService<ITenantConfigService>();
+            var tenantCfg = tenantConfigs.GetConfigurationAsync(tenantId, CancellationToken.None).ConfigureAwait(false).GetAwaiter().GetResult();
+            if (!string.IsNullOrWhiteSpace(tenantCfg.Llm.Model))
+            {
+                chatModelId = tenantCfg.Llm.Model.Trim();
+                useTenantChatModel = true;
+            }
+        }
+
+        if (!useTenantChatModel && !profile.Enabled)
             throw new InvalidOperationException($"SemanticKernel profile '{_options.ActiveProfile}' is disabled.");
 
         var secretProvider = _provider.GetService<HiveOps.Infrastructure.Secrets.ISecretProvider>();
@@ -43,7 +68,7 @@ public sealed class KernelFactory
         catch { /* fallback to options */ }
 
         builder.AddOpenAIChatCompletion(
-            modelId: profile.ModelId,
+            modelId: chatModelId,
             apiKey: chatApiKey,
             endpoint: new Uri(_options.OpenRouter.Endpoint),
             httpClient: CreateOpenRouterHttpClient());

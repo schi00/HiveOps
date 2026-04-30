@@ -1,5 +1,12 @@
 ﻿const API='/api';
-const s={token:localStorage.getItem('token'),user:JSON.parse(localStorage.getItem('user')||'null'),isAdmin:false,incidents:[],tenantId:localStorage.getItem('tenantId')||null,tenants:[]};
+// Minimal shim for anime.js to avoid runtime errors if CDN fails to load
+try{
+ if(typeof window!=='undefined' && typeof window.anime==='undefined'){
+   const noop=()=>{};
+   window.anime=Object.assign(function(){return null;}, { stagger: () => noop });
+ }
+}catch{}
+const s={token:localStorage.getItem('token'),user:JSON.parse(localStorage.getItem('user')||'null'),isAdmin:false,incidents:[],tenantId:localStorage.getItem('tenantId')||null,tenants:[],deploymentMode:null};
 if(s.token&&s.user){showApp();}else{showLogin();}
 async function lb(){
 try{
@@ -47,7 +54,68 @@ try{
  const cur=ts.find(x=>x.id===sel.value);
  st.textContent=cur?`Estado actual: ${cur.subscriptionStatus||'—'} · Price: ${cur.stripePriceId||'—'}`:'Selecciona un tenant';
  sel.onchange=()=>{ const c=ts.find(x=>x.id===sel.value); st.textContent=c?`Estado actual: ${c.subscriptionStatus||'—'} · Price: ${c.stripePriceId||'—'}`:'Selecciona un tenant'; };
+const billCard=document.getElementById('billing-card');
+if(billCard) billCard.style.display=(s.deploymentMode==null||s.deploymentMode==='SaaS')?'':'none';
+ let dbCard=document.getElementById('selfhosted-db-card');
+ if(s.deploymentMode==='SelfHosted'){
+   if(!dbCard){
+     dbCard=document.createElement('div');
+     dbCard.id='selfhosted-db-card';
+     dbCard.className='hive-card p-6';
+     dbCard.innerHTML=`<h3 class="font-semibold text-lg mb-4">Base de datos dedicada (self-hosted)</h3>
+     <p class="text-sm mb-4" style="color:var(--text-secondary)">Asigná la cadena SQL para este tenant (queda cifrada en el servidor). Dejá vacío para borrar y usar la base catálogo.</p>
+     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+       <div class="col-span-1"><label class="text-sm block mb-2" style="color:var(--text-secondary)">Tenant</label>
+       <select id="shdb-tenant" class="input-field w-full px-3 py-2 rounded-xl text-sm"></select></div>
+       <div class="col-span-2"><label class="text-sm block mb-2" style="color:var(--text-secondary)">Connection string</label>
+       <input id="shdb-conn" type="password" autocomplete="off" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="Server=...;Database=...;User Id=...;Password=...;TrustServerCertificate=True"/></div>
+     </div>
+     <div class="flex flex-wrap gap-3 mt-4">
+       <button id="shdb-save" type="button" class="btn-primary px-5 py-2.5 rounded-xl text-sm">Guardar cadena</button>
+       <button id="shdb-clear" type="button" class="btn-secondary px-5 py-2.5 rounded-xl text-sm">Quitar (usar catálogo)</button>
+     </div>
+     <div id="shdb-status" class="mt-3 text-sm" style="color:var(--text-secondary)"></div>`;
+     el.appendChild(dbCard);
+     document.getElementById('shdb-save').onclick=async ()=>{
+       const tid=(document.getElementById('shdb-tenant')||{}).value;
+       const cs=(document.getElementById('shdb-conn')||{}).value||'';
+       if(!tid){toast('Selecciona un tenant','error');return;}
+       try{
+         await fetch(`${API}/admin/tenants/${tid}/dedicated-database`,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(s.token||'')},credentials:'include',body:JSON.stringify({connectionString:cs})});
+         document.getElementById('shdb-conn').value='';
+         toast(cs?'Cadena guardada':'Cadena eliminada','success'); shdbRefresh();
+       }catch(e){toast(e.message||'Error','error');}
+     };
+     document.getElementById('shdb-clear').onclick=async ()=>{
+       const tid=(document.getElementById('shdb-tenant')||{}).value;
+       if(!tid){toast('Selecciona un tenant','error');return;}
+       try{
+         await fetch(`${API}/admin/tenants/${tid}/dedicated-database`,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(s.token||'')},credentials:'include',body:JSON.stringify({connectionString:null})});
+         toast('Cadena eliminada','success'); shdbRefresh();
+       }catch(e){toast(e.message||'Error','error');}
+     };
+   }
+   const shSel=document.getElementById('shdb-tenant');
+   if(shSel){
+     shSel.innerHTML='';
+     ts.forEach(t=>{const o=document.createElement('option');o.value=t.id;o.textContent=t.name;shSel.appendChild(o);});
+     if(s.tenantId) shSel.value=s.tenantId;
+     shSel.onchange=()=>shdbRefresh();
+   }
+   shdbRefresh();
+ } else if(dbCard){ dbCard.remove(); }
 }catch(e){console.warn('billing ui error',e);}
+}
+async function shdbRefresh(){
+try{
+ const tid=(document.getElementById('shdb-tenant')||{}).value;
+ const st=document.getElementById('shdb-status');
+ if(!st||!tid) return;
+ const r=await fetch(`${API}/admin/tenants/${tid}/dedicated-database`,{headers:{'Authorization':'Bearer '+(s.token||''),'Content-Type':'application/json'},credentials:'include'});
+ if(!r.ok){ st.textContent='No se pudo leer el estado'; return; }
+ const j=await r.json();
+ st.textContent=j&&j.configured?'Hay cadena dedicada configurada para este tenant.':'Sin cadena dedicada (usa catálogo).';
+}catch{}
 }
 document.getElementById('login-form').addEventListener('submit',async e=>{
 e.preventDefault();
@@ -91,11 +159,15 @@ async function initRealtime(){
   }catch(e){console.warn('Realtime init failed',e)}
 }
 function showLogin(){document.getElementById('login-screen').classList.remove('hidden');document.getElementById('app').classList.add('hidden');}
-function showApp(){
+async function loadDeploymentInfo(){
+try{const d=await api('GET','/deployment/info');s.deploymentMode=d&&d.mode?d.mode:null;}catch{s.deploymentMode=null;}
+}
+async function showApp(){
 try{
 document.getElementById('login-screen').classList.add('hidden');
 document.getElementById('app').classList.remove('hidden');
 s.isAdmin=s.user.role==='SuperAdmin'||s.user.role==='Admin';
+await loadDeploymentInfo();
 if(s.isAdmin){const adm=document.getElementById('n-adm');if(adm)adm.classList.remove('hidden');}
 else {const adm=document.getElementById('n-adm');if(adm)adm.classList.add('hidden');}
 setTimeout(()=>{loadTenants();n('dashboard');ld();initRealtime();},100);
@@ -356,56 +428,102 @@ ld();li();
 localStorage.removeItem('tenantId');
 }
 }
+async function patchTenantPath(pathRel, payload){
+if(!s.tenantId){throw new Error('Sin tenant');}
+const o={method:'PATCH',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(s.token||'')},credentials:'include',body:JSON.stringify(payload)};
+if(s.tenantId)o.headers['X-Tenant-Id']=s.tenantId;
+const r=await fetch(`${API}/tenants/${s.tenantId}${pathRel}`,o);
+if(r.status===401){logout();throw new Error('Sesion expirada');}
+const t=await r.text();
+if(!r.ok){throw new Error(t||r.statusText);}
+return t?JSON.parse(t):null;}
 async function lc(){
 try{
 if(!s.tenantId){toast('Selecciona un tenant primero','warning');return;}
 const cfg=await api('GET','/tenants/'+s.tenantId+'/config');
-document.getElementById('cfg-model').value=cfg.agent?.tone||'sales';
-document.getElementById('cfg-temp').value=0.7;
-document.getElementById('temp-value').textContent='0.7';
-document.getElementById('cfg-tokens').value=cfg.agent?.maxSteps||3;
-document.getElementById('cfg-db-conn').value='';
-document.getElementById('cfg-db-enabled').checked=cfg.tools?.toolSettings?.length>0||false;
+const el=id=>document.getElementById(id);
+const llmHint=el('cfg-llm-selfhosted-hint');
+if(llmHint){ if(s.deploymentMode==='SelfHosted') llmHint.classList.remove('hidden'); else llmHint.classList.add('hidden'); }
+el('cfg-schema-banner').textContent='Schema v'+(cfg.configurationSchemaVersion ?? '?');
+const a=cfg.agent||{};
+el('cfg-agent-enabled').checked=a.enabled!==false;
+el('cfg-planner').checked=a.enableLlmPlanner!==false;
+el('cfg-planner-version').value=a.plannerVersion||'v1';
+el('cfg-tone').value=a.tone||'sales';
+el('cfg-max-steps').value=a.maxSteps??3;
+const L=cfg.llm||{};
+el('cfg-llm-provider').value=L.provider||'openai';
+el('cfg-llm-model').value=L.model||'gpt-4';
+const temp=L.temperature??0.7;
+el('cfg-llm-temp').value=String(temp);
+el('cfg-llm-temp-val').textContent=String(temp);
+el('cfg-llm-max-out').value=L.maxOutputTokens??2000;
+const D=cfg.deployGit||{};
+el('cfg-auto-deploy').checked=D.autoDeployEnabled!==false;
+el('cfg-manual-deploy').checked=D.manualDeployAllowed!==false;
+el('cfg-git-url').value=D.gitRepositoryUrl||'';
+el('cfg-git-branch').value=D.gitDefaultBranch||'main';
+el('cfg-git-subpath').value=D.workingDirectoryRelativePath||'';
+const E=cfg.escalation||{};
+el('cfg-esc-enable').checked=E.enableEscalation!==false;
+el('cfg-esc-frust').checked=E.enableFrustrationEscalation!==false;
+el('cfg-esc-max-failures').value=E.maxPlannerFailuresBeforeEscalation??3;
+el('cfg-esc-keywords').value=(E.triggerKeywords||[]).join(', ');
+el('cfg-policies-json').value=JSON.stringify(cfg.policies||[],null,2);
+const w=(cfg.channel&&cfg.channel.whatsApp)||{};
+el('cfg-wa-buttons').checked=w.enableInteractiveButtons!==false;
+el('cfg-wa-menu').checked=w.enableInteractiveMenu!==false;
+el('cfg-wa-list-long').checked=w.preferListForLongChoices!==false;
+el('cfg-wa-max-qr').value=w.maxQuickReplyButtons??3;
 }catch(e){toast(e.message,'error');}
 }
 function applyPreset(preset){
 const presets={
-basic:{model:'gpt-3.5-turbo',temperature:0.5,maxTokens:1000},
+basic:{model:'gpt-3.5-turbo',temperature:0.5,maxTokens:1600},
 standard:{model:'gpt-4',temperature:0.7,maxTokens:2000},
-advanced:{model:'gpt-4',temperature:0.8,maxTokens:4000}
+advanced:{model:'gpt-4',temperature:0.85,maxTokens:4000}
 };
 const p=presets[preset];
-document.getElementById('cfg-model').value=p.model;
-document.getElementById('cfg-temp').value=p.temperature;
-document.getElementById('temp-value').textContent=p.temperature;
-document.getElementById('cfg-tokens').value=p.maxTokens;
+document.getElementById('cfg-llm-model').value=p.model;
+document.getElementById('cfg-llm-temp').value=String(p.temperature);
+document.getElementById('cfg-llm-temp-val').textContent=String(p.temperature);
+document.getElementById('cfg-llm-max-out').value=p.maxTokens;
 ['basic','standard','advanced'].forEach(k=>{
 const el=document.getElementById('preset-'+k);
 if(el){if(k===preset)el.classList.add('preset-selected');else el.classList.remove('preset-selected');}
 });
-toast('Preconfiguración '+preset+' aplicada','success');
+toast('Preconfiguración '+preset+' aplicada (guardá LLM para persistir)','success');
 }
-async function saveConfig(){
+function buildAgentPayload(){return{enabled:document.getElementById('cfg-agent-enabled').checked,enableLlmPlanner:document.getElementById('cfg-planner').checked,plannerVersion:document.getElementById('cfg-planner-version').value||'v1',maxSteps:parseInt(document.getElementById('cfg-max-steps').value,10)||3,tone:document.getElementById('cfg-tone').value||'sales',systemPromptOverride:null,promptVariables:{},allowedTools:[]};}
+function buildLlmPayload(){return{provider:document.getElementById('cfg-llm-provider').value||'openai',model:document.getElementById('cfg-llm-model').value||'gpt-4',temperature:parseFloat(document.getElementById('cfg-llm-temp').value)||0.7,topP:null,maxOutputTokens:parseInt(document.getElementById('cfg-llm-max-out').value,10)||2000};}
+function buildDeployPayload(){return{autoDeployEnabled:document.getElementById('cfg-auto-deploy').checked,manualDeployAllowed:document.getElementById('cfg-manual-deploy').checked,gitRepositoryUrl:(document.getElementById('cfg-git-url').value||'').trim()||null,gitDefaultBranch:document.getElementById('cfg-git-branch').value||'main',workingDirectoryRelativePath:(document.getElementById('cfg-git-subpath').value||'').trim()||null};}
+function buildEscalationPayload(){const raw=(document.getElementById('cfg-esc-keywords').value||'').split(',').map(x=>x.trim()).filter(Boolean);return{enableEscalation:document.getElementById('cfg-esc-enable').checked,enableFrustrationEscalation:document.getElementById('cfg-esc-frust').checked,maxPlannerFailuresBeforeEscalation:parseInt(document.getElementById('cfg-esc-max-failures').value,10)||3,triggerKeywords:raw};}
+function buildChannelPayload(){return{whatsApp:{enableInteractiveButtons:document.getElementById('cfg-wa-buttons').checked,enableInteractiveMenu:document.getElementById('cfg-wa-menu').checked,preferListForLongChoices:document.getElementById('cfg-wa-list-long').checked,maxQuickReplyButtons:Math.min(3,Math.max(1,parseInt(document.getElementById('cfg-wa-max-qr').value,10)||3))}};}
+async function saveAgentRuntime(){if(!s.tenantId)return;try{await patchTenantPath('/config/agent',buildAgentPayload());toast('Runtime del agente guardado','success');}catch(e){toast(e.message,'error');}}
+async function saveLlmSection(){if(!s.tenantId)return;try{await patchTenantPath('/config/llm',buildLlmPayload());toast('LLM guardado','success');}catch(e){toast(e.message,'error');}}
+async function saveDeployGitSection(){if(!s.tenantId)return;try{await patchTenantPath('/config/deploy-git',buildDeployPayload());toast('Deploy/Git guardado','success');}catch(e){toast(e.message,'error');}}
+async function saveEscalationSection(){if(!s.tenantId)return;try{await patchTenantPath('/config/escalation',buildEscalationPayload());toast('Escalación guardada','success');}catch(e){toast(e.message,'error');}}
+async function saveChannelSection(){if(!s.tenantId)return;try{await patchTenantPath('/config/channel',buildChannelPayload());toast('Canal guardado','success');}catch(e){toast(e.message,'error');}}
+async function savePoliciesSection(){if(!s.tenantId)return;try{const txt=document.getElementById('cfg-policies-json').value.trim();let arr=[]; if(txt){arr=JSON.parse(txt); if(!Array.isArray(arr))throw new Error('Políticas: se esperaba un JSON array')} await patchTenantPath('/config/policies',arr);toast('Políticas guardadas','success');}catch(e){toast(e.message||'JSON inválido','error');}}
+async function saveAllConfigSections(){
+if(!s.tenantId)return;
 try{
-const cfg={
-agent:{enabled:true,enableLlmPlanner:true,plannerVersion:'v1',maxSteps:parseInt(document.getElementById('cfg-tokens').value),tone:document.getElementById('cfg-model').value,systemPromptOverride:null,promptVariables:{},allowedTools:[]},
-tools:{toolSettings:{}},
-business:{},
-channel:{},
-escalation:{},
-featureFlags:{},
-abTesting:{},
-policies:[]
-};
-await api('PUT','/tenants/'+s.tenantId+'/config',cfg);
-toast('Configuración guardada','success');
-}catch(e){toast(e.message,'error');}
-}
+await patchTenantPath('/config/agent',buildAgentPayload());
+await patchTenantPath('/config/llm',buildLlmPayload());
+await patchTenantPath('/config/deploy-git',buildDeployPayload());
+await patchTenantPath('/config/escalation',buildEscalationPayload());
+await patchTenantPath('/config/channel',buildChannelPayload());
+const txt=document.getElementById('cfg-policies-json').value.trim();
+let arr=[]; if(txt){arr=JSON.parse(txt); if(!Array.isArray(arr))throw new Error('Políticas: array JSON requerido');}
+await patchTenantPath('/config/policies',arr);
+toast('Todas las secciones guardadas','success');
+}catch(e){toast(e.message||'Error al guardar','error');}}
 function resetConfig(){
 lc();
-toast('Cambios descartados','info');
+toast('Datos recargados desde servidor','info');
 }
-document.getElementById('cfg-temp').addEventListener('input',e=>{document.getElementById('temp-value').textContent=e.target.value;});
+try{document.getElementById('cfg-llm-temp')?.addEventListener('input',e=>{document.getElementById('cfg-llm-temp-val').textContent=e.target.value});}catch{}
+
 
 let notifications=[];
 function toggleNotifications(){

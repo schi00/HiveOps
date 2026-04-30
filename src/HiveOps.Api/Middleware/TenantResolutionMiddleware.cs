@@ -23,8 +23,10 @@ public sealed class TenantResolutionMiddleware
     private static readonly HashSet<string> _exemptPaths =
     [
         "/health",
+        "/api/health",
         "/swagger",
         "/api/auth",
+        "/api/onboarding",
         "/webhook/whatsapp",
         "/webhooks/whatsapp",
         "/api/admin",

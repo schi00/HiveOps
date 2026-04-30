@@ -1,11 +1,16 @@
+using System.Text;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using HiveOps.Api.Authentication;
 using HiveOps.Api.Services;
 using HiveOps.Api.Utilities;
 using HiveOps.Application.Interfaces;
 using HiveOps.Application.Models;
 using HiveOps.Domain.Entities;
+using HiveOps.Domain.Interfaces;
 using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Secrets;
 using HiveOps.Infrastructure.Persistence;
@@ -25,6 +30,9 @@ public sealed class AdminTenantsController : ControllerBase
     private readonly IWhatsAppAccessTokenValidator _whatsAppAccessTokenValidator;
     private readonly ILogger<AdminTenantsController> _logger;
     private readonly IStripeService _stripe;
+    private readonly IDataProtector _tenantConnectionProtector;
+    private readonly IDynamicConnectionStringResolver _connectionStringResolver;
+    private readonly IOptions<HiveOps.Application.Configuration.HiveOpsDeploymentOptions> _deploymentOptions;
 
     public AdminTenantsController(
         AppDbContext db,
@@ -35,6 +43,9 @@ public sealed class AdminTenantsController : ControllerBase
         IndustrySettingsService industrySettings,
         IWhatsAppAccessTokenValidator whatsAppAccessTokenValidator,
         IStripeService stripe,
+        IDataProtectionProvider dataProtectionProvider,
+        IDynamicConnectionStringResolver connectionStringResolver,
+        IOptions<HiveOps.Application.Configuration.HiveOpsDeploymentOptions> deploymentOptions,
         ILogger<AdminTenantsController> logger)
     {
         _db = db;
@@ -45,6 +56,9 @@ public sealed class AdminTenantsController : ControllerBase
         _industrySettings = industrySettings;
         _whatsAppAccessTokenValidator = whatsAppAccessTokenValidator;
         _stripe = stripe;
+        _tenantConnectionProtector = dataProtectionProvider.CreateProtector(DynamicConnectionStringResolver.TenantConnectionStringDataProtectionPurpose);
+        _connectionStringResolver = connectionStringResolver;
+        _deploymentOptions = deploymentOptions;
         _logger = logger;
     }
 
@@ -100,6 +114,61 @@ public sealed class AdminTenantsController : ControllerBase
         }
 
         return Ok(new { environment = _environment.EnvironmentName, sources = result });
+    }
+
+    [HttpGet("{tenantId:guid}/dedicated-database")]
+    public async Task<IActionResult> GetDedicatedDatabase(Guid tenantId, CancellationToken ct)
+    {
+        if (!IsAdminRequest()) return Unauthorized("Admin credentials required.");
+        if (_deploymentOptions.Value.Mode != HiveOps.Application.Configuration.HiveOpsDeploymentMode.SelfHosted)
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Dedicated database assignment is only available when HiveOps:Deployment:Mode is SelfHosted." });
+
+        var tenant = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+        if (tenant is null) return NotFound();
+
+        var configured = !string.IsNullOrWhiteSpace(tenant.EncryptedConnectionString);
+        return Ok(new DedicatedDatabaseStatusDto(configured));
+    }
+
+    [HttpPut("{tenantId:guid}/dedicated-database")]
+    public async Task<IActionResult> PutDedicatedDatabase(Guid tenantId, [FromBody] DedicatedDatabaseRequest request, CancellationToken ct)
+    {
+        if (!IsAdminRequest()) return Unauthorized("Admin credentials required.");
+        if (_deploymentOptions.Value.Mode != HiveOps.Application.Configuration.HiveOpsDeploymentMode.SelfHosted)
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Dedicated database assignment is only available when HiveOps:Deployment:Mode is SelfHosted." });
+
+        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+        if (tenant is null) return NotFound();
+
+        if (request?.ConnectionString is null || string.IsNullOrWhiteSpace(request.ConnectionString))
+        {
+            tenant.EncryptedConnectionString = null;
+            await _db.SaveChangesAsync(ct);
+            _connectionStringResolver.Invalidate(tenantId);
+            _logger.LogInformation("AUDIT: Dedicated database cleared for tenant {TenantId} by {Admin}", tenantId, GetAdminIdentifier());
+            return Ok(new { message = "Dedicated connection string removed.", tenantId });
+        }
+
+        var trimmed = request.ConnectionString.Trim();
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(trimmed) { ConnectTimeout = 5 };
+            await using var probe = new SqlConnection(builder.ConnectionString);
+            await probe.OpenAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Dedicated database probe failed for tenant {TenantId}", tenantId);
+            return BadRequest(new { message = "Connection probe failed. Check the connection string and network access.", detail = ex.Message });
+        }
+
+        var protectedBytes = _tenantConnectionProtector.Protect(Encoding.UTF8.GetBytes(trimmed));
+        tenant.EncryptedConnectionString = Convert.ToBase64String(protectedBytes);
+        await _db.SaveChangesAsync(ct);
+        _connectionStringResolver.Invalidate(tenantId);
+        _logger.LogInformation("AUDIT: Dedicated database configured for tenant {TenantId} by {Admin}", tenantId, GetAdminIdentifier());
+
+        return Ok(new { message = "Dedicated connection string saved.", tenantId });
     }
 
     [HttpGet("{tenantId:guid}/settings")]
@@ -503,7 +572,8 @@ public sealed class AdminTenantsController : ControllerBase
 
     private bool IsAdminRequest()
     {
-        if (User.Identity?.IsAuthenticated == true && User.IsInRole(AppRoles.Admin))
+        if (User.Identity?.IsAuthenticated == true
+            && (User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.SuperAdmin)))
             return true;
 
         var configured = _configuration["Admin:ApiKey"];
@@ -555,3 +625,7 @@ public sealed record AdminBotMetricsDto(
     IReadOnlyList<MetricPointDto> FallbacksPerDay);
 
 public sealed record EnsureSubscriptionRequest(string PriceId);
+
+public sealed record DedicatedDatabaseRequest(string? ConnectionString);
+
+public sealed record DedicatedDatabaseStatusDto(bool Configured);

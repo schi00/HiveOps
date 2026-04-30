@@ -4,12 +4,71 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+# Repository secret (Settings > Secrets): HIVEOPS_CI_SQL_PASSWORD — strong SA password for the ephemeral SQL container.
+# Must meet SQL Server complexity rules. Same value backs MSSQL_SA_PASSWORD and connection strings below.
+
 jobs:
-  build-preview:
-    runs-on: ubuntu-latest
+  ephemeral-smoke:
+    runs-on: ubuntu-22.04
+    env:
+      MSSQL_SA_PASSWORD: ${{ secrets.HIVEOPS_CI_SQL_PASSWORD }}
+      HIVEOPS_SQL_PASSWORD: ${{ secrets.HIVEOPS_CI_SQL_PASSWORD }}
+      HIVEOPS_EPHEMERAL_SQL: Server=localhost,1433;Database=Hive;User Id=sa;Password=${{ secrets.HIVEOPS_CI_SQL_PASSWORD }};TrustServerCertificate=True;MultipleActiveResultSets=true
+      HIVEOPS_EPHEMERAL_REDIS: localhost:6379
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: ${{ secrets.HIVEOPS_CI_SQL_PASSWORD }}
+        ports:
+          - 1433:1433
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Verify CI SQL secret
+        env:
+          HIVEOPS_CI_SQL_PASSWORD: ${{ secrets.HIVEOPS_CI_SQL_PASSWORD }}
+        run: |
+          if [ -z "$HIVEOPS_CI_SQL_PASSWORD" ]; then
+            echo "::error::Repository secret HIVEOPS_CI_SQL_PASSWORD is not set. Add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Wait for SQL Server port
+        run: |
+          for i in $(seq 1 60); do
+            if timeout 1 bash -c 'echo > /dev/tcp/127.0.0.1/1433' 2>/dev/null; then
+              echo "Port 1433 is accepting connections."
+              exit 0
+            fi
+            echo "Waiting for SQL ($i/60)..."
+            sleep 2
+          done
+          exit 1
+
+      - name: Install Microsoft repository and sqlcmd
+        run: |
+          set -e
+          wget -qO /tmp/packages-microsoft-prod.deb https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+          sudo dpkg -i /tmp/packages-microsoft-prod.deb
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
+          echo "/opt/mssql-tools18/bin" >> "$GITHUB_PATH"
+
+      - name: Bootstrap database
+        run: |
+          chmod +x db/bootstrap.sh
+          export HIVEOPS_SQL_PASSWORD
+          export HIVEOPS_SQL_HOST=127.0.0.1
+          export HIVEOPS_SQL_PORT=1433
+          ./db/bootstrap.sh
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -22,10 +81,5 @@ jobs:
       - name: Build
         run: dotnet build --no-restore -c Release
 
-      - name: Test (smoke)
-        run: dotnet test --no-build -c Release --filter TestCategory!=LongRunning --verbosity minimal
-
-      # Placeholder for ephemeral preview infra (containers or functions)
-      - name: Provision preview (placeholder)
-        run: |
-          echo "Preview env for PR #${{ github.event.pull_request.number }}"
+      - name: Ephemeral smoke tests
+        run: dotnet test tests/HiveOps.IntegrationTests/HiveOps.IntegrationTests.csproj --no-build -c Release --filter "Category=EphemeralSmoke" --verbosity normal

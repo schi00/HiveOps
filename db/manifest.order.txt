@@ -1,0 +1,6 @@
+# Ordered SQL bootstrap for HiveOps (one path per line). Lines starting with # are ignored.
+# After schema, apply additive patches (idempotent).
+
+create_hive_support_bot.sql
+AddTenantBillingAndStripe.sql
+AddEncryptedConnectionStringToTenants.sql

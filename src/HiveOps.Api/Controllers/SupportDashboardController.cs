@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -6,6 +7,7 @@ using HiveOps.Agents.Support;
 using HiveOps.Api.Authentication;
 using HiveOps.Application;
 using HiveOps.Application.Interfaces;
+using HiveOps.Application.Support;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
 using HiveOps.Domain.Interfaces;
@@ -30,6 +32,7 @@ public sealed class SupportDashboardController : ControllerBase
     private readonly ITenantDataFixerService _dataFixer;
     private readonly ISupervisionNotifier _notifier;
     private readonly IHubContext<SupervisionHub> _hub;
+    private readonly ITenantConfigService _tenantConfigService;
 
     public SupportDashboardController(
         AppDbContext db,
@@ -39,7 +42,8 @@ public sealed class SupportDashboardController : ControllerBase
         IDeploymentService deploymentService,
         ITenantDataFixerService dataFixer,
         ISupervisionNotifier notifier,
-        IHubContext<SupervisionHub> hub)
+        IHubContext<SupervisionHub> hub,
+        ITenantConfigService tenantConfigService)
     {
         _db = db;
         _tenantContext = tenantContext;
@@ -49,6 +53,7 @@ public sealed class SupportDashboardController : ControllerBase
         _dataFixer = dataFixer;
         _notifier = notifier;
         _hub = hub;
+        _tenantConfigService = tenantConfigService;
     }
 
     private bool IsSuperAdmin => User.IsInRole(AppRoles.SuperAdmin);
@@ -65,6 +70,12 @@ public sealed class SupportDashboardController : ControllerBase
     private Guid? GetEffectiveTenantId()
     {
         if (_tenantContext.IsResolved) return _tenantContext.TenantId;
+        var tenantClaim = User.FindFirstValue(AppClaimTypes.TenantId);
+        if (Guid.TryParse(tenantClaim, out var claimTenantId))
+        {
+            _tenantContext.SetTenant(claimTenantId);
+            return claimTenantId;
+        }
         if (IsPrivileged) return ResolveTenantFromHeader();
         return null;
     }
@@ -496,8 +507,14 @@ public sealed class SupportDashboardController : ControllerBase
         if (string.IsNullOrWhiteSpace(incident.GitBranch))
             return BadRequest(new { message = "No branch associated with this incident." });
 
+        if (!await TenantDeployPolicy.IsManualDeployAllowedAsync(_tenantConfigService, incident.TenantId, ct))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { message = "Manual deploy is disabled for this tenant (DeployGit.ManualDeployAllowed)." });
+        }
+
         // Merge PR via Git provider API
-        var mergeResult = await _gitService.MergePullRequestAsync(incident.GitBranch, ct);
+        var mergeResult = await _gitService.MergePullRequestAsync(incident.TenantId, incident.GitBranch, ct);
 
         // After merge, trigger deploy
         var pipelineHealthy = await _deploymentService.IsPipelineHealthyAsync(ct);
@@ -542,15 +559,16 @@ public sealed class SupportDashboardController : ControllerBase
         [FromQuery] int take = 20,
         CancellationToken ct = default)
     {
-        if (!_tenantContext.IsResolved && !IsPrivileged) return Unauthorized();
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue && !IsPrivileged) return Unauthorized();
         take = Math.Clamp(take, 1, 100);
 
         var query = _db.KbArticles.AsNoTracking();
         
         // Privileged users see all KB articles, regular users see only their tenant's
-        if (!IsPrivileged)
+        if (!IsPrivileged && effectiveTenantId.HasValue)
         {
-            query = query.Where(a => a.TenantId == _tenantContext.TenantId);
+            query = query.Where(a => a.TenantId == effectiveTenantId.Value);
         }
         
         query = query.Where(a => a.IsPublished);

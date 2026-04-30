@@ -5,7 +5,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using HiveOps.Agents.Support;
+using HiveOps.Application.Configuration;
 using HiveOps.Application.Interfaces;
+using HiveOps.Application.Support;
 using HiveOps.Application.Services;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
@@ -17,6 +19,7 @@ using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
 using HiveOps.Infrastructure.Services;
 using Microsoft.SemanticKernel;
+using System.Collections.Generic;
 using System.Text;
 
 namespace HiveOps.Workers;
@@ -72,6 +75,12 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (!_options.Enabled)
+        {
+            _logger.LogInformation("Incident Auto Workflow Service is disabled by configuration.");
+            return;
+        }
+
         _logger.LogInformation("Incident Auto Workflow Service started");
 
         while (!stoppingToken.IsCancellationRequested)
@@ -243,9 +252,9 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
         var branchName = $"support/inc-{incident.Id:N}";
 
         // Create branch
-        if (!await _gitService.BranchExistsAsync(branchName, cancellationToken))
+        if (!await _gitService.BranchExistsAsync(incident.TenantId, branchName, cancellationToken))
         {
-            await _gitService.CreateBranchAsync(branchName, cancellationToken);
+            await _gitService.CreateBranchAsync(incident.TenantId, branchName, cancellationToken);
             _logger.LogInformation("Created branch {Branch} for incident {IncidentId}", branchName, incident.Id);
         }
 
@@ -316,7 +325,7 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
                 var commitMessage = $"[Auto-Fix] Incident {incident.Id}: {incident.Title}";
                 try
                 {
-                    var commitHash = await _gitService.CommitAsync(commitMessage, modifiedFiles.ToArray(), cancellationToken);
+                    var commitHash = await _gitService.CommitAsync(incident.TenantId, commitMessage, modifiedFiles.ToArray(), cancellationToken);
                     incident.GitCommitHash = commitHash;
                     incident.UpdatedAt = DateTimeOffset.UtcNow;
                     await db.SaveChangesAsync(cancellationToken);
@@ -380,7 +389,7 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
 
     private string GetProjectRoot()
     {
-        // Use the configured Git repository path from LocalGitService
+        // Project root for sandbox edits (TenantGitService uses Git:RepoPath or per-tenant workspaces).
         // This is set in appsettings.json: Git:RepoPath = "c:/temp/hiveops-work"
         var configuredRepoPath = Environment.GetEnvironmentVariable("HIVEOPS_GIT_REPO_PATH") 
             ?? "c:/temp/hiveops-work";
@@ -787,6 +796,24 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             return;
         }
 
+        using (var policyScope = _scopeFactory.CreateScope())
+        {
+            var tenantCfg = policyScope.ServiceProvider.GetRequiredService<ITenantConfigService>();
+            if (!await TenantDeployPolicy.IsAutoDeployEnabledAsync(tenantCfg, incident.TenantId, cancellationToken))
+            {
+                await _messageHistory.AppendMessageToIncidentAsync(
+                    incident.Id,
+                    MessageRole.Assistant,
+                    "Auto-deploy deshabilitado para este tenant. Se omite pipeline; el fix queda en rama para despliegue manual.",
+                    "IncidentAutoWorkflow",
+                    cancellationToken);
+                await ResolveIncidentAsync(incident, db,
+                    "Corrección lista; despliegue automático deshabilitado por configuración del tenant.",
+                    cancellationToken);
+                return;
+            }
+        }
+
         await _messageHistory.AppendMessageToIncidentAsync(
             incident.Id,
             MessageRole.Assistant,
@@ -797,7 +824,7 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
         try
         {
             // Push branch
-            await _gitService.PushAsync(incident.GitBranch, cancellationToken);
+            await _gitService.PushAsync(incident.TenantId, incident.GitBranch, cancellationToken);
 
             // Trigger deployment
             var deployId = await _deploymentService.TriggerDeployAsync(incident.GitBranch, incident.GitCommitHash ?? "", cancellationToken);
@@ -920,6 +947,21 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
         _logger.LogInformation("Incident {IncidentId} resolved and closed", incident.Id);
     }
 
+    private async Task<KernelArguments> CreateTenantPromptArgumentsAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var tenantConfigs = scope.ServiceProvider.GetRequiredService<ITenantConfigService>();
+        var deploymentOpts = scope.ServiceProvider.GetRequiredService<IOptions<HiveOpsDeploymentOptions>>();
+        var exec = await TenantLlmExecutionHelper.GetChatExecutionSettingsAsync(tenantId, tenantConfigs, deploymentOpts, cancellationToken);
+        return new KernelArguments
+        {
+            ExecutionSettings = new Dictionary<string, PromptExecutionSettings>(StringComparer.OrdinalIgnoreCase)
+            {
+                [PromptExecutionSettings.DefaultServiceId] = exec
+            }
+        };
+    }
+
     private async Task<string> GenerateCodeFixProposalAsync(Incident incident, CancellationToken cancellationToken)
     {
         // First, try rule-based fix for known Sandpit code errors
@@ -996,7 +1038,8 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
                 Keep the fix minimal - only change what's absolutely necessary.
                 """;
 
-            var result = await kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
+            var args = await CreateTenantPromptArgumentsAsync(incident.TenantId, cancellationToken);
+            var result = await kernel.InvokePromptAsync(prompt, args, cancellationToken: cancellationToken);
             var fixProposal = result.ToString();
 
             if (string.IsNullOrWhiteSpace(fixProposal))
@@ -1083,7 +1126,8 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
                 Make sure to include appropriate WHERE clauses to limit affected records.
                 """;
 
-            var result = await kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
+            var args = await CreateTenantPromptArgumentsAsync(incident.TenantId, cancellationToken);
+            var result = await kernel.InvokePromptAsync(prompt, args, cancellationToken: cancellationToken);
             var sqlFix = result.ToString().Trim();
 
             if (string.IsNullOrWhiteSpace(sqlFix))
@@ -1163,6 +1207,7 @@ public sealed class IncidentAutoWorkflowOptions
 {
     public const string SectionName = "IncidentAutoWorkflow";
 
+    public bool Enabled { get; set; } = true;
     public int PollingIntervalSeconds { get; set; } = 30;
     public int MaxConcurrentIncidents { get; set; } = 5;
     public int CodeLineThreshold { get; set; } = 3;

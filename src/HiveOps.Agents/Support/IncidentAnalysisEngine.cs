@@ -1,11 +1,14 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
+using HiveOps.Application.Configuration;
+using HiveOps.Application.Interfaces;
+using HiveOps.Infrastructure.AI;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
 using HiveOps.Domain.Models;
-using HiveOps.Infrastructure.AI;
 using HiveOps.Infrastructure.Persistence;
 
 namespace HiveOps.Agents.Support;
@@ -23,11 +26,19 @@ public sealed class IncidentAnalysisEngine
 {
     private readonly KernelFactory _kernelFactory;
     private readonly AppDbContext _db;
+    private readonly ITenantConfigService _tenantConfigService;
+    private readonly IOptions<HiveOpsDeploymentOptions> _deploymentOptions;
 
-    public IncidentAnalysisEngine(KernelFactory kernelFactory, AppDbContext db)
+    public IncidentAnalysisEngine(
+        KernelFactory kernelFactory,
+        AppDbContext db,
+        ITenantConfigService tenantConfigService,
+        IOptions<HiveOpsDeploymentOptions> deploymentOptions)
     {
         _kernelFactory = kernelFactory;
         _db = db;
+        _tenantConfigService = tenantConfigService;
+        _deploymentOptions = deploymentOptions;
     }
 
     public async Task<IncidentAnalysisResult> AnalyzeAsync(
@@ -79,7 +90,9 @@ public sealed class IncidentAnalysisEngine
         history.AddSystemMessage(systemPrompt);
         history.AddUserMessage($"Incident description:\n{description}");
 
-        var response = await chat.GetChatMessageContentAsync(history, cancellationToken: ct);
+        var exec = await TenantLlmExecutionHelper.GetChatExecutionSettingsAsync(
+            tenantId, _tenantConfigService, _deploymentOptions, ct);
+        var response = await chat.GetChatMessageContentAsync(history, exec, cancellationToken: ct);
         var rawJson = response.Content ?? "";
 
         // ── 4. Audit log (prompt + response) ────────────────────────────────

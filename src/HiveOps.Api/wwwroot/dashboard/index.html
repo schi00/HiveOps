@@ -806,70 +806,133 @@ html.light .hex-pattern {
     
     <!-- Config View -->
     <div id="v-config" class="view-section space-y-6">
-      <h2 class="text-2xl font-bold">Configuración del Tenant</h2>
-      
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 class="text-2xl font-bold">Configuración del Tenant</h2>
+        <span id="cfg-schema-banner" class="text-xs px-3 py-1 rounded-full hive-card border" style="color:var(--text-tertiary)">Schema —</span>
+      </div>
+      <p class="text-sm" style="color:var(--text-secondary)">Cada tarjeta se guarda de forma independiente (PATCH por sección). Seleccioná tenant arriba.</p>
+
       <!-- Presets -->
       <div class="hive-card p-6">
-        <h3 class="font-semibold text-lg mb-4">Preconfiguración Rápida</h3>
+        <h3 class="font-semibold text-lg mb-4">Preconfiguración rápida (LLM)</h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button id="preset-basic" onclick="applyPreset('basic')" class="hive-card p-4 text-left hover:border-amber-500/50 transition-all">
+          <button id="preset-basic" type="button" onclick="applyPreset('basic')" class="hive-card p-4 text-left hover:border-amber-500/50 transition-all">
             <div class="font-semibold mb-2" style="color:var(--text-primary)">Básico</div>
-            <div class="text-sm" style="color:var(--text-secondary)">Configuración simple para empezar</div>
+            <div class="text-sm" style="color:var(--text-secondary)">Modelo rápido, menor costo</div>
           </button>
-          <button id="preset-standard" onclick="applyPreset('standard')" class="hive-card p-4 text-left hover:border-amber-500/50 transition-all">
+          <button id="preset-standard" type="button" onclick="applyPreset('standard')" class="hive-card p-4 text-left hover:border-amber-500/50 transition-all">
             <div class="font-semibold mb-2" style="color:var(--text-primary)">Estándar</div>
-            <div class="text-sm" style="color:var(--text-secondary)">Configuración recomendada</div>
+            <div class="text-sm" style="color:var(--text-secondary)">Equilibrio recomendado</div>
           </button>
-          <button id="preset-advanced" onclick="applyPreset('advanced')" class="hive-card p-4 text-left hover:border-amber-500/50 transition-all">
+          <button id="preset-advanced" type="button" onclick="applyPreset('advanced')" class="hive-card p-4 text-left hover:border-amber-500/50 transition-all">
             <div class="font-semibold mb-2" style="color:var(--text-primary)">Avanzado</div>
-            <div class="text-sm" style="color:var(--text-secondary)">Todas las opciones disponibles</div>
+            <div class="text-sm" style="color:var(--text-secondary)">Más temperatura/tokens</div>
           </button>
         </div>
       </div>
-      
-      <!-- Agent Configuration -->
+
+      <!-- Agent runtime -->
       <div class="hive-card p-6">
-        <h3 class="font-semibold text-lg mb-4">Configuración del Agente</h3>
-        <div class="space-y-4">
-          <div>
-            <label class="text-sm font-medium block mb-2" style="color:var(--text-secondary)">Modelo LLM</label>
-            <select id="cfg-model" class="input-field w-full px-4 py-2.5 rounded-xl text-sm">
-              <option value="gpt-4">GPT-4</option>
-              <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-              <option value="claude-3">Claude 3</option>
-            </select>
-          </div>
-          <div>
-            <label class="text-sm font-medium block mb-2" style="color:var(--text-secondary)">Temperatura (0-1)</label>
-            <input id="cfg-temp" type="range" min="0" max="1" step="0.1" value="0.7" class="w-full"/>
-            <div class="text-xs mt-1" style="color:var(--text-tertiary)">Valor actual: <span id="temp-value">0.7</span></div>
-          </div>
-          <div>
-            <label class="text-sm font-medium block mb-2" style="color:var(--text-secondary)">Max Tokens</label>
-            <input id="cfg-tokens" type="number" value="2000" class="input-field w-full px-4 py-2.5 rounded-xl text-sm"/>
+        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+          <h3 class="font-semibold text-lg">Runtime del agente (planner)</h3>
+          <button type="button" onclick="saveAgentRuntime()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar runtime</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-agent-enabled" type="checkbox" class="accent-amber-500"/> Agente habilitado</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-planner" type="checkbox" class="accent-amber-500"/> Planner LLM</label>
+          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Planner version</label>
+            <input id="cfg-planner-version" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" value="v1"/></div>
+          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Tono conversacional</label>
+            <input id="cfg-tone" type="text" placeholder="sales, soporte..." class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
+          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Pasos máx. planner</label>
+            <input id="cfg-max-steps" type="number" min="1" max="8" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
+        </div>
+      </div>
+
+      <!-- LLM -->
+      <div class="hive-card p-6">
+        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+          <h3 class="font-semibold text-lg">Modelo LLM (proveedor)</h3>
+          <button type="button" onclick="saveLlmSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar LLM</button>
+        </div>
+        <p id="cfg-llm-selfhosted-hint" class="hidden text-xs mb-4 rounded-lg px-3 py-2" style="color:var(--text-secondary);background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2)">Self-hosted: el campo <strong>Modelo</strong> debe ser un id de OpenRouter (p. ej. <code class="text-amber-500">meta-llama/llama-3.3-70b-instruct</code>), igual que en appsettings SemanticKernel.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Proveedor</label>
+            <select id="cfg-llm-provider" class="input-field w-full px-3 py-2 rounded-xl text-sm"><option value="openai">openai</option><option value="azure">azure</option><option value="anthropic">anthropic</option></select></div>
+          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Modelo</label>
+            <input id="cfg-llm-model" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="gpt-4"/></div>
+          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Temperatura (0–2)</label>
+            <input id="cfg-llm-temp" type="range" min="0" max="2" step="0.05" value="0.7" class="w-full"/>
+            <div class="text-xs mt-1" style="color:var(--text-tertiary)"><span id="cfg-llm-temp-val">0.7</span></div></div>
+          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Max tokens salida</label>
+            <input id="cfg-llm-max-out" type="number" min="128" max="32000" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
+        </div>
+      </div>
+
+      <!-- Deploy / Git -->
+      <div class="hive-card p-6">
+        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+          <h3 class="font-semibold text-lg">Deploy y Git (tenant)</h3>
+          <button type="button" onclick="saveDeployGitSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar Deploy/Git</button>
+        </div>
+        <div class="space-y-3">
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-auto-deploy" type="checkbox" class="accent-amber-500"/> Auto-deploy (workflow incidentes)</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-manual-deploy" type="checkbox" class="accent-amber-500"/> Permitir deploy manual (panel/plugin/aprobaciones)</label>
+          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">URL repo Git (opcional)</label>
+            <input id="cfg-git-url" type="url" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="https://github.com/org/repo"/></div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Rama por defecto</label><input id="cfg-git-branch" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
+            <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Subcarpeta (mono-repo)</label><input id="cfg-git-subpath" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="src/sandpit"/></div>
           </div>
         </div>
       </div>
-      
-      <!-- Database Configuration -->
+
+      <!-- Escalation -->
       <div class="hive-card p-6">
-        <h3 class="font-semibold text-lg mb-4">Acceso a Base de Datos</h3>
-        <div class="space-y-4">
-          <div>
-            <label class="text-sm font-medium block mb-2" style="color:var(--text-secondary)">Conexión</label>
-            <input id="cfg-db-conn" type="text" placeholder="Server=...;Database=..." class="input-field w-full px-4 py-2.5 rounded-xl text-sm"/>
-          </div>
-          <div class="flex items-center gap-2">
-            <input id="cfg-db-enabled" type="checkbox" class="w-4 h-4 rounded accent-amber-500"/>
-            <label class="text-sm" style="color:var(--text-secondary)">Permitir ejecución de SQL</label>
-          </div>
+        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+          <h3 class="font-semibold text-lg">Escalación</h3>
+          <button type="button" onclick="saveEscalationSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar escalación</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-esc-enable" type="checkbox" class="accent-amber-500"/> Escalación habilitada</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-esc-frust" type="checkbox" class="accent-amber-500"/> Escalación por frustración</label>
+          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Fallos planner antes de escalar</label>
+            <input id="cfg-esc-max-failures" type="number" min="1" max="10" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
+          <div class="md:col-span-2"><label class="text-sm block mb-1" style="color:var(--text-secondary)">Keywords (coma)</label>
+            <input id="cfg-esc-keywords" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="reembolso, cancelar,..."/></div>
         </div>
       </div>
-      
-      <!-- Save Button -->
-      <div class="flex gap-3">
-        <button onclick="saveConfig()" class="btn-primary px-6 py-3 rounded-xl text-sm">Guardar Configuración</button>
-        <button onclick="resetConfig()" class="btn-secondary px-6 py-3 rounded-xl text-sm">Descartar Cambios</button>
+
+      <!-- Policies JSON -->
+      <div class="hive-card p-6">
+        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+          <div>
+            <h3 class="font-semibold text-lg">Políticas (JSON)</h3>
+            <p class="text-xs mt-1" style="color:var(--text-tertiary)">Lista de objetos &#123; condition, action, parameters &#125;</p>
+          </div>
+          <button type="button" onclick="savePoliciesSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar políticas</button>
+        </div>
+        <textarea id="cfg-policies-json" rows="8" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder='[{"condition":"Always","action":"noop","parameters":{}}]'></textarea>
+      </div>
+
+      <!-- Channel -->
+      <div class="hive-card p-6">
+        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+          <h3 class="font-semibold text-lg">Canal WhatsApp (UI)</h3>
+          <button type="button" onclick="saveChannelSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar canal</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-wa-buttons" type="checkbox" class="accent-amber-500"/> Botones interactivos</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-wa-menu" type="checkbox" class="accent-amber-500"/> Menú interactivo</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer md:col-span-2"><input id="cfg-wa-list-long" type="checkbox" class="accent-amber-500"/> Lista larga cuando aplique</label>
+          <div><label class="text-sm block mb-1">Max botones rápidos (1–3)</label>
+            <input id="cfg-wa-max-qr" type="number" min="1" max="3" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-3">
+        <button type="button" onclick="saveAllConfigSections()" class="btn-primary px-6 py-3 rounded-xl text-sm">Guardar todas las secciones</button>
+        <button type="button" onclick="resetConfig()" class="btn-secondary px-6 py-3 rounded-xl text-sm">Recargar desde servidor</button>
       </div>
     </div>
     
@@ -1236,11 +1299,18 @@ initTheme();
       });
     }catch(e){ console.warn('portal enhancer failed', e); }
   }
-  // Observe DOM to add the button once the billing card appears
-  var obs = new MutationObserver(function(){ enhance(); });
-  obs.observe(document.body, { childList:true, subtree:true });
-  // Also attempt shortly after load
+  // Run once after load and when user enters Admin view.
   window.addEventListener('load', function(){ setTimeout(enhance, 800); });
+  var originalNavigate = window.n;
+  if (typeof originalNavigate === 'function') {
+    window.n = function(view){
+      var result = originalNavigate.apply(this, arguments);
+      if (view === 'admin') {
+        setTimeout(enhance, 150);
+      }
+      return result;
+    };
+  }
 })();
 </script>
 <script>
@@ -1308,9 +1378,19 @@ initTheme();
     }catch(e){ console.warn('usage widget failed', e); }
   }
   // Refresh when navigating to Admin and also when tenant selection changes (if present)
-  const obs = new MutationObserver(()=>ensureWidget());
-  obs.observe(document.body,{childList:true,subtree:true});
   window.addEventListener('load', ()=> setTimeout(ensureWidget, 900));
+  const tenantSelect = document.getElementById('tenant-select');
+  if (tenantSelect) tenantSelect.addEventListener('change', ()=> setTimeout(ensureWidget, 50));
+  const originalNavigate = window.n;
+  if (typeof originalNavigate === 'function') {
+    window.n = function(view){
+      const result = originalNavigate.apply(this, arguments);
+      if (view === 'admin') {
+        setTimeout(ensureWidget, 150);
+      }
+      return result;
+    };
+  }
 })();
 </script>
 <script>
@@ -1339,9 +1419,19 @@ initTheme();
       badge.textContent = `(30d: ${data?.total ?? 0})`;
     }catch(e){ /* silent */ }
   }
-  const obs = new MutationObserver(()=>loadBadge());
-  obs.observe(document.body,{childList:true,subtree:true});
   window.addEventListener('load', ()=> setTimeout(loadBadge, 1200));
+  const tenantSelect = document.getElementById('tenant-select');
+  if (tenantSelect) tenantSelect.addEventListener('change', ()=> setTimeout(loadBadge, 50));
+  const originalNavigate = window.n;
+  if (typeof originalNavigate === 'function') {
+    window.n = function(view){
+      const result = originalNavigate.apply(this, arguments);
+      if (view === 'admin') {
+        setTimeout(loadBadge, 150);
+      }
+      return result;
+    };
+  }
 })();
 </script>
 <script>
@@ -1379,9 +1469,19 @@ initTheme();
       badge.textContent = `Plan: ${plan}`;
     }catch(e){ /* silent */ }
   }
-  const obs = new MutationObserver(()=>loadPlan());
-  obs.observe(document.body,{childList:true,subtree:true});
   window.addEventListener('load', ()=> setTimeout(loadPlan, 1000));
+  const tenantSelect = document.getElementById('tenant-select');
+  if (tenantSelect) tenantSelect.addEventListener('change', ()=> setTimeout(loadPlan, 50));
+  const originalNavigate = window.n;
+  if (typeof originalNavigate === 'function') {
+    window.n = function(view){
+      const result = originalNavigate.apply(this, arguments);
+      if (view === 'admin') {
+        setTimeout(loadPlan, 150);
+      }
+      return result;
+    };
+  }
   window.addEventListener('storage', (e)=>{ if(e.key==='tenantId') loadPlan(); });
 })();
 </script>

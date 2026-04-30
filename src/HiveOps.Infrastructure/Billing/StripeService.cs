@@ -1,9 +1,9 @@
 using HiveOps.Application.Interfaces;
 using HiveOps.Infrastructure.Secrets;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using HiveOps.Infrastructure.Persistence;
-// Note: We depend on Stripe SDK if available; otherwise we no-op gracefully.
 
 namespace HiveOps.Infrastructure.Billing;
 
@@ -22,11 +22,40 @@ public sealed class StripeService : IStripeService
         _db = db;
     }
 
-    public Task EnsureCustomerAsync(Guid tenantId, string tenantName, CancellationToken ct = default)
+    public async Task EnsureCustomerAsync(Guid tenantId, string tenantName, CancellationToken ct = default)
     {
         _logger.LogInformation("[Stripe] EnsureCustomer tenant={TenantId} name={Name}", tenantId, tenantName);
-        // TODO: Use Stripe SDK; for now, placeholder no-op.
-        return Task.CompletedTask;
+#if STRIPE_SDK
+        var apiKey = _options.ApiKey;
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            _logger.LogWarning("[Stripe] ApiKey missing; cannot ensure customer");
+            return;
+        }
+
+        Stripe.StripeConfiguration.ApiKey = apiKey;
+        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+        if (tenant is null)
+        {
+            _logger.LogWarning("[Stripe] Tenant not found {TenantId}", tenantId);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(tenant.StripeCustomerId))
+            return;
+
+        var custService = new Stripe.CustomerService();
+        var cust = await custService.CreateAsync(new Stripe.CustomerCreateOptions
+        {
+            Name = tenantName,
+            Metadata = new Dictionary<string, string> { ["tenantId", tenant.Id.ToString()] }
+        }, cancellationToken: ct);
+        tenant.StripeCustomerId = cust.Id;
+        await _db.SaveChangesAsync(ct);
+#else
+        _logger.LogDebug("[Stripe] SDK not compiled in; EnsureCustomer is a no-op");
+        await Task.CompletedTask;
+#endif
     }
 
     public async Task EnsureSubscriptionAsync(Guid tenantId, string priceId, CancellationToken ct = default)
@@ -51,7 +80,7 @@ public sealed class StripeService : IStripeService
             var cust = await custService.CreateAsync(new Stripe.CustomerCreateOptions
             {
                 Name = tenant.Name,
-                Metadata = new System.Collections.Generic.Dictionary<string, string>{{"tenantId", tenant.Id.ToString()}}
+                Metadata = new Dictionary<string, string>{{"tenantId", tenant.Id.ToString()}}
             }, cancellationToken: ct);
             tenant.StripeCustomerId = cust.Id;
         }
@@ -63,7 +92,7 @@ public sealed class StripeService : IStripeService
             var sub = await subService.CreateAsync(new Stripe.SubscriptionCreateOptions
             {
                 Customer = tenant.StripeCustomerId,
-                Items = new System.Collections.Generic.List<Stripe.SubscriptionItemOptions>
+                Items = new List<Stripe.SubscriptionItemOptions>
                 {
                     new Stripe.SubscriptionItemOptions { Price = priceId }
                 }
@@ -107,13 +136,17 @@ public sealed class StripeService : IStripeService
             }
 #if STRIPE_SDK
             Stripe.StripeConfiguration.ApiKey = apiKey;
-            var customers = new Stripe.CustomerService();
-            // In real impl, look up tenant.StripeCustomerId from DB here (this service would need db or a provider)
-            // For now, we assume caller verifies existence and passes via context; this is a placeholder.
+            var tenant = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == tenantId, ct);
+            if (tenant is null || string.IsNullOrWhiteSpace(tenant.StripeCustomerId))
+            {
+                _logger.LogWarning("[Stripe] Tenant or StripeCustomerId missing for tenant {TenantId}", tenantId);
+                return null;
+            }
+
             var sessionService = new Stripe.BillingPortal.SessionService();
             var session = await sessionService.CreateAsync(new Stripe.BillingPortal.SessionCreateOptions
             {
-                Customer = "{{SET_CUSTOMER_ID}}", // TODO: wire real customer id via caller or repository
+                Customer = tenant.StripeCustomerId,
                 ReturnUrl = returnUrl
             }, cancellationToken: ct);
             return session?.Url;
@@ -165,8 +198,8 @@ public sealed class StripeService : IStripeService
         {
             _logger.LogWarning(ex, "[Stripe] Failed to send usage record for tenant {TenantId}", tenantId);
         }
-#endif
+#else
         await Task.CompletedTask;
-        return;
+#endif
     }
 }

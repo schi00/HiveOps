@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.SemanticKernel;
 using HiveOps.Application;
 using HiveOps.Application.Interfaces;
+using HiveOps.Application.Support;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
 using HiveOps.Domain.Interfaces;
@@ -24,19 +25,22 @@ public sealed class SupportPlugin
     private readonly IGitService _gitService;
     private readonly IDeploymentService _deploymentService;
     private readonly ISupervisionNotifier _notifier;
+    private readonly ITenantConfigService _tenantConfigService;
 
     public SupportPlugin(
         AppDbContext db,
         IConversationStateManager stateManager,
         IGitService gitService,
         IDeploymentService deploymentService,
-        ISupervisionNotifier notifier)
+        ISupervisionNotifier notifier,
+        ITenantConfigService tenantConfigService)
     {
         _db = db;
         _stateManager = stateManager;
         _gitService = gitService;
         _deploymentService = deploymentService;
         _notifier = notifier;
+        _tenantConfigService = tenantConfigService;
     }
 
     [KernelFunction("analyze_incident")]
@@ -165,9 +169,9 @@ public sealed class SupportPlugin
         var branchName = $"support/inc-{incident.Id:N}-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}";
         var commitMessage = $"[Support Bot] Fix for incident {incident.Id}: {fixDescription}";
 
-        await _gitService.CreateBranchAsync(branchName, cancellationToken);
-        var commitHash = await _gitService.CommitAsync(commitMessage, filePaths, cancellationToken);
-        await _gitService.PushAsync(branchName, cancellationToken);
+        await _gitService.CreateBranchAsync(tenantId, branchName, cancellationToken);
+        var commitHash = await _gitService.CommitAsync(tenantId, commitMessage, filePaths, cancellationToken);
+        await _gitService.PushAsync(tenantId, branchName, cancellationToken);
 
         incident.GitBranch = branchName;
         incident.GitCommitHash = commitHash;
@@ -256,6 +260,9 @@ public sealed class SupportPlugin
 
         if (string.IsNullOrWhiteSpace(incident.GitBranch) || string.IsNullOrWhiteSpace(incident.GitCommitHash))
             return "No code fix has been proposed for this incident.";
+
+        if (!await TenantDeployPolicy.IsManualDeployAllowedAsync(_tenantConfigService, incident.TenantId, cancellationToken))
+            return "Despliegue deshabilitado para este tenant en la configuración DeployGit (ManualDeployAllowed).";
 
         var pipelineHealthy = await _deploymentService.IsPipelineHealthyAsync(cancellationToken);
         if (!pipelineHealthy)

@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using HiveOps.Application.Configuration;
 using HiveOps.Application.Interfaces;
 using HiveOps.Domain.Interfaces;
 using HiveOps.Infrastructure.AI;
@@ -14,6 +16,7 @@ using HiveOps.Infrastructure.Persistence;
 using StackExchange.Redis;
 using HiveOps.Infrastructure.Secrets;
 using HiveOps.Infrastructure.Billing;
+using HiveOps.Infrastructure.Configuration;
 
 namespace HiveOps.Infrastructure;
 
@@ -37,6 +40,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TenantSaveChangesInterceptor>();
         services.AddMemoryCache();
         services.AddScoped<ITenantConfigService, TenantConfigService>();
+        services.AddSingleton<ITenantConfigurationAuditLogger, TenantConfigurationAuditLogger>();
 
         // ── Secrets (Env -> AWS -> Configuration) ─────────────────────────
         services.Configure<SecretsOptions>(configuration.GetSection(SecretsOptions.SectionName));
@@ -59,6 +63,14 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITenantProvider, TenantProvider>();
         services.AddSingleton<IDynamicConnectionStringResolver, DynamicConnectionStringResolver>();
 
+        // ── Deployment profile (SaaS / SelfHosted / Ephemeral) ─────────────
+        services.Configure<HiveOpsDeploymentOptions>(configuration.GetSection(HiveOpsDeploymentOptions.SectionPath));
+        services.AddSingleton<IValidateOptions<HiveOpsDeploymentOptions>, HiveOpsDeploymentOptionsValidator>();
+        services.AddOptions<HiveOpsDeploymentOptions>().ValidateOnStart();
+
+        var deployment = configuration.GetSection(HiveOpsDeploymentOptions.SectionPath).Get<HiveOpsDeploymentOptions>()
+            ?? new HiveOpsDeploymentOptions();
+
         // ── EF Core + SQL Server ───────────────────────────────────────────
         services.AddDbContext<AppDbContext>((sp, options) =>
         {
@@ -74,17 +86,24 @@ public static class ServiceCollectionExtensions
             options.AddInterceptors(tenantInterceptor, saveChangesInterceptor);
         }, ServiceLifetime.Scoped);
 
-        // ── Redis ──────────────────────────────────────────────────────────
-        services.Configure<RedisOptions>(configuration.GetSection(RedisOptions.SectionName));
-        services.AddSingleton<IConnectionMultiplexer>(sp =>
+        // ── Redis or in-memory conversation state ──────────────────────────
+        if (deployment.Mode == HiveOpsDeploymentMode.Ephemeral && deployment.AllowInMemoryConversationState)
         {
-            var opts = configuration.GetSection(RedisOptions.SectionName).Get<RedisOptions>()
-                ?? new RedisOptions();
-            var config = ConfigurationOptions.Parse(opts.ConnectionString);
-            config.AbortOnConnectFail = false;
-            return ConnectionMultiplexer.Connect(config);
-        });
-        services.AddScoped<IConversationStateManager, RedisConversationStateManager>();
+            services.AddSingleton<IConversationStateManager, InMemoryConversationStateManager>();
+        }
+        else
+        {
+            services.Configure<RedisOptions>(configuration.GetSection(RedisOptions.SectionName));
+            services.AddSingleton<IConnectionMultiplexer>(_ =>
+            {
+                var opts = configuration.GetSection(RedisOptions.SectionName).Get<RedisOptions>()
+                    ?? new RedisOptions();
+                var redisConfig = ConfigurationOptions.Parse(opts.ConnectionString);
+                redisConfig.AbortOnConnectFail = false;
+                return ConnectionMultiplexer.Connect(redisConfig);
+            });
+            services.AddScoped<IConversationStateManager, RedisConversationStateManager>();
+        }
 
         // ── Semantic Kernel ────────────────────────────────────────────────
         services.Configure<SemanticKernelOptions>(configuration.GetSection(SemanticKernelOptions.SectionName));
@@ -97,15 +116,18 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<IMessagingChannel, MetaWhatsAppChannel>();
 
         // ── Git & Deployment (CI/CD pipeline stubs) ────────────────────────
-        services.AddSingleton<IGitService, LocalGitService>();
+        services.AddSingleton<IGitService, TenantGitService>();
         services.AddSingleton<IDeploymentService, PipelineDeploymentService>();
 
         // ── Tenant Data Fixer ────────────────────────────────────────────────
         services.AddScoped<ITenantDataFixerService, TenantDataFixerService>();
 
-        // ── Billing (Stripe wiring placeholders) ─────────────────────────────
+        // ── Billing ─────────────────────────────────────────────────────────
         services.Configure<StripeOptions>(configuration.GetSection(StripeOptions.SectionName));
-        services.AddScoped<IStripeService, StripeService>();
+        if (deployment.Billing == HiveOpsBillingMode.Stripe)
+            services.AddScoped<IStripeService, StripeService>();
+        else
+            services.AddScoped<IStripeService, DisabledStripeService>();
 
         return services;
     }

@@ -34,7 +34,7 @@ Adaptar SaaSBot (.NET 9, Semantic Kernel, EF Core, Redis, MediatR) a un bot de r
 ### Servicios
 
 - `SafetyValidator` — valida que SQL/scripts sean seguros antes de ejecutar
-- `IGitService` / `LocalGitService` — operaciones Git
+- `IGitService` / `TenantGitService` — operaciones Git (repo global o clon por tenant en self-hosted)
 - `IDeploymentService` / `PipelineDeploymentService` — trigger de deploy
 
 ### Router Extension

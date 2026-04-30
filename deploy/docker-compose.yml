@@ -1,0 +1,59 @@
+# Self-hosted stack: SQL Server + Redis + HiveOps API.
+# From repo root: docker compose -f deploy/docker-compose.yml up --build
+# Then run DB bootstrap once (see docs/operations.md): ./db/bootstrap.sh
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "HiveOps-Local-SA-2026-Strong!"
+    ports:
+      - "1433:1433"
+    volumes:
+      - hiveops_sqldata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/1433' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 35s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Development"
+      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=Hive;User Id=sa;Password=HiveOps-Local-SA-2026-Strong!;TrustServerCertificate=True;MultipleActiveResultSets=true"
+      Redis__ConnectionString: "redis:6379"
+      Jwt__Key: "HiveOps-Docker-Dev-Jwt-Key-32-Chars!!"
+      Admin__ApiKey: "docker-compose-admin-key-local-only-32"
+      Git__RepoPath: "/tmp/hiveops-git-work"
+      Git__WorkspacesRoot: "/tmp/hiveops-git-workspaces"
+      HiveOps__DataProtectionKeysPath: "/app/data/dataprotection"
+      HiveOps__Deployment__Mode: "SelfHosted"
+      HiveOps__Deployment__Billing: "None"
+      Secrets__UseAws: "false"
+    volumes:
+      - hiveops_dataprotection:/app/data/dataprotection
+      - hiveops_gitwork:/tmp/hiveops-git-work
+      - hiveops_git_workspaces:/tmp/hiveops-git-workspaces
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  hiveops_sqldata:
+  hiveops_dataprotection:
+  hiveops_gitwork:
+  hiveops_git_workspaces:

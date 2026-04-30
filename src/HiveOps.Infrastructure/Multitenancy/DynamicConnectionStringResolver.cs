@@ -1,8 +1,12 @@
+using System.Security;
+using System.Text;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using HiveOps.Application.Configuration;
 using HiveOps.Domain.Interfaces;
 
 namespace HiveOps.Infrastructure.Multitenancy;
@@ -10,11 +14,13 @@ namespace HiveOps.Infrastructure.Multitenancy;
 public class DynamicConnectionStringResolver : IDynamicConnectionStringResolver
 {
     private const string CacheKeyPrefix = "conn:";
-    private const string DataProtectionPurpose = "HiveOps.TenantConnectionString";
+    /// <summary>Purpose string shared with admin APIs that persist per-tenant connection strings.</summary>
+    public const string TenantConnectionStringDataProtectionPurpose = "HiveOps.TenantConnectionString";
     private readonly IMemoryCache _cache;
     private readonly IDataProtector _protector;
     private readonly IConfiguration _configuration;
     private readonly ILogger<DynamicConnectionStringResolver> _logger;
+    private readonly IOptions<HiveOpsDeploymentOptions> _deploymentOptions;
     private readonly TimeSpan _cacheTtl;
     private readonly Dictionary<string, SemaphoreSlim> _warmLocks = new();
     private readonly object _warmLockDictLock = new();
@@ -23,12 +29,14 @@ public class DynamicConnectionStringResolver : IDynamicConnectionStringResolver
         IMemoryCache cache,
         IDataProtectionProvider dataProtectionProvider,
         IConfiguration configuration,
-        ILogger<DynamicConnectionStringResolver> logger)
+        ILogger<DynamicConnectionStringResolver> logger,
+        IOptions<HiveOpsDeploymentOptions> deploymentOptions)
     {
         _cache = cache;
-        _protector = dataProtectionProvider.CreateProtector(DataProtectionPurpose);
+        _protector = dataProtectionProvider.CreateProtector(TenantConnectionStringDataProtectionPurpose);
         _configuration = configuration;
         _logger = logger;
+        _deploymentOptions = deploymentOptions;
 
         var minutes = configuration.GetValue<int?>("HiveOps:TenantConnectionStringCacheMinutes") ?? 5;
         _cacheTtl = TimeSpan.FromMinutes(minutes);
@@ -42,7 +50,9 @@ public class DynamicConnectionStringResolver : IDynamicConnectionStringResolver
     /// Resolves the connection string for a tenant from cache.
     /// This method is synchronous and must NOT perform I/O — it relies on WarmCacheAsync
     /// having been called beforehand (e.g. from the TenantResolutionMiddleware).
-    /// If the cache is cold, returns the DefaultConnectionString as a safe fallback.
+    /// If the cache is cold, returns the configured default connection string unless
+    /// <c>HiveOps:Deployment:FailClosedTenantConnectionInSelfHosted</c> is enabled with <c>Mode=SelfHosted</c>,
+    /// in which case a <see cref="SecurityException"/> is thrown.
     /// </summary>
     public string Resolve(Guid tenantId)
     {
@@ -51,6 +61,17 @@ public class DynamicConnectionStringResolver : IDynamicConnectionStringResolver
         {
             _logger.LogDebug("Connection string cache hit for tenant {TenantId}", tenantId);
             return cached;
+        }
+
+        var deploy = _deploymentOptions.Value;
+        if (deploy.Mode == HiveOpsDeploymentMode.SelfHosted && deploy.FailClosedTenantConnectionInSelfHosted)
+        {
+            _logger.LogCritical(
+                "Connection string cache miss for tenant {TenantId} with FailClosedTenantConnectionInSelfHosted enabled.",
+                tenantId);
+            throw new SecurityException(
+                "Cross-tenant access prevention: connection string cache is cold for this tenant. " +
+                "Ensure WarmCacheAsync completed before Resolve, or disable FailClosedTenantConnectionInSelfHosted for single-database deployments.");
         }
 
         _logger.LogWarning(
@@ -103,9 +124,23 @@ public class DynamicConnectionStringResolver : IDynamicConnectionStringResolver
     {
         var encrypted = await ReadEncryptedConnectionStringAsync(tenantId, cancellationToken);
         if (string.IsNullOrWhiteSpace(encrypted))
-            return DefaultConnectionString;
+        {
+            var deploy = _deploymentOptions.Value;
+            if (deploy.Mode == HiveOpsDeploymentMode.SelfHosted && deploy.FailClosedTenantConnectionInSelfHosted)
+            {
+                _logger.LogCritical(
+                    "Tenant {TenantId} has no EncryptedConnectionString while FailClosedTenantConnectionInSelfHosted is enabled.",
+                    tenantId);
+                throw new SecurityException(
+                    "Cross-tenant access prevention: no per-tenant encrypted connection string was found for this tenant. " +
+                    "Configure EncryptedConnectionString for dedicated databases, or set FailClosedTenantConnectionInSelfHosted to false for a shared catalog.");
+            }
 
-        return _protector.Unprotect(encrypted);
+            return DefaultConnectionString;
+        }
+
+        var payload = Convert.FromBase64String(encrypted.Trim());
+        return Encoding.UTF8.GetString(_protector.Unprotect(payload));
     }
 
     protected virtual async Task<string?> ReadEncryptedConnectionStringAsync(Guid tenantId, CancellationToken cancellationToken)

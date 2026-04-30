@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using HiveOps.Application.Configuration;
+using HiveOps.Application.Interfaces;
 using HiveOps.Application.Services;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
@@ -5,6 +8,7 @@ using HiveOps.Infrastructure.AI;
 using HiveOps.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 
 namespace HiveOps.Agents.Support;
@@ -59,7 +63,7 @@ public sealed class KbArticleGenerator
             Content = GenerateContent(incident, history),
             Category = incident.Category.ToString(),
             Tags = GenerateTags(incident),
-            ResolutionSteps = await GenerateResolutionSteps(incident, history),
+            ResolutionSteps = await GenerateResolutionSteps(incident, history, cancellationToken),
             IsPublished = false, // Requires manual review
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -116,11 +120,17 @@ public sealed class KbArticleGenerator
         return string.Join(", ", tags);
     }
 
-    private async Task<string> GenerateResolutionSteps(Incident incident, string history)
+    private async Task<string> GenerateResolutionSteps(Incident incident, string history, CancellationToken cancellationToken)
     {
         // Use LLM to extract and format resolution steps from conversation history
         try
         {
+            using var cfgScope = _scopeFactory.CreateScope();
+            var tenantConfigs = cfgScope.ServiceProvider.GetRequiredService<ITenantConfigService>();
+            var deploymentOpts = cfgScope.ServiceProvider.GetRequiredService<IOptions<HiveOpsDeploymentOptions>>();
+            var exec = await TenantLlmExecutionHelper.GetChatExecutionSettingsAsync(
+                incident.TenantId, tenantConfigs, deploymentOpts, cancellationToken);
+
             var kernel = _kernelFactory.CreateForTenant(incident.TenantId);
             var prompt = $"""
                 Based on the following incident resolution conversation, extract the specific resolution steps taken.
@@ -137,7 +147,14 @@ public sealed class KbArticleGenerator
                 If no specific steps are documented, state that explicitly.
                 """;
 
-            var result = await kernel.InvokePromptAsync(prompt);
+            var args = new KernelArguments
+            {
+                ExecutionSettings = new Dictionary<string, PromptExecutionSettings>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [PromptExecutionSettings.DefaultServiceId] = exec
+                }
+            };
+            var result = await kernel.InvokePromptAsync(prompt, args, cancellationToken: cancellationToken);
             var steps = result.ToString();
 
             if (string.IsNullOrWhiteSpace(steps) || steps.Contains("no specific steps", StringComparison.OrdinalIgnoreCase))

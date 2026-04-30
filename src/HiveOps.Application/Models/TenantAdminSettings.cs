@@ -4,6 +4,9 @@ namespace HiveOps.Application.Models;
 
 public sealed class TenantAdminSettings
 {
+    /// <summary>JSON schema version for the whole <c>ConfigJson</c> envelope (see <see cref="TenantConfigurationSchema"/>).</summary>
+    public int SchemaVersion { get; set; } = TenantConfigurationSchema.Current;
+
     public BotBehaviorSettings BotBehavior { get; set; } = new();
     public PhraseSettings Phrases { get; set; } = new();
     public CatalogSyncSettings CatalogSync { get; set; } = new();
