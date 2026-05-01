@@ -65,3 +65,7 @@ secrets.json
 # Worklogs and temp config
 Worklogs/
 temp_config.txt
+
+# Node and frontend artifacts
+node_modules/
+.playwright/

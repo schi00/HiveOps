@@ -102,8 +102,7 @@ public class DynamicConnectionStringResolverTests
     {
         var resolver = CreateResolver(null, new HiveOpsDeploymentOptions
         {
-            Mode = HiveOpsDeploymentMode.SelfHosted,
-            FailClosedTenantConnectionInSelfHosted = true
+            Mode = HiveOpsDeploymentMode.SelfHosted
         });
         var tenantId = Guid.NewGuid();
         Assert.Throws<SecurityException>(() => resolver.Resolve(tenantId));
@@ -114,8 +113,7 @@ public class DynamicConnectionStringResolverTests
     {
         var resolver = CreateResolver(null, new HiveOpsDeploymentOptions
         {
-            Mode = HiveOpsDeploymentMode.SelfHosted,
-            FailClosedTenantConnectionInSelfHosted = true
+            Mode = HiveOpsDeploymentMode.SelfHosted
         });
         var tenantId = Guid.NewGuid();
         await Assert.ThrowsAsync<SecurityException>(() => resolver.WarmCacheAsync(tenantId));

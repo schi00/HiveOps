@@ -50,9 +50,10 @@ public class DynamicConnectionStringResolver : IDynamicConnectionStringResolver
     /// Resolves the connection string for a tenant from cache.
     /// This method is synchronous and must NOT perform I/O — it relies on WarmCacheAsync
     /// having been called beforehand (e.g. from the TenantResolutionMiddleware).
-    /// If the cache is cold, returns the configured default connection string unless
-    /// <c>HiveOps:Deployment:FailClosedTenantConnectionInSelfHosted</c> is enabled with <c>Mode=SelfHosted</c>,
-    /// in which case a <see cref="SecurityException"/> is thrown.
+    /// If the cache is cold and the deployment <c>Mode</c> is <c>SelfHosted</c>, a
+    /// <see cref="SecurityException"/> is thrown to enforce tenant data isolation
+    /// (fail-closed). For SaaS/Ephemeral modes the configured default connection
+    /// string is returned.
     /// </summary>
     public string Resolve(Guid tenantId)
     {
@@ -64,14 +65,14 @@ public class DynamicConnectionStringResolver : IDynamicConnectionStringResolver
         }
 
         var deploy = _deploymentOptions.Value;
-        if (deploy.Mode == HiveOpsDeploymentMode.SelfHosted && deploy.FailClosedTenantConnectionInSelfHosted)
+        if (deploy.Mode == HiveOpsDeploymentMode.SelfHosted)
         {
             _logger.LogCritical(
-                "Connection string cache miss for tenant {TenantId} with FailClosedTenantConnectionInSelfHosted enabled.",
+                "Connection string cache miss for tenant {TenantId} in SelfHosted mode; failing closed to prevent cross-tenant access.",
                 tenantId);
             throw new SecurityException(
                 "Cross-tenant access prevention: connection string cache is cold for this tenant. " +
-                "Ensure WarmCacheAsync completed before Resolve, or disable FailClosedTenantConnectionInSelfHosted for single-database deployments.");
+                "In SelfHosted mode tenant-specific connection strings are required.");
         }
 
         _logger.LogWarning(
@@ -126,14 +127,13 @@ public class DynamicConnectionStringResolver : IDynamicConnectionStringResolver
         if (string.IsNullOrWhiteSpace(encrypted))
         {
             var deploy = _deploymentOptions.Value;
-            if (deploy.Mode == HiveOpsDeploymentMode.SelfHosted && deploy.FailClosedTenantConnectionInSelfHosted)
+            if (deploy.Mode == HiveOpsDeploymentMode.SelfHosted)
             {
                 _logger.LogCritical(
-                    "Tenant {TenantId} has no EncryptedConnectionString while FailClosedTenantConnectionInSelfHosted is enabled.",
+                    "Tenant {TenantId} has no EncryptedConnectionString while in SelfHosted mode; failing closed to prevent cross-tenant access.",
                     tenantId);
                 throw new SecurityException(
-                    "Cross-tenant access prevention: no per-tenant encrypted connection string was found for this tenant. " +
-                    "Configure EncryptedConnectionString for dedicated databases, or set FailClosedTenantConnectionInSelfHosted to false for a shared catalog.");
+                    "Cross-tenant access prevention: no per-tenant encrypted connection string was found for this tenant. Configure EncryptedConnectionString for dedicated databases.");
             }
 
             return DefaultConnectionString;
