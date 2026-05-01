@@ -73,6 +73,77 @@ public static class AgentToolCatalog
                 ],
                 AllowedStates = [ConversationState.Idle, ConversationState.InSupport, ConversationState.AwaitingHuman]
             }
+            ,
+            new AgentToolDefinition
+            {
+                Name = "search_products",
+                Description = "Searches product catalog for matching items.",
+                WhenToUse = [
+                    "User asks for product inventory or commercial info.",
+                    "User asks for product availability."
+                ],
+                WhenNotToUse = [
+                    "User reports a support incident."
+                ],
+                Arguments = new Dictionary<string, AgentToolArgumentDefinition>
+                {
+                    ["query"] = new() { Type = "string", Required = true, Description = "Search query", Example = "nike" }
+                },
+                Examples = [
+                    new AgentToolUsageExample
+                    {
+                        UserMessage = "Mostrame zapatillas nike",
+                        ToolArgs = new Dictionary<string, string> { ["query"] = "nike" }
+                    }
+                ],
+                AllowedStates = [ConversationState.Idle, ConversationState.InInventoryQuery]
+            },
+            new AgentToolDefinition
+            {
+                Name = "get_store_info",
+                Description = "Returns information about a store or location.",
+                WhenToUse = [
+                    "User asks for store hours, location or contact info."
+                ],
+                WhenNotToUse = [
+                    "User asks for product inventory or commercial info."
+                ],
+                Arguments = new Dictionary<string, AgentToolArgumentDefinition>
+                {
+                    ["store_id"] = new() { Type = "string", Required = false, Description = "Optional store identifier", Example = "store_123" }
+                },
+                Examples = [
+                    new AgentToolUsageExample
+                    {
+                        UserMessage = "¿Horario de la sucursal centro?",
+                        ToolArgs = new Dictionary<string, string> { ["store_id"] = "centro" }
+                    }
+                ],
+                AllowedStates = [ConversationState.Idle]
+            },
+            new AgentToolDefinition
+            {
+                Name = "start_checkout",
+                Description = "Initiates a checkout flow for the user.",
+                WhenToUse = [
+                    "User is ready to purchase and asks to checkout."
+                ],
+                WhenNotToUse = [
+                    "User asks for product info only."
+                ],
+                Arguments = new Dictionary<string, AgentToolArgumentDefinition>
+                {
+                    ["cart_id"] = new() { Type = "string", Required = false, Description = "Optional cart identifier", Example = "cart_abc" }
+                },
+                Examples = [
+                    new AgentToolUsageExample
+                    {
+                        UserMessage = "Quiero pagar",
+                        ToolArgs = new Dictionary<string, string> { ["cart_id"] = "current_cart" }
+                    }
+                ],
+                AllowedStates = [ConversationState.InOrderFlow]
+            }
         ];
     }
 }

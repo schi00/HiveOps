@@ -84,19 +84,35 @@ Categoría:", userMessage);
         if (ContainsAny(text, "hablar con", "persona", "humano", "asesor", "vendedor", "agente", "operador"))
             return IntentType.HumanHandoff;
 
-        // Incidentes de soporte
-        if (ContainsAny(text, "bug", "error", "incidente", "ticket", "falla", "fallo", "problema", "crash", "excepcion", "stack trace",
-            "base de datos", "bd", "database", "sql", "tabla", "columna", "deploy", "desplegar", "corregir", "fix", "patch"))
-            return IntentType.IncidentReport;
+        // Despedidas
+        if (ContainsAny(text, "adios", "chao", "hasta luego", "nos vemos"))
+            return IntentType.Farewell;
 
-        if (ContainsAny(text, "estado del ticket", "como va mi ticket", "seguimiento", "status del incidente"))
+        // Agradecimientos
+        if (ContainsAny(text, "gracias", "muchas gracias"))
+            return IntentType.ThankYou;
+
+        // Consultas sobre estado de ticket (buscar coincidencias compuestas)
+        if ((text.Contains("estado") && text.Contains("ticket")) ||
+            ContainsAny(text, "estado del ticket", "como va mi ticket", "seguimiento", "status del incidente", "estado de mi ticket"))
             return IntentType.IncidentQuery;
 
-        if (ContainsAny(text, "apruebo", "confirmo fix", "ok para deploy", "dale deploy", "deployear", "desplegar"))
+        // Aprobaciones explícitas
+        if (ContainsAny(text, "apruebo", "aprobar", "aprobo", "confirmo fix", "ok para deploy", "dale deploy", "deployear"))
             return IntentType.IncidentApprove;
 
+        // Rechazos
         if (ContainsAny(text, "rechazo", "no apruebo", "cancelar fix", "descartar"))
             return IntentType.IncidentReject;
+
+        // Solicitudes de deploy (prioritario sobre incident report)
+        if (ContainsAny(text, "deploy", "deploy now", "deployear", "deployea", "desplegar", "deployea la correccion"))
+            return IntentType.DeployRequest;
+
+        // Incidentes de soporte generales
+        if (ContainsAny(text, "bug", "error", "incidente", "falla", "fallo", "problema", "crash", "excepcion", "stack trace",
+            "base de datos", "bd", "database", "sql", "tabla", "columna", "corregir", "fix", "patch"))
+            return IntentType.IncidentReport;
 
         return null;
     }
