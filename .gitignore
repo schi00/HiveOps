@@ -30,6 +30,8 @@ src/HiveOps.Sandpit/HiveOps.Sandpit.Ui/wwwroot/lib/
 
 # Test artifacts
 TestResults/
+test-results/
+playwright-report/
 *.trx
 coverage/
 coverage.*
