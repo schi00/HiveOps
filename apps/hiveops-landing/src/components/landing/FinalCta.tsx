@@ -4,7 +4,7 @@ import { AnimatedSection } from "./AnimatedSection";
 export function FinalCta() {
   return (
     <AnimatedSection className="px-6 py-18">
-      <div className="mx-auto w-full max-w-5xl rounded-3xl border border-cyan-500/40 bg-gradient-to-br from-cyan-500/15 via-[#161B22] to-[#0B0F17] p-8 text-center sm:p-12">
+      <div className="mx-auto w-full max-w-5xl rounded-3xl border border-cyan-500/40 bg-gradient-to-br from-cyan-500/15 via-[#161B22] to-[#050608] p-8 text-center sm:p-12">
         <span className="hive-badge-cyan mb-4">HIVE ECOSYSTEM · EMPEZÁ HOY</span>
         <h2 className="mb-4 text-3xl font-extrabold md:text-5xl">
           Que ningún incidente se quede <span className="cyan-text">esperando al lunes</span>
