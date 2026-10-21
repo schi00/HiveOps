@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 64 64"
+   fill="none"
+   version="1.1"
+   id="svg4"
+   sodipodi:docname="hive-mark_dark.svg"
+   inkscape:version="1.4.4 (dcaf3e7, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs4" />
+  <sodipodi:namedview
+     id="namedview4"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="11.523631"
+     inkscape:cx="29.764924"
+     inkscape:cy="38.139021"
+     inkscape:window-width="2400"
+     inkscape:window-height="1261"
+     inkscape:window-x="2391"
+     inkscape:window-y="-9"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg4" />
+  <!--
+    HIVE honeycomb-cube mark (vectorizado).
+    Estructura: hexágono exterior relleno + cubo interior concéntrico
+    + 6 trapecios radiales idénticos (rotación de 60°, anclados
+    vértice-a-vértice entre el hexágono interno y el externo).
+
+    Edición:
+      - Color de relleno: atributo fill del primer path.
+      - Color de líneas internas: stroke del grupo <g>.
+      - Fondo: primer <rect> (eliminarlo para fondo transparente).
+      - Geometría: R externo = 22, R interno = 12, centro (32,32).
+  -->
+  <!-- Hexágono exterior relleno (vértices: top, right-top, right-bottom, bottom, left-bottom, left-top) -->
+  <path
+     d="M32 10 51.05 21v22L32 54 12.95 43V21Z"
+     fill="#F5B323"
+     id="path1"
+     style="fill:#000000;fill-opacity:1" />
+  <!-- Líneas internas: hexágono interior + Y del cubo + 6 radios vértice-a-vértice -->
+  <g
+     stroke="#171B22"
+     stroke-width="2"
+     stroke-linejoin="miter"
+     id="g4"
+     style="stroke:#000000">
+    <!-- hexágono interior (mismo centro, R=12) -->
+    <path
+       d="M32 20 42.39 26v12L32 44 21.61 38V26Z"
+       id="path2"
+       style="stroke:#f5b323;stroke-opacity:1" />
+    <!-- Y interno del cubo: centro → vértices top, lower-left, lower-right -->
+    <path
+       d="M32 32V20M32 32 21.61 38M32 32l10.39 6"
+       id="path3"
+       style="stroke:#f5b323;stroke-opacity:1" />
+    <!-- 6 radios que dividen el anillo en trapecios idénticos -->
+    <path
+       d="M 31.846597,9.9079578 31.907958,20 M 51.05,21 42.39,26 m 8.66,17 -8.874765,-5.122723 m -10.422542,15.7017 0.03254,-9.7017 m -19.05,-1 8.66,-5 M 12.95,21 l 8.66,5"
+       id="path4"
+       style="stroke:#f5b323;fill:#f5b323;fill-opacity:1;stroke-opacity:1"
+       sodipodi:nodetypes="cccccccccccc" />
+  </g>
+  <g
+     id="g50"
+     transform="matrix(0.22151016,0,0,0.22202009,-198.19553,-95.967944)">
+    <path
+       d="M 1129.0326,627.80289 V 524.41143 c -10.8266,-7.61247 -90.0402,-50.42375 -90.0402,-50.42375 l -89.76732,50.04548 v 51.81723 51.8172 l 9.46355,5.4885 c 0,0 80.08257,44.09457 80.19117,44.0351 z m -124.0223,26.3381 -41.5899,-23.5465 -9.71259,-5.5309 v -5.53085 l 0.01,-43.61335 0.01,-49.14414 c 0,0 46.74099,-26.43542 46.44219,-26.55143 0,0 38.3152,-20.94857 38.8718,-20.94857 0.5565,0 10.6104,5.38913 22.3422,11.97585 11.7316,6.58672 30.8421,17.27422 42.4677,23.75 l 21.1375,11.77415 0.031,48.59504 c 0.029,45.0692 0.103,49.82477 0.103,49.82477 0,0 -17.4551,9.54183 -34.4397,19.06453 -16.9846,9.5228 -36.36,20.5498 -36.36,20.5498 l -15.3906,8.27438 -33.9194,-18.94278 z"
+       style="fill:#f5b323;stroke-width:0.99808;fill-opacity:1"
+       id="path1-74" />
+  </g>
+</svg>
