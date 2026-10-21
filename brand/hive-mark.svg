@@ -1,10 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <!-- HIVE parent mark: isometric cube (hexagon + inner Y)
-       Edit stroke to recolor; stroke-width to adjust weight. -->
-  <path
-    d="M32 8 52.8 20v24L32 56 11.2 44V20Z"
-    stroke="#F5B323" stroke-width="3.5" stroke-linejoin="miter"/>
-  <path
-    d="M32 8v24M32 32 11.2 44M32 32l20.8 12"
-    stroke="#F5B323" stroke-width="3.5" stroke-linejoin="miter"/>
+  <!--
+    HIVE — marca padre.
+    Carcasa de familia: hexágono relleno + anillo de 6 trapecios
+    (radios vértice-a-vértice, R ext=22 / R int=12, centro 32,32).
+    Núcleo: cubo isométrico lineal (hexágono interior + Y).
+
+    Edición: color de marca = fill del primer path.
+             trazo interno = stroke del grupo <g>.
+  -->
+  <path fill="#F5B323" d="M32 10 51.05 21v22L32 54 12.95 43V21Z"/>
+  <g fill="none" stroke="#000000" stroke-width="2" stroke-linejoin="miter">
+    <!-- cámara interior -->
+    <path d="M32 20l10.39 6v12L32 44 21.61 38V26Z"/>
+    <!-- Y del cubo: centro → vértices top / lower-left / lower-right -->
+    <path d="M32 32V20M32 32 21.61 38M32 32l10.39 6"/>
+    <!-- 6 radios que dividen el anillo en trapecios idénticos -->
+    <path d="M32 10v10M51.05 21 42.39 26M51.05 43l-8.66-5M32 54V44M12.95 43l8.66-5M12.95 21l8.66 5"/>
+  </g>
 </svg>

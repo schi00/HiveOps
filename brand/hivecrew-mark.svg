@@ -1,19 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <!-- HiveCrew mark: hexagon outline + headset (sales support agent)
-       Colors: outer hexagon + headset in product amber. -->
-  <path
-    d="M32 8 52.8 20v24L32 56 11.2 44V20Z"
-    stroke="#F5B323" stroke-width="4" stroke-linejoin="miter"/>
-  <!-- headset: headband -->
-  <path
-    d="M20 38v-5a12 12 0 0 1 24 0v5"
-    stroke="#F5B323" stroke-width="3.5" stroke-linecap="round"/>
-  <!-- ear pads -->
-  <rect x="16.5" y="36" width="7" height="11" rx="3" fill="#F5B323"/>
-  <rect x="40.5" y="36" width="7" height="11" rx="3" fill="#F5B323"/>
-  <!-- mic boom + tip -->
-  <path
-    d="M44 47c0 4.4-3.6 8-8 8h-2"
-    stroke="#F5B323" stroke-width="3" stroke-linecap="round"/>
-  <circle cx="32.5" cy="55" r="1.8" fill="#F5B323"/>
+  <!--
+    HiveCrew — sales automation.
+    Misma carcasa que la marca padre (hexágono + anillo de trapecios).
+    Núcleo: headset (agente de ventas/soporte) centrado en la cámara.
+  -->
+  <path fill="#F5B323" d="M32 10 51.05 21v22L32 54 12.95 43V21Z"/>
+  <g fill="none" stroke="#000000" stroke-width="2" stroke-linejoin="miter">
+    <!-- cámara interior -->
+    <path d="M32 20l10.39 6v12L32 44 21.61 38V26Z"/>
+    <!-- 6 radios que dividen el anillo en trapecios idénticos -->
+    <path d="M32 10v10M51.05 21 42.39 26M51.05 43l-8.66-5M32 54V44M12.95 43l8.66-5M12.95 21l8.66 5"/>
+  </g>
+  <!-- headset: banda superior + boom del micrófono -->
+  <g fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round">
+    <path d="M27.9 35.6v-2.4a4.1 4.1 0 0 1 8.2 0v2.4"/>
+    <path d="M36.1 41c0 1.4-1.2 2.4-2.7 2.4"/>
+  </g>
+  <!-- earpads -->
+  <rect x="26" y="34.8" width="3.8" height="6" rx="1.8" fill="#000000"/>
+  <rect x="34.2" y="34.8" width="3.8" height="6" rx="1.8" fill="#000000"/>
+  <!-- punta del micrófono -->
+  <circle cx="33.3" cy="43.4" r="1.1" fill="#000000"/>
 </svg>
