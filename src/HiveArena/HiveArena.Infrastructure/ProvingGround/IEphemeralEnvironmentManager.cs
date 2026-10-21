@@ -1,7 +1,9 @@
 namespace HiveArena.Infrastructure.ProvingGround;
 
 /// <summary>
-/// Lifecycle: provision → test → collect → destroy (Compose/K8s in later phases).
+/// Lifecycle: provision → test → collect → destroy.
+/// The environment is an isolated filesystem root; dependent services
+/// (checkout, replay) place their artifacts inside <see cref="IEphemeralEnvironmentLease.RootPath"/>.
 /// </summary>
 public interface IEphemeralEnvironmentManager
 {
@@ -11,4 +13,7 @@ public interface IEphemeralEnvironmentManager
 public interface IEphemeralEnvironmentLease : IAsyncDisposable
 {
     string ArenaEnvironmentId { get; }
+
+    /// <summary>Isolated directory owned by this lease; deleted when the lease is disposed.</summary>
+    string RootPath { get; }
 }

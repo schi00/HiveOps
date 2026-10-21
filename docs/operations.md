@@ -138,6 +138,26 @@ Configuration for the HiveCrew support-agent scenario (see [`docs/plans/hivecrew
 
 ---
 
+## HiveArena proving ground (post-fix validation)
+
+HiveArena (`src/HiveArena`) validates proposed code fixes in an **ephemeral filesystem environment**: it clones the candidate branch/commit, runs `dotnet build`, then `dotnet test` per discovered test project, and reports **Survival / Defeat / Error** back to HiveOps with an LLM-readable report (including the failing `dotnet` output tail). Requires `git` and `dotnet` on PATH of the HiveArena host.
+
+| Setting | Description |
+|---------|-------------|
+| `HiveArena:Host:ApiKey` | Optional ingress key; requests must send `X-HiveArena-Key`. |
+| `HiveArena:HiveOpsBridge:*` | Base URL + `X-Dev-Key` for synthetic incidents (`POST /api/support/incidents/from-sandpit`). |
+| `HiveArena:HiveOpsCallback:BaseUrl` / `SharedSecret` | Callback to `POST {BaseUrl}/api/internal/hivearena/validation-completed` with `X-HiveArena-Key`; must match HiveOps `HiveOps:HiveArenaInbound:SharedSecret`. |
+| `HiveArena:ProvingGround:WorkspacesRoot` | Root for ephemeral env dirs (default `%TEMP%/hivearena`); deleted after each run. |
+| `HiveArena:ProvingGround:GitTimeoutSeconds` / `BuildTimeoutSeconds` / `TestTimeoutSeconds` | Defaults `240` / `600` / `900`. |
+| `HiveArena:ProvingGround:RunTestsWhenPresent` | `false` → build gate only. |
+| `HiveArena:ProvingGround:ExcludedTestProjectPatterns` | Project name fragments to skip, e.g. `["IntegrationTests"]` when the environment lacks their external dependencies (live Postgres, Redis). |
+
+**HiveOps side** (`HiveOps.Api` / `HiveOps.Workers`): `HiveArena:Publisher:Enabled` publishes a validation request after each auto-fix commit; `RepoUrl` names the repository under validation (single-repo MVP — per-tenant repo URLs are a later phase).
+
+**Code-fix workspace:** in `SelfHosted` mode the worker clones `runtimeConfiguration.deployGit.gitRepositoryUrl` per tenant into `Git:WorkspacesRoot`; in other modes it falls back to `Git:RepoPath` (e.g. a sandbox clone at `c:/temp/hiveops-work`).
+
+---
+
 ## Ephemeral CI (GitHub Actions)
 
 Workflow: [`.github/workflows/preview.yml`](../.github/workflows/preview.yml).

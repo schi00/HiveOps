@@ -22,7 +22,14 @@ public sealed class ProcessValidationRequestCommandHandler(
 
         try
         {
-            var checkout = await branchCheckoutService.CheckoutAsync(req.RepoUrl, req.BranchName, req.CommitSha, cancellationToken);
+            var checkout = await branchCheckoutService.CheckoutAsync(req.RepoUrl, req.BranchName, req.CommitSha, lease.RootPath, cancellationToken);
+            if (!checkout.Success)
+            {
+                var checkoutReport = survivalReporter.BuildReport(req, ValidationOutcome.Error,
+                    new[] { $"Checkout failed: {checkout.Message}" });
+                await callbackClient.NotifyCompletedAsync(checkoutReport, cancellationToken);
+                return checkoutReport;
+            }
             var repro = new List<string>
             {
                 $"Provision ephemeral arena environment `{lease.ArenaEnvironmentId}`.",
@@ -32,6 +39,13 @@ public sealed class ProcessValidationRequestCommandHandler(
 
             var outcome = await scenarioReplayRunner.ReplayAsync(req.ScenarioId, req.Seed, checkout.WorkspacePath, cancellationToken);
             var report = survivalReporter.BuildReport(req, outcome, repro);
+
+            if (outcome != ValidationOutcome.Survival)
+            {
+                var logTail = ReadLogTail(checkout.WorkspacePath);
+                if (logTail is not null)
+                    report = report with { LlmReadableLog = report.LlmReadableLog + "\n\n## dotnet output (tail)\n```\n" + logTail + "\n```" };
+            }
 
             await callbackClient.NotifyCompletedAsync(report, cancellationToken);
             return report;
@@ -49,5 +63,30 @@ public sealed class ProcessValidationRequestCommandHandler(
             await callbackClient.NotifyCompletedAsync(full, cancellationToken);
             return full;
         }
+    }
+
+    private static string? ReadLogTail(string workspacePath)
+    {
+        foreach (var name in new[] { "arena-test.log", "arena-build.log" })
+        {
+            var path = Path.Combine(workspacePath, name);
+            if (!File.Exists(path))
+                continue;
+
+            try
+            {
+                var lines = File.ReadAllLines(path);
+                var tail = lines.Skip(Math.Max(0, lines.Length - 40)).ToArray();
+                var joined = string.Join('\n', tail).TrimEnd();
+                if (joined.Length > 0)
+                    return joined;
+            }
+            catch
+            {
+                // best effort only
+            }
+        }
+
+        return null;
     }
 }

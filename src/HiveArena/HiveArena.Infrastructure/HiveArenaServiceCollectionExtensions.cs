@@ -29,6 +29,7 @@ public static class HiveArenaServiceCollectionExtensions
     {
         services.Configure<HiveArenaBridgeOptions>(configuration.GetSection(HiveArenaBridgeOptions.SectionName));
         services.Configure<HiveOpsCallbackOptions>(configuration.GetSection(HiveOpsCallbackOptions.SectionName));
+        services.Configure<ProvingGroundOptions>(configuration.GetSection(ProvingGroundOptions.SectionName));
         return services;
     }
 }
