@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>HiveArena.Api</RootNamespace>
+    <AssemblyName>HiveArena.Api</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR" Version="12.4.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HiveArena.Core\HiveArena.Core.csproj" />
+    <ProjectReference Include="..\HiveArena.Infrastructure\HiveArena.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

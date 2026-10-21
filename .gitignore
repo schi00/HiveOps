@@ -71,3 +71,5 @@ temp_config.txt
 # Node and frontend artifacts
 node_modules/
 .playwright/
+# Aider AI assistant artifacts
+.aider*

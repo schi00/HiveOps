@@ -1,0 +1,53 @@
+@{
+    ViewData["Title"] = "HiveArena botonera";
+}
+<h1>HiveArena — simulación MVP</h1>
+<p class="hint">Cada botón ejecuta <code>POST /api/hivearena/scenarios/run</code>. Opcional: cabecera <code>X-HiveArena-Key</code> si configuraste <code>HiveArena:Host:ApiKey</code>.</p>
+
+<div class="grid" id="buttons"></div>
+
+<label class="hint">API key (opcional): <input type="password" id="apiKey" style="width:280px" placeholder="X-HiveArena-Key" /></label>
+
+<div id="log"></div>
+
+<script>
+    const scenarios = [
+        { id: 'data-error-order-total', label: 'DataError — total pedido' },
+        { id: 'code-error-null-reference', label: 'CodeError — null pricing' },
+        { id: 'infrastructure-error-dns', label: 'Infrastructure — DNS' },
+        { id: 'integration-api-error-429', label: 'Integration — API 429' },
+        { id: 'performance-error-slow-query', label: 'Performance — query lenta' }
+    ];
+
+    const grid = document.getElementById('buttons');
+    scenarios.forEach(s => {
+        const b = document.createElement('button');
+        b.textContent = s.label;
+        b.onclick = () => run(s.id);
+        grid.appendChild(b);
+    });
+
+    function log(msg) {
+        const el = document.getElementById('log');
+        el.textContent += msg + '\n';
+    }
+
+    async function run(scenarioId) {
+        const key = document.getElementById('apiKey').value;
+        const headers = { 'Content-Type': 'application/json' };
+        if (key) headers['X-HiveArena-Key'] = key;
+
+        log('→ ' + scenarioId + ' ...');
+        try {
+            const res = await fetch('/api/hivearena/scenarios/run', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ scenarioId, seed: 42 })
+            });
+            const text = await res.text();
+            log('← ' + res.status + ' ' + text);
+        } catch (e) {
+            log('ERROR ' + e);
+        }
+    }
+</script>

@@ -60,6 +60,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<IncidentAttachment> IncidentAttachments { get; set; } = null!;
     public DbSet<DiagnosticLog> DiagnosticLogs { get; set; } = null!;
     public DbSet<KbArticle> KbArticles { get; set; } = null!;
+    public DbSet<ApiDependency> ApiDependencies { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -75,5 +76,6 @@ public sealed class AppDbContext : DbContext
         modelBuilder.Entity<IncidentAttachment>().HasQueryFilter(ia => ia.TenantId == CurrentTenantId);
         modelBuilder.Entity<DiagnosticLog>().HasQueryFilter(dl => dl.TenantId == CurrentTenantId);
         modelBuilder.Entity<KbArticle>().HasQueryFilter(ka => ka.TenantId == CurrentTenantId);
+        modelBuilder.Entity<ApiDependency>().HasQueryFilter(ad => ad.TenantId == CurrentTenantId);
     }
 }

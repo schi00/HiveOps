@@ -34,6 +34,7 @@
 - SQL bootstrap scripts: [`db`](db)
 - Docker / Compose: [`deploy`](deploy)
 - Operations runbook: [`docs/operations.md`](docs/operations.md)
+- Simulation / proving ground: [`src/HiveArena`](src/HiveArena) (see [`docs/architecture/hivearena.md`](docs/architecture/hivearena.md)); legacy Sandpit UI: [`src/HiveOps.Sandpit`](src/HiveOps.Sandpit)
 
 ## Definition of done
 

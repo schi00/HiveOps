@@ -17,6 +17,7 @@ using HiveOps.Application.Interfaces;
 using HiveOps.Application.Services;
 using HiveOps.Domain.Models;
 using HiveOps.Infrastructure;
+using HiveOps.Infrastructure.ApiDrift;
 using HiveOps.Infrastructure.Services;
 using HiveOps.Workers;
 using System.Threading.RateLimiting;
@@ -159,7 +160,16 @@ builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddHttpClient<IWhatsAppAccessTokenValidator, MetaWhatsAppAccessTokenValidator>();
 builder.Services.AddScoped<OutboundWebhookService>();
 builder.Services.AddScoped<IOutboundWebhookService>(sp => sp.GetRequiredService<OutboundWebhookService>());
-builder.Services.AddHttpClient("OutboundWebhook");
+builder.Services.AddHttpClient("OutboundWebhook")
+    .AddHttpMessageHandler<ApiContractObserverHandler>();
+
+// -- API Drift Detection - Register handler for named HttpClients
+builder.Services.AddScoped<ApiContractObserverHandler>();
+builder.Services.AddHttpClient("ApiDriftDetection")
+    .AddHttpMessageHandler<ApiContractObserverHandler>();
+
+// -- HiveArena (optional proving-ground callbacks / publisher config) ------------
+builder.Services.Configure<HiveOpsHiveArenaInboundOptions>(builder.Configuration.GetSection(HiveOpsHiveArenaInboundOptions.SectionName));
 
 // -- Incident Auto Workflow Services --------------------------------------------
 builder.Services.Configure<IncidentAutoWorkflowOptions>(builder.Configuration.GetSection(IncidentAutoWorkflowOptions.SectionName));

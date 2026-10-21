@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Inventory - HiveOps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        amber: {
+          50: '#fffbeb', 100: '#fef3c7', 200: '#fde68a', 300: '#fcd34d',
+          400: '#fbbf24', 500: '#f59e0b', 600: '#d97706', 700: '#b45309',
+          800: '#92400e', 900: '#78350f', 950: '#451a03',
+        },
+        hive: { dark: '#0a0a0a', darker: '#050505', card: '#111111', border: '#222222', amber: '#f59e0b' }
+      },
+      fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+    }
+  }
+}
+</script>
+<style>
+:root { --bg-primary: #0a0a0a; --bg-secondary: #111111; --border-color: #222222; --text-primary: #fafafa; --amber-primary: #f59e0b; }
+html.light { --bg-primary: #f9fafb; --bg-secondary: #ffffff; --border-color: #e5e7eb; --text-primary: #111827; --amber-primary: #ffb800; }
+body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary); color: var(--text-primary); }
+.hive-card { background: var(--bg-secondary); border: 1px solid rgba(245, 158, 11, 0.6); border-radius: 16px; }
+.light .hive-card { background: #ffffff; border: 1px solid #d1d5db; }
+.status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+.status-healthy { background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); }
+.status-learning { background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+.status-drift { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+.status-error { background: rgba(107, 114, 128, 0.2); color: #6b7280; border: 1px solid rgba(107, 114, 128, 0.3); }
+.btn-primary { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #0a0a0a; font-weight: 600; transition: all 0.3s ease; }
+.btn-primary:hover { box-shadow: 0 4px 20px rgba(245, 158, 11, 0.4); transform: translateY(-1px); }
+.input-field { background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); transition: all 0.3s ease; }
+.light .input-field { background: #ffffff; border-color: #d1d5db; color: #111827; }
+.input-field:focus { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1); outline: none; }
+.provider-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+.modal-overlay { opacity: 0; pointer-events: none; transition: opacity 0.3s ease; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 50; display: flex; align-items: center; justify-content: center; }
+.modal-overlay.open { opacity: 1; pointer-events: auto; }
+.modal-content { transform: scale(0.9); transition: transform 0.3s ease; }
+.modal-overlay.open .modal-content { transform: scale(1); }
+</style>
+</head>
+<body class="min-h-screen p-6">
+<div class="max-w-7xl mx-auto">
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h1 class="text-3xl font-bold mb-2">API Inventory</h1>
+      <p class="opacity-70">Monitoreo de dependencias externas y detección de cambios en contratos</p>
+    </div>
+    <button onclick="openModal()" class="btn-primary px-6 py-3 rounded-xl">+ Nueva API</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="hive-card p-4">
+      <div class="text-sm opacity-70 mb-1">Total APIs</div>
+      <div class="text-2xl font-bold" id="stat-total">0</div>
+    </div>
+    <div class="hive-card p-4 border-green-500/30">
+      <div class="text-sm opacity-70 mb-1">Healthy</div>
+      <div class="text-2xl font-bold text-green-500" id="stat-healthy">0</div>
+    </div>
+    <div class="hive-card p-4 border-yellow-500/30">
+      <div class="text-sm opacity-70 mb-1">Learning</div>
+      <div class="text-2xl font-bold text-yellow-500" id="stat-learning">0</div>
+    </div>
+    <div class="hive-card p-4 border-red-500/30">
+      <div class="text-sm opacity-70 mb-1">Drift Detected</div>
+      <div class="text-2xl font-bold text-red-500" id="stat-drift">0</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex flex-wrap gap-3 mb-6">
+    <select id="filter-provider" class="input-field px-4 py-2 rounded-xl text-sm" onchange="loadApis()">
+      <option value="">Todos los proveedores</option>
+      <option value="MercadoLibre">MercadoLibre</option>
+      <option value="Shopify">Shopify</option>
+      <option value="TiendaNube">TiendaNube</option>
+      <option value="Custom">Custom</option>
+    </select>
+    <select id="filter-status" class="input-field px-4 py-2 rounded-xl text-sm" onchange="loadApis()">
+      <option value="">Todos los estados</option>
+      <option value="Healthy">Healthy</option>
+      <option value="Learning">Learning</option>
+      <option value="DriftDetected">Drift Detected</option>
+      <option value="Error">Error</option>
+    </select>
+    <button onclick="loadApis()" class="input-field px-4 py-2 rounded-xl text-sm hover:border-amber-500">🔄 Actualizar</button>
+  </div>
+
+  <!-- API List -->
+  <div id="api-list" class="space-y-3">
+    <div class="text-center py-12 opacity-50">Cargando...</div>
+  </div>
+</div>
+
+<!-- Add API Modal -->
+<div id="modal" class="modal-overlay" onclick="closeModal(event)">
+  <div class="modal-content hive-card p-6 w-full max-w-lg mx-4" onclick="event.stopPropagation()">
+    <h2 class="text-xl font-bold mb-4">Registrar Nueva API</h2>
+    <form id="api-form" onsubmit="saveApi(event)">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm mb-1 opacity-70">Proveedor</label>
+          <select id="form-provider" class="input-field w-full px-4 py-3 rounded-xl" required>
+            <option value="MercadoLibre">MercadoLibre</option>
+            <option value="Shopify">Shopify</option>
+            <option value="TiendaNube">TiendaNube</option>
+            <option value="Custom">Custom</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm mb-1 opacity-70">URL del Endpoint</label>
+          <input id="form-url" type="url" class="input-field w-full px-4 py-3 rounded-xl" placeholder="https://api.ejemplo.com/v1/resource" required>
+        </div>
+        <div>
+          <label class="block text-sm mb-1 opacity-70">Método HTTP</label>
+          <select id="form-method" class="input-field w-full px-4 py-3 rounded-xl">
+            <option value="GET">GET</option>
+            <option value="POST">POST</option>
+            <option value="PUT">PUT</option>
+            <option value="DELETE">DELETE</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm mb-1 opacity-70">Schema Hash Esperado (opcional)</label>
+          <input id="form-hash" type="text" class="input-field w-full px-4 py-3 rounded-xl" placeholder="Dejar vacío para modo Learning">
+          <p class="text-xs mt-1 opacity-50">Si se deja vacío, la API se registrará en modo Learning</p>
+        </div>
+      </div>
+      <div class="flex gap-3 mt-6">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-3 rounded-xl border border-gray-500/30 hover:bg-gray-500/10">Cancelar</button>
+        <button type="submit" class="flex-1 btn-primary px-4 py-3 rounded-xl">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const API = '/api';
+const token = localStorage.getItem('token');
+const tenantId = localStorage.getItem('tenantId');
+
+if (!token) { window.location.href = '/dashboard/'; }
+
+function getProviderIcon(provider) {
+  const icons = {
+    'MercadoLibre': '🛒',
+    'Shopify': '🛍️',
+    'TiendaNube': '🌐',
+    'Custom': '🔌'
+  };
+  return icons[provider] || '🔌';
+}
+
+function getProviderColor(provider) {
+  const colors = {
+    'MercadoLibre': 'bg-yellow-500/20 text-yellow-500',
+    'Shopify': 'bg-green-500/20 text-green-500',
+    'TiendaNube': 'bg-blue-500/20 text-blue-500',
+    'Custom': 'bg-gray-500/20 text-gray-500'
+  };
+  return colors[provider] || 'bg-gray-500/20 text-gray-500';
+}
+
+function getStatusBadge(status) {
+  const classes = {
+    'Healthy': 'status-healthy',
+    'Learning': 'status-learning',
+    'DriftDetected': 'status-drift',
+    'Error': 'status-error'
+  };
+  const labels = {
+    'Healthy': 'Healthy',
+    'Learning': 'Learning',
+    'DriftDetected': 'Drift',
+    'Error': 'Error'
+  };
+  return `<span class="status-badge ${classes[status] || 'status-error'}">${labels[status] || status}</span>`;
+}
+
+async function loadApis() {
+  const container = document.getElementById('api-list');
+  
+  // Show loading spinner
+  container.innerHTML = `
+    <div class="text-center py-12">
+      <div class="inline-block w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p class="opacity-50">Cargando APIs...</p>
+    </div>`;
+  
+  try {
+    const provider = document.getElementById('filter-provider').value;
+    const status = document.getElementById('filter-status').value;
+    
+    let url = `${API}/api-dependencies`;
+    const params = new URLSearchParams();
+    if (provider) params.append('provider', provider);
+    if (status) params.append('status', status);
+    if (params.toString()) url += '?' + params.toString();
+    
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'X-Tenant-Id': tenantId || ''
+      }
+    });
+    
+    if (!res.ok) {
+      if (res.status === 401) {
+        window.location.href = '/dashboard/';
+        return;
+      }
+      throw new Error(`Error ${res.status}: ${res.statusText}`);
+    }
+    
+    const apis = await res.json();
+    renderApis(apis);
+    updateStats(apis);
+  } catch (e) {
+    container.innerHTML = `
+      <div class="hive-card p-8 text-center">
+        <div class="text-4xl mb-4">⚠️</div>
+        <h3 class="text-lg font-semibold mb-2 text-red-400">Error al cargar APIs</h3>
+        <p class="opacity-70 mb-4">${e.message}</p>
+        <button onclick="loadApis()" class="btn-primary px-6 py-2 rounded-xl">Reintentar</button>
+      </div>`;
+  }
+}
+
+function renderApis(apis) {
+  const container = document.getElementById('api-list');
+  
+  if (apis.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-12 opacity-50">
+        <div class="text-4xl mb-4">🔌</div>
+        <p>No hay APIs registradas</p>
+        <p class="text-sm mt-2">Las APIs se detectan automáticamente o puedes registrarlas manualmente</p>
+      </div>`;
+    return;
+  }
+  
+  container.innerHTML = apis.map(api => `
+    <div class="hive-card p-4 flex items-center gap-4">
+      <div class="provider-icon ${getProviderColor(api.providerName)}">
+        ${getProviderIcon(api.providerName)}
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="font-semibold">${api.providerName}</span>
+          ${getStatusBadge(api.status)}
+        </div>
+        <div class="text-sm opacity-70 truncate">${api.endpointUrl}</div>
+        <div class="text-xs opacity-50 mt-1">
+          ${api.httpMethod} • Último check: ${new Date(api.lastChecked).toLocaleString()}
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="recheckApi('${api.id}')" class="p-2 rounded-lg hover:bg-amber-500/10 text-amber-500" title="Forzar recheck">
+          🔄
+        </button>
+        <button onclick="deleteApi('${api.id}')" class="p-2 rounded-lg hover:bg-red-500/10 text-red-500" title="Eliminar">
+          🗑️
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateStats(apis) {
+  document.getElementById('stat-total').textContent = apis.length;
+  document.getElementById('stat-healthy').textContent = apis.filter(a => a.status === 'Healthy').length;
+  document.getElementById('stat-learning').textContent = apis.filter(a => a.status === 'Learning').length;
+  document.getElementById('stat-drift').textContent = apis.filter(a => a.status === 'DriftDetected').length;
+}
+
+async function saveApi(e) {
+  e.preventDefault();
+  
+  const data = {
+    providerName: document.getElementById('form-provider').value,
+    endpointUrl: document.getElementById('form-url').value,
+    httpMethod: document.getElementById('form-method').value,
+    expectedSchemaHash: document.getElementById('form-hash').value || null
+  };
+  
+  try {
+    const res = await fetch(`${API}/api-dependencies`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'X-Tenant-Id': tenantId || ''
+      },
+      body: JSON.stringify(data)
+    });
+    
+    if (!res.ok) throw new Error('Error guardando API');
+    
+    closeModal();
+    document.getElementById('api-form').reset();
+    loadApis();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function recheckApi(id) {
+  try {
+    const res = await fetch(`${API}/api-dependencies/${id}/recheck`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'X-Tenant-Id': tenantId || ''
+      }
+    });
+    
+    if (!res.ok) throw new Error('Error en recheck');
+    
+    alert('Recheck programado. La próxima llamada a este endpoint validará el esquema.');
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function deleteApi(id) {
+  if (!confirm('¿Eliminar esta API del inventario?')) return;
+  
+  try {
+    const res = await fetch(`${API}/api-dependencies/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'X-Tenant-Id': tenantId || ''
+      }
+    });
+    
+    if (!res.ok) throw new Error('Error eliminando API');
+    loadApis();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+function openModal() {
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('modal')) {
+    document.getElementById('modal').classList.remove('open');
+  }
+}
+
+// Load on page load
+loadApis();
+</script>
+</body>
+</html>

@@ -38,6 +38,7 @@ public sealed class AuthBootstrapHostedService : IHostedService
             return;
 
         await EnsureAdminUserAsync(db, cancellationToken);
+        await EnsureComandaTenantAsync(db, cancellationToken);
         await EnsureTenantUsersAndDefaultsAsync(db, industrySettings, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Auth bootstrap completed.");
@@ -132,6 +133,60 @@ public sealed class AuthBootstrapHostedService : IHostedService
             admin.PasswordHash = PasswordSecurity.HashPassword("123456");
     }
 
+    private async Task EnsureComandaTenantAsync(AppDbContext db, CancellationToken ct)
+    {
+        var options = _configuration.GetSection("ComandaTenant").Get<ComandaTenantOptions>();
+        if (options is null || !options.Enabled)
+            return;
+
+        if (string.IsNullOrWhiteSpace(options.ApiKey) || string.IsNullOrWhiteSpace(options.RepositoryUrl))
+        {
+            _logger.LogWarning(
+                "Comanda tenant bootstrap is enabled but ComandaTenant:ApiKey or RepositoryUrl is missing. Tenant was not created.");
+            return;
+        }
+
+        if (!Uri.TryCreate(options.RepositoryUrl, UriKind.Absolute, out _))
+        {
+            _logger.LogWarning("Comanda tenant bootstrap skipped because RepositoryUrl is not an absolute URI.");
+            return;
+        }
+
+        var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Name == options.Name, ct);
+        if (tenant is null)
+        {
+            var tenantId = Guid.TryParse(options.TenantId, out var configuredId)
+                ? configuredId
+                : Guid.NewGuid();
+            tenant = new Tenant
+            {
+                Id = tenantId,
+                Name = options.Name,
+                Industry = options.Industry,
+                ApiKey = options.ApiKey.Trim(),
+                IsActive = true
+            };
+            db.Tenants.Add(tenant);
+        }
+        else
+        {
+            tenant.ApiKey = options.ApiKey.Trim();
+            tenant.Industry = options.Industry;
+            tenant.IsActive = true;
+        }
+
+        var settings = TenantSettingsJson.Parse(tenant.ConfigJson);
+        settings.RuntimeConfiguration.DeployGit.GitRepositoryUrl = options.RepositoryUrl.Trim();
+        settings.RuntimeConfiguration.DeployGit.GitDefaultBranch = string.IsNullOrWhiteSpace(options.DefaultBranch)
+            ? "main"
+            : options.DefaultBranch.Trim();
+        settings.RuntimeConfiguration.DeployGit.AutoDeployEnabled = options.AutoDeployEnabled;
+        settings.RuntimeConfiguration.DeployGit.ManualDeployAllowed = options.ManualDeployAllowed;
+        tenant.ConfigJson = TenantSettingsJson.Stringify(settings);
+
+        _logger.LogInformation("Comanda tenant bootstrap completed for tenant {TenantId}.", tenant.Id);
+    }
+
     private static async Task EnsureTenantUsersAndDefaultsAsync(AppDbContext db, IndustrySettingsService industrySettings, CancellationToken ct)
     {
         var tenants = await db.Tenants.ToListAsync(ct);
@@ -176,4 +231,17 @@ public sealed class AuthBootstrapHostedService : IHostedService
         var chars = value.ToLowerInvariant().Where(ch => char.IsLetterOrDigit(ch) || ch == ' ').ToArray();
         return new string(chars).Replace(' ', '_');
     }
+}
+
+internal sealed class ComandaTenantOptions
+{
+    public bool Enabled { get; set; }
+    public string Name { get; set; } = "Comanda";
+    public string Industry { get; set; } = "restaurantes";
+    public string? TenantId { get; set; }
+    public string? ApiKey { get; set; }
+    public string? RepositoryUrl { get; set; }
+    public string DefaultBranch { get; set; } = "main";
+    public bool AutoDeployEnabled { get; set; }
+    public bool ManualDeployAllowed { get; set; } = true;
 }
