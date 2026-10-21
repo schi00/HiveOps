@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --bg-black: #0B0F17;
+  --bg-black: #050608;
   --bg-ink: #161B22;
   --bg-elevate: #1E293B;
   --white: #FAFAFA;
@@ -30,10 +30,7 @@
 
 html,
 body {
-  background:
-    radial-gradient(circle at 82% 8%, rgba(0, 240, 255, 0.10) 0%, transparent 40%),
-    radial-gradient(circle at 12% 45%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
-    var(--bg-black);
+  background: var(--bg-black);
   color: var(--white);
   font-family: var(--font-sans), Inter, system-ui, -apple-system, sans-serif;
 }
@@ -140,8 +137,8 @@ a {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.16;
-  background-image: radial-gradient(circle at 22% 20%, rgba(0, 240, 255, 0.14), transparent 46%);
+  opacity: 0.12;
+  background-image: radial-gradient(circle at 22% 20%, rgba(0, 240, 255, 0.10), transparent 46%);
 }
 
 @media (prefers-reduced-motion: reduce) {
