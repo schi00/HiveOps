@@ -621,14 +621,23 @@ html.light .by-hive-badge {
         <button onclick="n('dashboard')" id="n-dash" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Resumen</button>
         <button onclick="n('incidents')" id="n-inc" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Conversaciones</button>
         <button onclick="n('kb')" id="n-kb" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Knowledge Base</button>
+        <button onclick="n('playbooks')" id="n-pb" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Playbooks</button>
         <button onclick="window.location.href='/dashboard/api-inventory.html'" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">API Inventory</button>
         <button onclick="n('config')" id="n-cfg" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Configuración</button>
-        <button onclick="n('admin')" id="n-adm" class="nav-item px-4 py-2 text-sm font-medium hidden" style="color: var(--text-secondary)">Admin</button>
+        <span class="border-l pl-2 ml-2 flex items-center" style="border-color: var(--border-color)">
+          <button onclick="n('admin')" id="n-adm" class="nav-item px-4 py-2 text-sm font-semibold hidden" style="color: #fbbf24">Plataforma</button>
+        </span>
       </div>
     </div>
     
     <div class="flex items-center gap-3">
-      <!-- Tenant Selector -->
+      <!-- Identity: role badge + scope -->
+      <div class="hidden md:flex items-center gap-2">
+        <span id="role-badge" class="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest border" style="border-color: var(--border-color); color: var(--text-tertiary)">…</span>
+        <span id="scope-label" class="text-xs" style="color: var(--text-tertiary)"></span>
+      </div>
+
+      <!-- Tenant Selector (solo admin de plataforma: actúa sobre un tenant) -->
       <select id="tenant-select" onchange="changeTenant()" class="input-field px-4 py-2 rounded-xl text-sm hidden md:block" style="width: 200px;">
         <option value="">Seleccionar Tenant...</option>
       </select>
@@ -676,6 +685,10 @@ html.light .by-hive-badge {
           A
         </div>
         <div id="user-dropdown" class="user-dropdown">
+          <div class="px-4 py-3" style="border-bottom: 1px solid var(--border-color)">
+            <div id="ud-name" class="text-sm font-semibold truncate" style="color: var(--text-primary)">Usuario</div>
+            <div id="ud-role" class="text-[10px] uppercase tracking-widest mt-0.5" style="color: var(--text-tertiary)">—</div>
+          </div>
           <div class="user-dropdown-item" onclick="openChangePasswordModal()">
             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
             Cambiar contraseña
@@ -737,6 +750,70 @@ html.light .by-hive-badge {
           </div>
           <div class="text-4xl font-bold" id="c-avg">0</div>
           <div class="mt-2 text-xs" style="color: var(--text-tertiary)">Minutos</div>
+        </div>
+      </div>
+
+      <!-- Commercial ROI & Readiness Banner + Operating Mode Switcher -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <!-- Card 1: ROI & Autonomous Outcomes -->
+        <div class="hive-card p-6 flex flex-col justify-between">
+          <div>
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-5">
+              <div>
+                <h3 class="font-semibold text-base" style="color: var(--text-primary)">ROI &amp; Autonomous Outcomes (Últimos 30 días)</h3>
+                <p class="text-xs mt-0.5" style="color: var(--text-tertiary)">Métricas verificadas del AI Support Engineer v1.2</p>
+              </div>
+              <span id="roi-audit-badge" class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-medium">Audit Chain SHA-256: Intacta</span>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+              <div class="p-3 rounded-xl border" style="background: var(--bg-tertiary); border-color: var(--border-color)">
+                <div class="text-xs mb-1" style="color: var(--text-secondary)">Resoluciones Autónomas Verificadas</div>
+                <div id="roi-verified" class="text-2xl font-bold text-emerald-400">0</div>
+              </div>
+              <div class="p-3 rounded-xl border" style="background: var(--bg-tertiary); border-color: var(--border-color)">
+                <div class="text-xs mb-1" style="color: var(--text-secondary)">Simuladas en Modo Shadow</div>
+                <div id="roi-shadow" class="text-2xl font-bold text-cyan-400">0</div>
+              </div>
+              <div class="p-3 rounded-xl border" style="background: var(--bg-tertiary); border-color: var(--border-color)">
+                <div class="text-xs mb-1" style="color: var(--text-secondary)">Horas de Ingeniería Ahorradas</div>
+                <div id="roi-hours" class="text-2xl font-bold" style="color: var(--text-primary)">0.0 h</div>
+              </div>
+              <div class="p-3 rounded-xl border" style="background: var(--bg-tertiary); border-color: var(--border-color)">
+                <div class="text-xs mb-1" style="color: var(--text-secondary)">Ahorro Estimado USD</div>
+                <div id="roi-savings" class="text-2xl font-bold text-emerald-400">$0</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t flex flex-wrap items-center justify-between gap-3" style="border-color: var(--border-color)">
+            <span class="text-xs font-medium" style="color: var(--text-secondary)">Modo Operativo:</span>
+            <div class="inline-flex rounded-xl p-1 border gap-1" style="background: var(--bg-tertiary); border-color: var(--border-color)">
+              <button type="button" id="mode-btn-Shadow" onclick="setOperatingMode('Shadow')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all">Shadow (POC 14d)</button>
+              <button type="button" id="mode-btn-Assisted" onclick="setOperatingMode('Assisted')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all">Assisted</button>
+              <button type="button" id="mode-btn-Autonomous" onclick="setOperatingMode('Autonomous')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all">Autonomous</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Target System Onboarding Doctor (Readiness Check) -->
+        <div class="hive-card p-6 flex flex-col justify-between">
+          <div>
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div>
+                <h3 class="font-semibold text-base" style="color: var(--text-primary)">Target System Onboarding Doctor</h3>
+                <p class="text-xs mt-0.5" style="color: var(--text-tertiary)">Diagnóstico de conexión y capacidades L1/L2/L3</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="rd-status-badge" class="text-xs px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-semibold">REQUIERE CONFIG</span>
+                <button type="button" onclick="loadReadinessAndOutcomes()" class="btn-secondary px-3 py-1.5 rounded-lg text-xs">Re-verificar</button>
+              </div>
+            </div>
+
+            <div id="rd-checks-list" class="space-y-2.5">
+              <div class="text-xs py-4 text-center" style="color: var(--text-secondary)">Verificando estado del tenant...</div>
+            </div>
+          </div>
         </div>
       </div>
       
@@ -806,7 +883,21 @@ html.light .by-hive-badge {
     
     <!-- Admin View -->
     <div id="v-adm" class="view-section space-y-6">
-      <h2 class="text-2xl font-bold">Configuracion</h2>
+      <div class="hive-card p-5 border-l-4" style="border-left-color: #F5B323;">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-2xl font-bold">Administración de Plataforma</h2>
+            <p class="text-sm mt-1" style="color: var(--text-secondary)">Solo super usuario / admin de plataforma — estas acciones afectan a todos los tenants. Para operar dentro de un tenant, seleccionalo arriba o desde "Actuar como".</p>
+          </div>
+          <span class="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest border border-amber-500/40 bg-amber-500/15 text-amber-300">Super User</span>
+        </div>
+      </div>
+      <div class="hive-card p-6">
+        <h3 class="font-semibold text-lg mb-4">Tenants</h3>
+        <div id="l-tenants" class="space-y-2">
+          <div class="text-center py-6" style="color: var(--text-secondary)">Cargando...</div>
+        </div>
+      </div>
       <div class="hive-card p-6">
         <h3 class="font-semibold text-lg mb-4">Cola de Merge</h3>
         <div id="l-mer" class="space-y-3">
@@ -858,14 +949,102 @@ html.light .by-hive-badge {
         <div class="hive-card p-8 text-center col-span-full" style="color: var(--text-secondary)">Cargando...</div>
       </div>
     </div>
+
+    <!-- Playbooks L1/L2 View -->
+    <div id="v-playbooks" class="view-section hidden space-y-6">
+      <div class="flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <h2 class="text-2xl font-bold">Playbooks L1/L2</h2>
+          <p class="text-sm mt-1" style="color: var(--text-secondary)">Acciones determinísticas de resolución y auto-remediación con guardia de filas y verificación SQL.</p>
+        </div>
+        <div class="flex gap-3">
+          <button type="button" onclick="loadPlaybooks()" class="btn-secondary px-4 py-2.5 rounded-xl text-sm">Actualizar</button>
+          <button type="button" onclick="togglePlaybookForm()" class="btn-primary px-5 py-2.5 rounded-xl text-sm">+ Nuevo Playbook</button>
+        </div>
+      </div>
+
+      <!-- Collapsible New Playbook Form -->
+      <div id="pb-form-card" class="hive-card p-6 hidden">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-semibold text-lg">Crear Playbook L1/L2</h3>
+          <button type="button" onclick="togglePlaybookForm(false)" class="text-xs px-2.5 py-1 rounded-lg btn-secondary">Cerrar</button>
+        </div>
+        <form id="f-pb" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Código (ej. PB-UNLOCK-ORDER)</label>
+              <input id="pb-code" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm font-mono" placeholder="PB-001" required/>
+            </div>
+            <div>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Nombre</label>
+              <input id="pb-name" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="Desbloquear orden retenida" required/>
+            </div>
+            <div>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Tipo de Acción</label>
+              <select id="pb-type" class="input-field w-full px-3 py-2 rounded-xl text-sm">
+                <option value="SqlTemplate">SqlTemplate</option>
+                <option value="HttpWebhook">HttpWebhook</option>
+                <option value="StoredProcedure">StoredProcedure</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="text-xs block mb-1" style="color: var(--text-secondary)">Síntomas disparadores (Trigger Symptoms)</label>
+            <input id="pb-symptoms" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="orden bloqueada, pago aprobado sin despacho, estado stuck..." required/>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Action Payload Template (SQL / Webhook / SP)</label>
+              <textarea id="pb-payload" rows="3" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder="UPDATE Orders SET Status = 'Ready' WHERE Id = @OrderId AND Status = 'Locked';" required></textarea>
+            </div>
+            <div>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Verification SQL Query (0 filas = verificado)</label>
+              <textarea id="pb-verify" rows="3" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder="SELECT Id FROM Orders WHERE Id = @OrderId AND Status = 'Locked';"></textarea>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+            <div>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Parámetros requeridos (JSON)</label>
+              <input id="pb-params" type="text" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" value='["OrderId"]'/>
+            </div>
+            <div>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Máx. filas afectadas (Guardrail)</label>
+              <input id="pb-maxrows" type="number" min="1" max="1000" value="10" class="input-field w-full px-3 py-2 rounded-xl text-sm"/>
+            </div>
+            <div class="pt-4">
+              <label class="flex items-center gap-2 text-sm cursor-pointer">
+                <input id="pb-approval" type="checkbox" class="accent-cyan-500" checked/>
+                <span>Requiere aprobación humana</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-3 pt-2">
+            <button type="button" onclick="togglePlaybookForm(false)" class="btn-secondary px-5 py-2 rounded-xl text-sm">Cancelar</button>
+            <button type="submit" class="btn-primary px-6 py-2 rounded-xl text-sm">Guardar Playbook</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Playbooks List -->
+      <div id="l-pb" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div class="hive-card p-8 text-center col-span-full" style="color: var(--text-secondary)">Cargando playbooks...</div>
+      </div>
+    </div>
     
     <!-- Config View -->
     <div id="v-config" class="view-section space-y-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-2xl font-bold">Configuración del Tenant</h2>
-        <span id="cfg-schema-banner" class="text-xs px-3 py-1 rounded-full hive-card border" style="color:var(--text-tertiary)">Schema —</span>
+        <div class="flex items-center gap-2">
+          <button id="cfg-adv-toggle" type="button" onclick="toggleAdvancedConfig()" class="btn-secondary px-3 py-1.5 rounded-xl text-xs">Mostrar avanzado (LLM · Deploy · Políticas)</button>
+          <span id="cfg-schema-banner" class="text-xs px-3 py-1 rounded-full hive-card border" style="color:var(--text-tertiary)">Schema —</span>
+        </div>
       </div>
-      <p class="text-sm" style="color:var(--text-secondary)">Cada tarjeta se guarda de forma independiente (PATCH por sección). Seleccioná tenant arriba.</p>
+      <p class="text-sm" style="color:var(--text-secondary)">Opciones esenciales primero. Cada tarjeta se guarda de forma independiente; la configuración técnica avanzada queda plegada.</p>
 
       <!-- Presets -->
       <div class="hive-card p-6">
@@ -904,8 +1083,8 @@ html.light .by-hive-badge {
         </div>
       </div>
 
-      <!-- LLM -->
-      <div class="hive-card p-6">
+      <!-- LLM (avanzado) -->
+      <div class="hive-card p-6 cfg-adv hidden">
         <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
           <h3 class="font-semibold text-lg">Modelo LLM (proveedor)</h3>
           <button type="button" onclick="saveLlmSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar LLM</button>
@@ -924,8 +1103,8 @@ html.light .by-hive-badge {
         </div>
       </div>
 
-      <!-- Deploy / Git -->
-      <div class="hive-card p-6">
+      <!-- Deploy / Git (avanzado) -->
+      <div class="hive-card p-6 cfg-adv hidden">
         <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
           <h3 class="font-semibold text-lg">Deploy y Git (tenant)</h3>
           <button type="button" onclick="saveDeployGitSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar Deploy/Git</button>
@@ -958,8 +1137,8 @@ html.light .by-hive-badge {
         </div>
       </div>
 
-      <!-- Policies JSON -->
-      <div class="hive-card p-6">
+      <!-- Policies JSON (avanzado) -->
+      <div class="hive-card p-6 cfg-adv hidden">
         <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
           <div>
             <h3 class="font-semibold text-lg">Políticas (JSON)</h3>
@@ -1064,7 +1243,7 @@ html.light .by-hive-badge {
 </div>
 
 <!-- Detail Drawer -->
-<div id="dr" class="fixed top-0 right-0 bottom-0 w-full max-w-xl glass-strong z-50 drawer overflow-y-auto">
+<div id="dr" class="fixed top-0 right-0 bottom-0 w-full max-w-2xl glass-strong z-50 drawer overflow-y-auto">
   <div class="p-6">
     <div class="flex justify-between items-center mb-6">
       <h3 class="text-xl font-bold">Detalle del Incidente</h3>

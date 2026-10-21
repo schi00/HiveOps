@@ -54,6 +54,22 @@ try{
  const cur=ts.find(x=>x.id===sel.value);
  st.textContent=cur?`Estado actual: ${cur.subscriptionStatus||'—'} · Price: ${cur.stripePriceId||'—'}`:'Selecciona un tenant';
  sel.onchange=()=>{ const c=ts.find(x=>x.id===sel.value); st.textContent=c?`Estado actual: ${c.subscriptionStatus||'—'} · Price: ${c.stripePriceId||'—'}`:'Selecciona un tenant'; };
+ const lt=document.getElementById('l-tenants');
+ if(lt){
+   lt.innerHTML=ts.length?ts.map(t=>{
+     const active=t.id===s.tenantId;
+     return `<div class="flex items-center justify-between gap-3 p-3 rounded-xl border ${active?'border-cyan-500/40 bg-cyan-500/5':''}" style="border-color:var(--border-color)">
+       <div class="min-w-0">
+         <div class="text-sm font-semibold truncate" style="color:var(--text-primary)">${esc(t.name||'(sin nombre)')}</div>
+         <div class="text-xs" style="color:var(--text-tertiary)">${esc(t.subscriptionStatus||'sin suscripción')}${t.hasRollbackCapability===false?' · sin rollback':''}</div>
+       </div>
+       <div class="flex items-center gap-2 flex-shrink-0">
+         ${active?'<span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-semibold uppercase tracking-wider">Activo</span>':''}
+         <button type="button" onclick="actAsTenant('${t.id}')" class="btn-secondary px-3 py-1.5 rounded-lg text-xs">${active?'Viendo':'Actuar como'}</button>
+       </div>
+     </div>`;
+   }).join(''):'<div class="text-center py-6 text-sm" style="color:var(--text-secondary)">Sin tenants registrados</div>';
+ }
 const billCard=document.getElementById('billing-card');
 if(billCard) billCard.style.display=(s.deploymentMode==null||s.deploymentMode==='SaaS')?'':'none';
  let dbCard=document.getElementById('selfhosted-db-card');
@@ -125,7 +141,7 @@ const r=await fetch(`${API}/auth/login`,{method:'POST',headers:{'Content-Type':'
 if(!r.ok)throw new Error('Credenciales invalidas');
 const d=await r.json();
 s.token=d.token;
-s.user={username:d.displayName||d.username||'',role:d.role};
+s.user={username:d.displayName||d.username||'',role:d.role,tenantName:d.tenantName||null};
 s.isAdmin=d.role==='SuperAdmin'||d.role==='Admin';
 if(d.tenantId){s.tenantId=d.tenantId;localStorage.setItem('tenantId',s.tenantId);} 
 localStorage.setItem('token',s.token);localStorage.setItem('user',JSON.stringify(s.user));
@@ -170,8 +186,41 @@ s.isAdmin=s.user.role==='SuperAdmin'||s.user.role==='Admin';
 await loadDeploymentInfo();
 if(s.isAdmin){const adm=document.getElementById('n-adm');if(adm)adm.classList.remove('hidden');}
 else {const adm=document.getElementById('n-adm');if(adm)adm.classList.add('hidden');}
+renderIdentityBadge();
 setTimeout(()=>{loadTenants();n('dashboard');ld();initRealtime();},100);
 }catch(e){console.error('Error in showApp:',e);showLogin();}
+}
+function renderIdentityBadge(){
+const badge=document.getElementById('role-badge');if(!badge)return;
+const sel=document.getElementById('tenant-select');
+const scope=document.getElementById('scope-label');
+const amber='px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest border border-amber-500/40 bg-amber-500/15 text-amber-300';
+const cyan='px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest border border-cyan-500/40 bg-cyan-500/15 text-cyan-300';
+const udName=document.getElementById('ud-name'),udRole=document.getElementById('ud-role');
+if(udName)udName.textContent=(s.user&&s.user.username)||'Usuario';
+if(s.user&&s.user.role==='SuperAdmin'){
+badge.textContent='SUPER USUARIO';badge.className=amber;
+if(udRole)udRole.textContent='Super usuario · plataforma';
+if(scope)scope.textContent='Plataforma · todos los tenants';
+}else if(s.user&&s.user.role==='Admin'){
+badge.textContent='ADMIN';badge.className=amber;
+if(udRole)udRole.textContent='Admin · multi-tenant';
+if(scope)scope.textContent='Administración multi-tenant';
+}else{
+badge.textContent='TENANT';badge.className=cyan;
+if(udRole)udRole.textContent='Administrador del tenant';
+if(sel)sel.classList.add('hidden');
+updateScopeLabel();
+}
+}
+function updateScopeLabel(){
+const scope=document.getElementById('scope-label');if(!scope)return;
+if(s.isAdmin){
+const t=(s.tenants||[]).find(x=>x.id===s.tenantId);
+scope.textContent=s.tenantId?('Actuando como: '+(t?t.name:s.tenantId)):'Sin tenant seleccionado';
+}else{
+scope.textContent=s.user&&s.user.tenantName?('Tenant: '+s.user.tenantName):'';
+}
 }
 function logout(){localStorage.clear();s.token=null;s.user=null;showLogin();}
 async function api(m,p,b){
@@ -193,17 +242,19 @@ setTimeout(()=>el.classList.remove('show'),4000);
 }
 function showToast(msg,t){toast(msg,t);}
 function n(v){
-document.querySelectorAll('.view-section').forEach(el=>{el.classList.remove('active');el.style.opacity='0';});
+document.querySelectorAll('.view-section').forEach(el=>{el.classList.remove('active');el.classList.add('hidden');el.style.opacity='0';});
 document.querySelectorAll('.nav-item').forEach(el=>{el.classList.remove('active');});
-const viewMap={dashboard:'dash',incidents:'inc',kb:'kb',config:'cfg',admin:'adm'};
+const viewMap={dashboard:'dash',incidents:'inc',kb:'kb',playbooks:'playbooks',config:'cfg',admin:'adm'};
+const navMap={dashboard:'dash',incidents:'inc',kb:'kb',playbooks:'pb',config:'cfg',admin:'adm'};
 const viewId=viewMap[v]||v;
+const navId=navMap[v]||viewId;
 const t=document.getElementById('v-'+viewId)||document.getElementById('v-'+v);
-if(t){t.classList.add('active');
+if(t){t.classList.remove('hidden');t.classList.add('active');
 anime({targets:t,opacity:[0,1],translateY:[16,0],duration:450,easing:'easeOutCubic'});}
 else{console.warn('Dashboard view not found for',v,viewId);}
-const nb=document.getElementById('n-'+viewId)||document.getElementById('n-'+v);
+const nb=document.getElementById('n-'+navId)||document.getElementById('n-'+viewId)||document.getElementById('n-'+v);
 if(nb){nb.classList.add('active');}
-if(v==='incidents')li();if(v==='kb')lk();if(v==='config')lc();if(v==='admin'){lm();lh();lb();}
+if(v==='dashboard')ld();if(v==='incidents')li();if(v==='kb')lk();if(v==='playbooks')loadPlaybooks();if(v==='config')lc();if(v==='admin'){lm();lh();lb();}
 }
 async function ld(){
 try{
@@ -226,6 +277,7 @@ const rec=await api('GET','/support/incidents?status=&severity=&category=&pageSi
 const lr=document.getElementById('l-rec');
 lr.innerHTML=(rec||[]).length?rec.map(x=>rRow(x,true)).join(''):'<div class="p-8 text-center" style="color:var(--text-secondary)"><svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>Sin incidentes recientes</div>';
 anime({targets:lr.children,translateX:[-20,0],opacity:[0,1],delay:anime.stagger(40),duration:400,easing:'easeOutCubic'});
+loadReadinessAndOutcomes();
 }catch(e){toast(e.message,'error');}
 }
 function countUp(id,target){
@@ -379,7 +431,13 @@ actions+=`<div class="flex gap-3 mt-5"><button onclick="upd('${id}','InProgress'
 if(d.suggestedFixSql){
 actions+=`<div class="mt-5 p-4 rounded-xl hive-card" style="background:rgba(34,211,238,0.05)"><div class="text-xs mb-2" style="color:var(--text-tertiary)">Fix sugerido (SQL)</div><pre class="text-xs text-cyan-300 overflow-x-auto font-mono">${esc(d.suggestedFixSql)}</pre><div class="flex gap-2 mt-3"><button onclick="appr('${id}')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs">Aprobar</button><button onclick="rej('${id}')" class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs">Rechazar</button></div></div>`;
 }
-document.getElementById('db').innerHTML=`<div class="flex items-center gap-3 mb-5"><div class="w-3 h-3 rounded-full ${sev} status-pulse"></div><div class="text-2xl font-bold" style="color:var(--text-primary)">${esc(d.title)}</div></div><div class="text-sm mb-1" style="color:var(--text-secondary)">Estado: <span class="${st} font-medium">${d.status}</span></div><div class="text-sm mb-5" style="color:var(--text-tertiary)">Creado: ${new Date(d.createdAt).toLocaleString()}</div><div class="hive-card p-4 mb-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Descripcion</div><div class="text-sm leading-relaxed whitespace-pre-wrap" style="color:var(--text-secondary)">${esc(d.description)}</div></div>${d.resolutionNotes?`<div class=\"hive-card p-4 mb-4\"><div class=\"text-xs uppercase tracking-wider mb-2\" style=\"color:var(--text-tertiary)\">Notas de resolucion</div><div class=\"text-sm whitespace-pre-wrap\" style=\"color:var(--text-secondary)\">${esc(d.resolutionNotes)}</div></div>`:''}${d.reasoning?`<div class=\"hive-card p-4 mb-4 border-l-2 border-cyan-500\" style=\"background:rgba(34,211,238,0.03)\"><div class=\"text-xs text-cyan-400 uppercase tracking-wider mb-2\">Analisis IA</div><div class=\"text-sm italic\" style=\"color:var(--text-secondary)\">${esc(d.reasoning)}</div></div>`:''}${d.gitBranch?`<div class=\"text-xs\" style=\"color:var(--text-tertiary)\">Branch: <code class=\"text-cyan-400 font-mono\">${esc(d.gitBranch)}</code> · Commit: <code class=\"font-mono\" style=\"color:var(--text-secondary)\">${esc((d.gitCommitHash||'').substring(0,8))}</code></div>`:''}${actions}<div id=\"msgs\" class=\"hive-card p-4 mt-4\"><div class=\"text-xs uppercase tracking-wider mb-2\" style=\"color:var(--text-tertiary)\">Mensajes</div><div id=\"ml\"><div class=\"text-sm\" style=\"color:var(--text-secondary)\">Cargando mensajes...</div></div></div>`;
+const rcaPanelHtml = renderRootCausePanel(d);
+const evidencePackHtml = `${rcaPanelHtml}<div id="inc-snapshots-panel" class="hive-card p-4 mt-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Snapshots de Datos (Before / After Diff &amp; 1-Click Undo)</div><div class="text-xs" style="color:var(--text-secondary)">Cargando snapshots...</div></div><div id="inc-audit-panel" class="hive-card p-4 mt-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Cadena de Auditoría Criptográfica (SHA-256)</div><div class="text-xs" style="color:var(--text-secondary)">Verificando bloques SHA-256...</div></div>`;
+document.getElementById('db').innerHTML=`<div class="flex items-center gap-3 mb-5"><div class="w-3 h-3 rounded-full ${sev} status-pulse"></div><div class="text-2xl font-bold" style="color:var(--text-primary)">${esc(d.title)}</div></div><div class="text-sm mb-1" style="color:var(--text-secondary)">Estado: <span class="${st} font-medium">${d.status}</span></div><div class="text-sm mb-5" style="color:var(--text-tertiary)">Creado: ${new Date(d.createdAt).toLocaleString()}</div><div class="hive-card p-4 mb-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Descripcion</div><div class="text-sm leading-relaxed whitespace-pre-wrap" style="color:var(--text-secondary)">${esc(d.description)}</div></div>${d.resolutionNotes?`<div class=\"hive-card p-4 mb-4\"><div class=\"text-xs uppercase tracking-wider mb-2\" style=\"color:var(--text-tertiary)\">Notas de resolucion</div><div class=\"text-sm whitespace-pre-wrap\" style=\"color:var(--text-secondary)\">${esc(d.resolutionNotes)}</div></div>`:''}${d.reasoning?`<div class=\"hive-card p-4 mb-4 border-l-2 border-cyan-500\" style=\"background:rgba(34,211,238,0.03)\"><div class=\"text-xs text-cyan-400 uppercase tracking-wider mb-2\">Analisis IA</div><div class=\"text-sm italic\" style=\"color:var(--text-secondary)\">${esc(d.reasoning)}</div></div>`:''}${d.gitBranch?`<div class=\"text-xs\" style=\"color:var(--text-tertiary)\">Branch: <code class=\"text-cyan-400 font-mono\">${esc(d.gitBranch)}</code> · Commit: <code class=\"font-mono\" style=\"color:var(--text-secondary)\">${esc((d.gitCommitHash||'').substring(0,8))}</code></div>`:''}${actions}${evidencePackHtml}<div id=\"msgs\" class=\"hive-card p-4 mt-4\"><div class=\"text-xs uppercase tracking-wider mb-2\" style=\"color:var(--text-tertiary)\">Mensajes</div><div id=\"ml\"><div class=\"text-sm\" style=\"color:var(--text-secondary)\">Cargando mensajes...</div></div></div>`;
+
+ // Load Snapshots & Audit Chain asynchronously
+ loadIncidentSnapshots(id);
+ loadIncidentAuditChain(id);
 
  // Load and render messages with Auto-Fix labels
  try{
@@ -391,6 +449,7 @@ document.getElementById('dr').classList.add('open');
 anime({targets:'#db > *',translateX:[30,0],opacity:[0,1],delay:anime.stagger(60),duration:450,easing:'easeOutCubic'});
 }catch(e){toast(e.message,'error');}
 }
+function openIncident(id){return od(id);}
 async function upd(id,st){try{await api('PUT','/support/incidents/'+id,{status:st});toast('Estado actualizado','success');cd();li();ld();}catch(e){toast(e.message,'error');}}
 async function appr(id){try{await api('POST','/support/incidents/'+id+'/approve-db-fix');toast('Fix aprobado','success');cd();li();}catch(e){toast(e.message,'error');}}
 async function rej(id){try{await api('POST','/support/incidents/'+id+'/reject-fix');toast('Fix rechazado','success');cd();li();}catch(e){toast(e.message,'error');}}
@@ -415,11 +474,13 @@ if(sel){
 sel.innerHTML='<option value="">Seleccionar Tenant...</option>'+(tenants||[]).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
 if(s.tenantId&&tenants&&tenants.find(t=>t.id===s.tenantId)){sel.value=s.tenantId;changeTenant();}
 }
+updateScopeLabel();
 }catch(e){console.error('Error loading tenants:',e);toast('Error al cargar tenants','error');}
 }
 function changeTenant(){
 const sel=document.getElementById('tenant-select');
 s.tenantId=sel.value;
+updateScopeLabel();
 if(s.tenantId){
 localStorage.setItem('tenantId',s.tenantId);
 ld();li();
@@ -427,6 +488,17 @@ ld();li();
 }else{
 localStorage.removeItem('tenantId');
 }
+}
+function actAsTenant(tid){
+if(!tid)return;
+const sel=document.getElementById('tenant-select');
+if(sel)sel.value=tid;
+s.tenantId=tid;
+localStorage.setItem('tenantId',tid);
+updateScopeLabel();
+ld();li();
+if(hubConn&&hubConn.invoke){hubConn.invoke('JoinTenantGroup',tid).catch(()=>{});}
+toast('Operando como el tenant seleccionado','success');
 }
 async function patchTenantPath(pathRel, payload){
 if(!s.tenantId){throw new Error('Sin tenant');}
@@ -478,6 +550,7 @@ el('cfg-wa-max-qr').value=w.maxQuickReplyButtons??3;
 }catch(e){toast(e.message,'error');}
 }
 function applyPreset(preset){
+if(!s.tenantId){toast('Selecciona un tenant primero','warning');return;}
 const presets={
 basic:{model:'gpt-3.5-turbo',temperature:0.5,maxTokens:1600},
 standard:{model:'gpt-4',temperature:0.7,maxTokens:2000},
@@ -492,7 +565,14 @@ document.getElementById('cfg-llm-max-out').value=p.maxTokens;
 const el=document.getElementById('preset-'+k);
 if(el){if(k===preset)el.classList.add('preset-selected');else el.classList.remove('preset-selected');}
 });
-toast('Preconfiguración '+preset+' aplicada (guardá LLM para persistir)','success');
+saveLlmSection();
+}
+function toggleAdvancedConfig(){
+const els=document.querySelectorAll('.cfg-adv');
+const btn=document.getElementById('cfg-adv-toggle');
+const hidden=[...els].some(el=>el.classList.contains('hidden'));
+els.forEach(el=>el.classList.toggle('hidden',!hidden));
+if(btn)btn.textContent=hidden?'Ocultar avanzado':'Mostrar avanzado (LLM · Deploy · Políticas)';
 }
 function buildAgentPayload(){return{enabled:document.getElementById('cfg-agent-enabled').checked,enableLlmPlanner:document.getElementById('cfg-planner').checked,plannerVersion:document.getElementById('cfg-planner-version').value||'v1',maxSteps:parseInt(document.getElementById('cfg-max-steps').value,10)||3,tone:document.getElementById('cfg-tone').value||'sales',systemPromptOverride:null,promptVariables:{},allowedTools:[]};}
 function buildLlmPayload(){return{provider:document.getElementById('cfg-llm-provider').value||'openai',model:document.getElementById('cfg-llm-model').value||'gpt-4',temperature:parseFloat(document.getElementById('cfg-llm-temp').value)||0.7,topP:null,maxOutputTokens:parseInt(document.getElementById('cfg-llm-max-out').value,10)||2000};}
@@ -545,3 +625,511 @@ else{badge.classList.add('hidden');badge.classList.remove('status-pulse');}
 }catch(e){document.getElementById('notif-list').innerHTML='<div class="p-4 text-center text-sm" style="color:var(--text-secondary)">Error cargando notificaciones</div>';}
 }
 function markAllRead(){notifications.forEach(n=>n.read=true);document.getElementById('notif-badge').classList.add('hidden');document.getElementById('notif-badge').classList.remove('status-pulse');}
+
+// ==========================================
+// AI Support Engineer v1.2 — Readiness, ROI, Operating Mode, Playbooks, Evidence Pack
+// ==========================================
+
+function updateOperatingModePills(activeMode) {
+  const mode = activeMode || 'Assisted';
+  ['Shadow', 'Assisted', 'Autonomous'].forEach(m => {
+    const btn = document.getElementById('mode-btn-' + m);
+    if (!btn) return;
+    if (m.toLowerCase() === mode.toLowerCase()) {
+      btn.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all preset-selected';
+    } else {
+      btn.className = 'px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-cyan-500/10';
+      btn.style.color = 'var(--text-secondary)';
+    }
+  });
+}
+
+async function setOperatingMode(mode) {
+  updateOperatingModePills(mode);
+  const modeDescriptions = {
+    Shadow: 'Modo Shadow (POC 14d): el agente diagnostica, propone fixes y simula playbooks sin ejecutar escrituras en producción.',
+    Assisted: 'Modo Assisted: el agente diagnostica con evidencia multi-fuente y solicita aprobación humana antes de aplicar cambios.',
+    Autonomous: 'Modo Autonomous: auto-remediación L1/L2 habilitada bajo guardrails de filas, snapshot previo y verificación SQL.'
+  };
+  try {
+    try {
+      await api('PUT', '/support/readiness/operating-mode', { operatingMode: mode });
+    } catch {
+      if (s.tenantId) {
+        await api('PATCH', `/tenants/${s.tenantId}/config`, { operatingMode: mode });
+      } else {
+        await api('PATCH', '/tenant/config', { operatingMode: mode });
+      }
+    }
+    toast(modeDescriptions[mode] || ('Modo operativo cambiado a ' + mode), 'success');
+    loadReadinessAndOutcomes();
+  } catch (e) {
+    toast(e.message || 'No se pudo actualizar el modo operativo', 'error');
+  }
+}
+
+async function loadReadinessAndOutcomes() {
+  if (!s.tenantId && !s.isAdmin) return;
+
+  // 1. Load Outcomes & ROI
+  try {
+    const o = await api('GET', '/support/readiness/outcomes');
+    if (o) {
+      const verified = o.verifiedAutonomousResolutions ?? 0;
+      const shadow = o.shadowProposedResolutions ?? 0;
+      const hours = o.estimatedHoursSaved != null
+        ? Number(o.estimatedHoursSaved).toFixed(1)
+        : ((verified * 0.75) + (shadow * 0.5)).toFixed(1);
+      const savings = o.estimatedCostSavingsUsd != null
+        ? Math.round(Number(o.estimatedCostSavingsUsd))
+        : Math.round((verified * 0.75) * 65);
+
+      const elVer = document.getElementById('roi-verified');
+      const elShd = document.getElementById('roi-shadow');
+      const elHrs = document.getElementById('roi-hours');
+      const elSav = document.getElementById('roi-savings');
+      const elAud = document.getElementById('roi-audit-badge');
+
+      if (elVer) elVer.textContent = String(verified);
+      if (elShd) elShd.textContent = String(shadow);
+      if (elHrs) elHrs.textContent = `${hours} h`;
+      if (elSav) elSav.textContent = `$${savings.toLocaleString()}`;
+
+      if (elAud) {
+        const intact = o.auditChainIntact !== false;
+        elAud.textContent = `Audit Chain SHA-256: ${intact ? 'Intacta' : 'Revisar'}`;
+        elAud.className = intact
+          ? 'text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-medium'
+          : 'text-xs px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-medium';
+      }
+
+      updateOperatingModePills(o.operatingMode || 'Assisted');
+    }
+  } catch (e) {
+    console.warn('Outcomes load error:', e);
+    updateOperatingModePills('Assisted');
+  }
+
+  // 2. Load Readiness Check
+  try {
+    const r = await api('GET', '/support/readiness/check');
+    const badge = document.getElementById('rd-status-badge');
+    const listEl = document.getElementById('rd-checks-list');
+    if (!r || !listEl) return;
+
+    if (badge) {
+      if (r.ready) {
+        badge.textContent = 'LISTO';
+        badge.className = 'text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-semibold';
+      } else {
+        badge.textContent = 'REQUIERE CONFIG';
+        badge.className = 'text-xs px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-semibold';
+      }
+    }
+
+    const labels = {
+      targetDatabase: 'Target Database (SQL Introspección & Snapshots)',
+      gitWorkspace: 'Git Workspace (Commits & PRs L3)',
+      knowledgeBase: 'Knowledge Base (Artículos publicados)',
+      playbooks: 'Playbooks L1/L2 (Remediación determinística)',
+      channels: 'Canales de Notificación & Webhooks'
+    };
+
+    const checks = Array.isArray(r.checks) ? r.checks : [];
+    if (!checks.length) {
+      listEl.innerHTML = '<div class="text-xs py-3 text-center" style="color:var(--text-secondary)">Sin datos de verificación</div>';
+    } else {
+      listEl.innerHTML = checks.map(c => {
+        const ok = !!c.ok;
+        const icon = ok
+          ? '<span class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0 text-xs font-bold">✓</span>'
+          : '<span class="w-5 h-5 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center flex-shrink-0 text-xs font-bold">✕</span>';
+        const title = labels[c.name] || c.name;
+        return `<div class="flex items-start gap-3 p-2.5 rounded-xl border" style="background:var(--bg-tertiary);border-color:var(--border-color)" title="${esc(c.detail || '')}">
+          ${icon}
+          <div class="min-w-0 flex-1">
+            <div class="text-xs font-semibold" style="color:var(--text-primary)">${esc(title)}</div>
+            <div class="text-[11px] truncate mt-0.5" style="color:var(--text-secondary)">${esc(c.detail || '')}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  } catch (e) {
+    console.warn('Readiness check error:', e);
+  }
+}
+
+// ==========================================
+// Playbooks L1/L2 ABM
+// ==========================================
+
+function togglePlaybookForm(show) {
+  const card = document.getElementById('pb-form-card');
+  if (!card) return;
+  const shouldShow = typeof show === 'boolean' ? show : card.classList.contains('hidden');
+  if (shouldShow) card.classList.remove('hidden');
+  else card.classList.add('hidden');
+}
+
+async function loadPlaybooks() {
+  const listEl = document.getElementById('l-pb');
+  if (!listEl) return;
+  try {
+    const list = await api('GET', '/support/playbooks');
+    s.playbooks = list || [];
+    if (!s.playbooks.length) {
+      listEl.innerHTML = '<div class="hive-card p-8 text-center col-span-full" style="color:var(--text-secondary)">No hay playbooks activos configurados para este tenant. Creá el primero con "+ Nuevo Playbook".</div>';
+      return;
+    }
+    listEl.innerHTML = s.playbooks.map(pb => {
+      const approvalBadge = pb.requiresApproval
+        ? '<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">Requiere Aprobación</span>'
+        : '<span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">Auto-Ejecución</span>';
+      const typeBadge = `<span class="text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 font-mono">${esc(pb.actionType || 'SqlTemplate')}</span>`;
+      const activeBadge = pb.isActive !== false
+        ? ''
+        : '<span class="text-[11px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/20">Inactivo</span>';
+
+      return `<div class="hive-card p-5 flex flex-col justify-between gap-4">
+        <div>
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div class="flex items-center gap-2">
+              <code class="text-xs font-bold px-2 py-1 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">${esc(pb.code)}</code>
+              <h4 class="font-semibold text-base" style="color:var(--text-primary)">${esc(pb.name)}</h4>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+              ${typeBadge}
+              ${approvalBadge}
+              ${activeBadge}
+            </div>
+          </div>
+          <div class="text-xs mb-3" style="color:var(--text-secondary)">
+            <span class="font-medium" style="color:var(--text-tertiary)">Síntomas:</span> ${esc(pb.triggerSymptoms || '—')}
+          </div>
+          <div class="p-2.5 rounded-lg mb-2 font-mono text-xs overflow-x-auto" style="background:var(--bg-tertiary);color:var(--text-secondary)">
+            ${esc(pb.actionPayloadTemplate || '')}
+          </div>
+          ${pb.verificationSqlQuery ? `<div class="text-[11px] font-mono truncate mb-2" style="color:var(--text-tertiary)">Verificación: ${esc(pb.verificationSqlQuery)}</div>` : ''}
+          <div class="flex flex-wrap items-center gap-4 text-xs mt-2" style="color:var(--text-tertiary)">
+            <span>Máx filas: <strong style="color:var(--text-primary)">${pb.maxAffectedRows ?? 1}</strong></span>
+            <span>Params: <code class="font-mono">${esc(pb.requiredParametersJson || '[]')}</code></span>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-3 border-t" style="border-color:var(--border-color)">
+          <button type="button" onclick="dryRunPlaybook('${esc(pb.id)}','${esc(pb.code)}')" class="btn-secondary px-3 py-1.5 rounded-lg text-xs">Dry-Run</button>
+          <button type="button" onclick="deactivatePlaybook('${esc(pb.id)}')" class="px-3 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 text-xs transition-all">Desactivar</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    toast(e.message || 'Error cargando playbooks', 'error');
+  }
+}
+
+document.getElementById('f-pb')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  try {
+    const payload = {
+      code: document.getElementById('pb-code').value.trim(),
+      name: document.getElementById('pb-name').value.trim(),
+      triggerSymptoms: document.getElementById('pb-symptoms').value.trim(),
+      actionType: document.getElementById('pb-type').value,
+      actionPayloadTemplate: document.getElementById('pb-payload').value.trim(),
+      requiredParametersJson: document.getElementById('pb-params').value.trim() || '[]',
+      verificationSqlQuery: document.getElementById('pb-verify').value.trim() || null,
+      maxAffectedRows: parseInt(document.getElementById('pb-maxrows').value, 10) || 10,
+      requiresApproval: document.getElementById('pb-approval').checked
+    };
+    await api('POST', '/support/playbooks', payload);
+    toast('Playbook creado exitosamente', 'success');
+    document.getElementById('f-pb').reset();
+    togglePlaybookForm(false);
+    loadPlaybooks();
+  } catch (err) {
+    toast(err.message || 'Error al crear playbook', 'error');
+  }
+});
+
+async function deactivatePlaybook(id) {
+  if (!confirm('¿Desactivar este playbook?')) return;
+  try {
+    await api('DELETE', `/support/playbooks/${encodeURIComponent(id)}`);
+    toast('Playbook desactivado', 'success');
+    loadPlaybooks();
+  } catch (e) {
+    toast(e.message || 'Error al desactivar playbook', 'error');
+  }
+}
+
+async function dryRunPlaybook(id, code) {
+  const raw = prompt(`Dry-Run de ${code || 'Playbook'}.\nIngresá los parámetros en formato JSON:`, '{}');
+  if (raw === null) return;
+  let params = {};
+  try {
+    params = raw.trim() ? JSON.parse(raw) : {};
+  } catch {
+    toast('JSON de parámetros inválido', 'error');
+    return;
+  }
+  try {
+    const res = await api('POST', `/support/playbooks/${encodeURIComponent(id)}/dry-run`, { parameters: params });
+    if (res && res.success) {
+      toast(`Dry-Run OK (${res.playbookCode || code}): ${res.affectedRows ?? 0} filas afectadas. ${res.summary || ''}`, 'success');
+    } else {
+      toast(`Dry-Run falló: ${(res && (res.error || res.summary)) || 'Error desconocido'}`, 'error');
+    }
+  } catch (e) {
+    toast(e.message || 'Error ejecutando Dry-Run', 'error');
+  }
+}
+
+// ==========================================
+// Incident Detail Panels: Root Cause, Snapshots (1-Click Undo), Cryptographic Audit Chain
+// ==========================================
+
+function renderRootCausePanel(inc) {
+  let rca = null;
+  if (inc.rootCauseJson) {
+    try {
+      rca = typeof inc.rootCauseJson === 'string' ? JSON.parse(inc.rootCauseJson) : inc.rootCauseJson;
+    } catch (e) {
+      console.warn('Error parsing rootCauseJson', e);
+    }
+  }
+
+  const hasVerification = inc.verificationQuery || inc.verificationPassed != null || (rca && rca.verificationSqlQuery);
+  const hasArenaOrPr = inc.arenaValidationStatus || inc.pullRequestUrl;
+
+  if (!rca && !hasVerification && !hasArenaOrPr) {
+    return '';
+  }
+
+  const confPct = rca && rca.confidence != null ? Math.round(Number(rca.confidence) * 100) : null;
+  const confBadge = confPct != null
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/25 font-mono">Confianza: ${confPct}%</span>`
+    : '';
+
+  const trackColors = {
+    Playbook: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    DatabaseFix: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+    CodeFix: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+    Escalate: 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+  };
+  const track = rca && rca.recommendedTrack ? rca.recommendedTrack : null;
+  const trackBadge = track
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full border ${trackColors[track] || 'bg-stone-700 text-stone-300 border-stone-600'}">Track: ${esc(track)}</span>`
+    : '';
+
+  const pbBadge = rca && rca.matchedPlaybookCode
+    ? `<span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono">Playbook: ${esc(rca.matchedPlaybookCode)}</span>`
+    : '';
+
+  let verBadge = '';
+  if (inc.verificationPassed === true) {
+    verBadge = `<span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">Verificado: 0 anomalías</span>`;
+  } else if (inc.verificationPassed === false) {
+    verBadge = `<span class="text-[11px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 font-medium">Verificación Fallida</span>`;
+  } else if (hasVerification) {
+    verBadge = `<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">Verificación: Pendiente</span>`;
+  }
+
+  let arenaBadge = '';
+  if (inc.arenaValidationStatus) {
+    const st = inc.arenaValidationStatus;
+    const cls = st === 'Survived'
+      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+      : (st === 'Defeated' || st === 'Error')
+        ? 'bg-red-500/20 text-red-300 border-red-500/30'
+        : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
+    arenaBadge = `<span class="text-[11px] px-2 py-0.5 rounded-full border ${cls} font-mono">HiveArena: ${esc(st)}</span>`;
+  }
+
+  const prLink = inc.pullRequestUrl
+    ? `<a href="${esc(inc.pullRequestUrl)}" target="_blank" rel="noopener noreferrer" class="text-xs text-cyan-400 hover:underline font-mono inline-flex items-center gap-1">Ver Pull Request ↗</a>`
+    : '';
+
+  const vQuery = inc.verificationQuery || (rca && rca.verificationSqlQuery) || '';
+  const dbEv = (rca && Array.isArray(rca.databaseEvidence)) ? rca.databaseEvidence : [];
+  const commits = (rca && Array.isArray(rca.recentCommits)) ? rca.recentCommits : [];
+  const logs = (rca && Array.isArray(rca.applicationLogs)) ? rca.applicationLogs : [];
+
+  return `<div class="hive-card p-4 mt-4 border-l-2 border-cyan-400">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <div class="text-xs uppercase tracking-wider font-semibold text-cyan-400">Root Cause &amp; Multi-Source Evidence</div>
+      <div class="flex flex-wrap gap-1.5">
+        ${confBadge}
+        ${trackBadge}
+        ${pbBadge}
+        ${verBadge}
+        ${arenaBadge}
+      </div>
+    </div>
+
+    ${rca && rca.summaryHypothesis ? `<div class="text-sm mb-3 leading-relaxed" style="color:var(--text-primary)">${esc(rca.summaryHypothesis)}</div>` : ''}
+
+    ${vQuery ? `<div class="mb-3 p-2.5 rounded-lg border" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+      <div class="text-[11px] mb-1" style="color:var(--text-tertiary)">Query de Verificación Post-Fix:</div>
+      <pre class="text-xs text-cyan-300 font-mono overflow-x-auto">${esc(vQuery)}</pre>
+    </div>` : ''}
+
+    ${prLink ? `<div class="mb-3">${prLink}</div>` : ''}
+
+    <div class="space-y-2 text-xs">
+      ${dbEv.length ? `<details class="rounded-lg border p-2.5" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+        <summary class="cursor-pointer font-medium" style="color:var(--text-primary)">Evidencia SQL (${dbEv.length} consultas)</summary>
+        <div class="mt-2 space-y-2">
+          ${dbEv.map(ev => `<div class="p-2 rounded bg-black/20">
+            <div class="font-mono text-[11px] text-cyan-300 mb-1">${esc(ev.sqlQuery || '')}</div>
+            <div class="text-[11px] mb-1" style="color:var(--text-tertiary)">Filas: ${ev.rowCount ?? 0} · ${ev.success ? 'OK' : esc(ev.error || 'Error')}</div>
+            ${ev.renderedTable ? `<pre class="text-[11px] font-mono overflow-x-auto" style="color:var(--text-secondary)">${esc(ev.renderedTable)}</pre>` : ''}
+          </div>`).join('')}
+        </div>
+      </details>` : ''}
+
+      ${commits.length ? `<details class="rounded-lg border p-2.5" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+        <summary class="cursor-pointer font-medium" style="color:var(--text-primary)">Commits Recientes (${commits.length})</summary>
+        <div class="mt-2 space-y-1.5">
+          ${commits.map(c => `<div class="text-[11px] flex flex-wrap gap-2 items-baseline">
+            <code class="text-cyan-400 font-mono">${esc((c.commitHash || '').substring(0, 8))}</code>
+            <span class="font-medium" style="color:var(--text-primary)">${esc(c.subject || '')}</span>
+            <span style="color:var(--text-tertiary)">por ${esc(c.author || 'unknown')}</span>
+          </div>`).join('')}
+        </div>
+      </details>` : ''}
+
+      ${logs.length ? `<details class="rounded-lg border p-2.5" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+        <summary class="cursor-pointer font-medium" style="color:var(--text-primary)">Logs de Aplicación (${logs.length})</summary>
+        <div class="mt-2 space-y-1.5">
+          ${logs.map(l => `<div class="text-[11px] font-mono p-1.5 rounded bg-black/20">
+            <span class="text-amber-400">[${esc(l.level || 'INFO')}]</span> ${esc(l.message || '')}
+            ${l.exceptionText ? `<div class="text-red-400 mt-0.5 truncate">${esc(l.exceptionText)}</div>` : ''}
+          </div>`).join('')}
+        </div>
+      </details>` : ''}
+    </div>
+  </div>`;
+}
+
+async function loadIncidentSnapshots(incidentId) {
+  const panel = document.getElementById('inc-snapshots-panel');
+  if (!panel) return;
+  try {
+    const snaps = await api('GET', `/support/incidents/${encodeURIComponent(incidentId)}/snapshots`);
+    const list = Array.isArray(snaps) ? snaps : [];
+    if (!list.length) {
+      panel.innerHTML = `<div class="text-xs uppercase tracking-wider mb-1" style="color:var(--text-tertiary)">Snapshots de Datos (Before / After Diff &amp; 1-Click Undo)</div>
+        <div class="text-xs" style="color:var(--text-secondary)">Sin snapshots de filas registrados para este incidente.</div>`;
+      return;
+    }
+
+    panel.innerHTML = `<div class="text-xs uppercase tracking-wider mb-3 font-semibold" style="color:var(--text-tertiary)">Snapshots de Datos (${list.length}) &amp; 1-Click Undo</div>
+      <div class="space-y-4">
+        ${list.map(snap => {
+          const revertedBadge = snap.isReverted
+            ? `<span class="text-[11px] px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">Revertido el ${snap.revertedAt ? new Date(snap.revertedAt).toLocaleString() : '—'}</span>`
+            : `<button type="button" onclick="revertSnapshot('${esc(incidentId)}','${esc(snap.id)}')" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs transition-all">Revertir cambio (1-Click Undo)</button>`;
+
+          return `<div class="p-3 rounded-xl border space-y-2.5" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span class="text-xs font-bold font-mono text-cyan-400">${esc(snap.targetTable || 'Table')}</span>
+                <span class="text-xs ml-2" style="color:var(--text-secondary)">${snap.affectedRowCount ?? 0} filas afectadas</span>
+              </div>
+              ${revertedBadge}
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div>
+                <div class="text-[10px] uppercase mb-1" style="color:var(--text-tertiary)">Before (JSON)</div>
+                <pre class="text-[11px] font-mono p-2 rounded bg-black/30 overflow-x-auto max-h-36" style="color:var(--text-secondary)">${esc(snap.beforeRowsJson || '[]')}</pre>
+              </div>
+              <div>
+                <div class="text-[10px] uppercase mb-1" style="color:var(--text-tertiary)">After (JSON)</div>
+                <pre class="text-[11px] font-mono p-2 rounded bg-black/30 overflow-x-auto max-h-36" style="color:var(--text-secondary)">${esc(snap.afterRowsJson || '[]')}</pre>
+              </div>
+            </div>
+            ${snap.inverseSqlScript ? `<details class="text-xs">
+              <summary class="cursor-pointer text-[11px]" style="color:var(--text-tertiary)">Ver SQL Inverso de Rollback</summary>
+              <pre class="text-[11px] font-mono p-2 mt-1 rounded bg-black/30 text-amber-300 overflow-x-auto">${esc(snap.inverseSqlScript)}</pre>
+            </details>` : ''}
+          </div>`;
+        }).join('')}
+      </div>`;
+  } catch (e) {
+    panel.innerHTML = `<div class="text-xs uppercase tracking-wider mb-1" style="color:var(--text-tertiary)">Snapshots de Datos</div>
+      <div class="text-xs" style="color:var(--text-secondary)">No se pudieron cargar los snapshots.</div>`;
+  }
+}
+
+async function revertSnapshot(incidentId, snapshotId) {
+  if (!confirm('¿Ejecutar 1-Click Undo para restaurar las filas afectadas a su estado previo?')) return;
+  try {
+    const res = await api('POST', `/support/incidents/${encodeURIComponent(incidentId)}/snapshots/${encodeURIComponent(snapshotId)}/revert`);
+    toast((res && res.message) || `Snapshot revertido (${res?.affectedRows ?? 0} filas restauradas)`, 'success');
+    loadIncidentSnapshots(incidentId);
+    loadIncidentAuditChain(incidentId);
+  } catch (e) {
+    toast(e.message || 'Error al revertir snapshot', 'error');
+  }
+}
+
+const auditChainsCache = {};
+
+async function loadIncidentAuditChain(incidentId) {
+  const panel = document.getElementById('inc-audit-panel');
+  if (!panel) return;
+  try {
+    const chain = await api('GET', `/support/incidents/${encodeURIComponent(incidentId)}/audit-chain`);
+    if (!chain) return;
+    auditChainsCache[incidentId] = chain;
+    const total = chain.totalEntries ?? (Array.isArray(chain.entries) ? chain.entries.length : 0);
+    const valid = chain.isValid !== false;
+    const badge = valid
+      ? `<span class="text-[11px] px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">Cadena SHA-256 Verificada (${total} bloques)</span>`
+      : `<span class="text-[11px] px-2.5 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 font-medium">Cadena Rota en bloque ${esc(String(chain.brokenAtEntryId || '?'))}</span>`;
+
+    const entries = Array.isArray(chain.entries) ? chain.entries : [];
+    panel.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div class="text-xs uppercase tracking-wider font-semibold" style="color:var(--text-tertiary)">Cadena de Auditoría Criptográfica (SHA-256)</div>
+        <div class="flex flex-wrap items-center gap-2">
+          ${badge}
+          <button type="button" onclick="downloadAuditPack('${esc(incidentId)}')" class="btn-secondary px-2.5 py-1 rounded-lg text-[11px]">Descargar Evidencia JSON</button>
+        </div>
+      </div>
+      ${entries.length ? `<div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+        ${entries.map(en => {
+          const shortHash = en.entryHash ? '0x' + String(en.entryHash).substring(0, 10) : '0x—';
+          const ts = en.createdAt ? new Date(en.createdAt).toLocaleTimeString() : '';
+          return `<div class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs border" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="font-mono text-[11px] text-cyan-400">#${en.sequenceNumber ?? '?'}</span>
+              <span class="font-medium truncate" style="color:var(--text-primary)">${esc(en.eventType || '')}</span>
+              <span class="text-[11px] truncate" style="color:var(--text-tertiary)">· ${esc(en.actor || 'system')}</span>
+            </div>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <code class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/30 text-emerald-400" title="${esc(en.entryHash || '')}">${esc(shortHash)}</code>
+              <span class="text-[10px]" style="color:var(--text-tertiary)">${esc(ts)}</span>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>` : `<div class="text-xs" style="color:var(--text-secondary)">Sin bloques de auditoría registrados.</div>`}`;
+  } catch (e) {
+    panel.innerHTML = `<div class="text-xs uppercase tracking-wider mb-1" style="color:var(--text-tertiary)">Cadena de Auditoría Criptográfica (SHA-256)</div>
+      <div class="text-xs" style="color:var(--text-secondary)">No se pudo verificar la cadena de auditoría.</div>`;
+  }
+}
+
+function downloadAuditPack(incidentId) {
+  const data = auditChainsCache[incidentId] || { incidentId, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `incident-${incidentId}-audit-pack.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 150);
+}
+
