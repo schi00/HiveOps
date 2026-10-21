@@ -30,7 +30,7 @@ public sealed class AppDbContext : DbContext
 
         if (_tenantContext.IsResolved && _connectionStringResolver is not null)
         {
-            // Only override when using a relational (SQL Server) provider.
+            // Only override when using a relational (PostgreSQL) provider.
             // Skip for InMemory (used in tests) to avoid provider conflicts.
             var relationalExtension = optionsBuilder.Options
                 .FindExtension<Microsoft.EntityFrameworkCore.Infrastructure.RelationalOptionsExtension>();
@@ -42,7 +42,7 @@ public sealed class AppDbContext : DbContext
 
             if (!string.Equals(resolvedConnectionString, defaultConnectionString, StringComparison.OrdinalIgnoreCase))
             {
-                optionsBuilder.UseSqlServer(resolvedConnectionString, sql =>
+                optionsBuilder.UseNpgsql(resolvedConnectionString, sql =>
                 {
                     sql.EnableRetryOnFailure(3);
                     sql.CommandTimeout(30);
@@ -61,6 +61,9 @@ public sealed class AppDbContext : DbContext
     public DbSet<DiagnosticLog> DiagnosticLogs { get; set; } = null!;
     public DbSet<KbArticle> KbArticles { get; set; } = null!;
     public DbSet<ApiDependency> ApiDependencies { get; set; } = null!;
+    public DbSet<IncidentRemediationSnapshot> IncidentRemediationSnapshots { get; set; } = null!;
+    public DbSet<TenantPlaybook> TenantPlaybooks { get; set; } = null!;
+    public DbSet<IncidentAuditEntry> IncidentAuditEntries { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -77,5 +80,8 @@ public sealed class AppDbContext : DbContext
         modelBuilder.Entity<DiagnosticLog>().HasQueryFilter(dl => dl.TenantId == CurrentTenantId);
         modelBuilder.Entity<KbArticle>().HasQueryFilter(ka => ka.TenantId == CurrentTenantId);
         modelBuilder.Entity<ApiDependency>().HasQueryFilter(ad => ad.TenantId == CurrentTenantId);
+        modelBuilder.Entity<IncidentRemediationSnapshot>().HasQueryFilter(s => s.TenantId == CurrentTenantId);
+        modelBuilder.Entity<TenantPlaybook>().HasQueryFilter(p => p.TenantId == CurrentTenantId);
+        modelBuilder.Entity<IncidentAuditEntry>().HasQueryFilter(a => a.TenantId == CurrentTenantId);
     }
 }

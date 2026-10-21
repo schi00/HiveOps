@@ -346,6 +346,8 @@ internal sealed class FakeGitService : IGitService
     public Task<string> GetDiffAsync(Guid _, string b, CancellationToken ct = default) => Task.FromResult("");
     public Task<bool> BranchExistsAsync(Guid _, string b, CancellationToken ct = default) => Task.FromResult(false);
     public Task<string> MergePullRequestAsync(Guid _, string b, CancellationToken ct = default) => Task.FromResult($"MERGED:{b}");
+    public Task<IReadOnlyList<GitCommitEvidence>> GetRecentCommitsForFilesAsync(Guid _, IReadOnlyList<string> f, int max = 5, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<GitCommitEvidence>>(Array.Empty<GitCommitEvidence>());
 }
 
 internal sealed class FakeDynamicConnectionStringResolver : IDynamicConnectionStringResolver

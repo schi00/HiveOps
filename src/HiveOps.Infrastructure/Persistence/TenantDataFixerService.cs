@@ -1,6 +1,6 @@
 using System.Data;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -40,14 +40,15 @@ public sealed class TenantDataFixerService : ITenantDataFixerService
     /// tenant's business data:
     /// <list type="bullet">
     /// <item><b>Dedicated tenant database</b> (Mode=SelfHosted and the tenant has an
-    /// <c>EncryptedConnectionString</c>): a raw <see cref="SqlConnection"/> is opened with the
+    /// <c>EncryptedConnectionString</c>): a raw <see cref="NpgsqlConnection"/> is opened with the
     /// per-tenant connection string resolved via <see cref="IDynamicConnectionStringResolver"/>.
     /// RLS is not involved — the dedicated database is fully owned by the tenant.</item>
     /// <item><b>Shared catalog database</b> (SaaS/Ephemeral or tenant without a dedicated DB):
     /// the <see cref="AppDbContext"/> connection is used and the transaction is begun through
     /// EF Core (<c>Database.BeginTransactionAsync</c>) so the connection is opened via the EF
-    /// pipeline and <see cref="TenantSessionContextInterceptor"/> sets SESSION_CONTEXT for
-    /// Row-Level Security. A raw <c>OpenAsync()</c> on the underlying <see cref="System.Data.Common.DbConnection"/>
+    /// pipeline and <see cref="TenantSessionContextInterceptor"/> sets the
+    /// <c>app.tenant_id</c> GUC for Row-Level Security. A raw <c>OpenAsync()</c> on the
+    /// underlying <see cref="System.Data.Common.DbConnection"/>
     /// would bypass the interceptor and RLS would filter out every row.</item>
     /// </list>
     /// <see cref="DiagnosticLog"/> entries are always written through <see cref="AppDbContext"/>
@@ -86,7 +87,7 @@ public sealed class TenantDataFixerService : ITenantDataFixerService
 
     /// <summary>
     /// Shared catalog DB path: the EF-managed transaction guarantees the connection is
-    /// opened through the interceptor pipeline (SESSION_CONTEXT for RLS) and that the
+    /// opened through the interceptor pipeline (app.tenant_id GUC for RLS) and that the
     /// DiagnosticLog write participates in the same local transaction as the fix.
     /// </summary>
     private async Task<DataFixResult> ExecuteOnCatalogDatabaseAsync(Guid tenantId, string sqlScript, Guid incidentId, CancellationToken ct)
@@ -136,7 +137,7 @@ public sealed class TenantDataFixerService : ITenantDataFixerService
     }
 
     /// <summary>
-    /// Dedicated tenant DB path: own <see cref="SqlConnection"/> from the resolved
+    /// Dedicated tenant DB path: own <see cref="NpgsqlConnection"/> from the resolved
     /// per-tenant connection string. The fix runs in a transaction on that connection;
     /// diagnostic logging still goes to the catalog via <see cref="AppDbContext"/>.
     /// </summary>
@@ -155,7 +156,7 @@ public sealed class TenantDataFixerService : ITenantDataFixerService
             return new DataFixResult(false, $"Tenant database connection unavailable: {ex.Message}");
         }
 
-        await using var connection = new SqlConnection(connectionString);
+        await using var connection = new NpgsqlConnection(connectionString);
         try
         {
             await connection.OpenAsync(ct);

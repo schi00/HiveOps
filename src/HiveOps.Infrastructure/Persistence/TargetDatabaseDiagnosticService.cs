@@ -1,9 +1,10 @@
+using System.Data.Common;
 using System.Diagnostics;
 using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using HiveOps.Domain.Interfaces;
@@ -35,7 +36,7 @@ public sealed class TargetDatabaseDiagnosticService : ITargetDatabaseDiagnosticS
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex HasRowLimitPattern = new(
-        @"\bTOP\b|\bOFFSET\b|\bFETCH\b|COUNT\s*\(",
+        @"\bLIMIT\b|\bTOP\b|\bOFFSET\b|\bFETCH\b|COUNT\s*\(",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex WordPattern = new(
@@ -142,21 +143,26 @@ public sealed class TargetDatabaseDiagnosticService : ITargetDatabaseDiagnosticS
                 "Tenant database connection is unavailable.");
         }
 
-        // Force a row cap unless the query already limits rows (TOP/OFFSET/FETCH) or aggregates.
+        // Force a row cap unless the query already limits rows (LIMIT/OFFSET/FETCH) or aggregates.
+        // The user query is wrapped in a subquery so LIMIT applies to the final result
+        // even when the inner query has its own ORDER BY.
         var effectiveSql = HasRowLimitPattern.IsMatch(trimmed)
             ? trimmed
-            : SelectStartPattern.Replace(trimmed, $"SELECT TOP {MaxRenderedRows}", 1);
+            : $"SELECT * FROM ({trimmed.TrimEnd(';')}) AS _diag LIMIT {MaxRenderedRows}";
 
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            await using var connection = new SqlConnection(connectionString);
+            await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(ct);
 
             await using (var setup = connection.CreateCommand())
             {
+                // PostgreSQL maps READ UNCOMMITTED to READ COMMITTED anyway; keep it
+                // explicit plus a statement/lock timeout for the diagnostic session.
                 setup.CommandText =
-                    "SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED; SET LOCK_TIMEOUT 5000;";
+                    "SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED; " +
+                    "SET lock_timeout = '5000'; SET statement_timeout = '15000';";
                 setup.CommandTimeout = CommandTimeoutSeconds;
                 await setup.ExecuteNonQueryAsync(ct);
             }
@@ -247,7 +253,7 @@ public sealed class TargetDatabaseDiagnosticService : ITargetDatabaseDiagnosticS
     private async Task<List<(string Schema, string Name)>> LoadCandidateTablesAsync(
         string connectionString, IReadOnlyList<string> keywords, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(connectionString);
+        await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(ct);
 
         await using var command = connection.CreateCommand();
@@ -256,18 +262,18 @@ public sealed class TargetDatabaseDiagnosticService : ITargetDatabaseDiagnosticS
         if (keywords.Count > 0)
         {
             var sql = new StringBuilder(
-                "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES " +
-                "WHERE TABLE_TYPE = 'BASE TABLE' AND (");
+                "SELECT table_schema, table_name FROM information_schema.tables " +
+                "WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog', 'information_schema') AND (");
 
             for (var i = 0; i < keywords.Count; i++)
             {
                 if (i > 0)
                     sql.Append(" OR ");
-                sql.Append("TABLE_NAME LIKE @k").Append(i);
+                sql.Append("table_name ILIKE @k").Append(i);
                 command.Parameters.AddWithValue($"@k{i}", $"%{EscapeLikePattern(keywords[i])}%");
             }
 
-            sql.Append(") ORDER BY TABLE_SCHEMA, TABLE_NAME");
+            sql.Append(") ORDER BY table_schema, table_name");
             command.CommandText = sql.ToString();
 
             var matches = await ReadTableListAsync(command, ct);
@@ -280,11 +286,16 @@ public sealed class TargetDatabaseDiagnosticService : ITargetDatabaseDiagnosticS
 
         // Fallback: most-referenced tables by inbound foreign keys, then name.
         command.CommandText = """
-            SELECT TOP (@max) s.name, t.name
-            FROM sys.tables t
-            JOIN sys.schemas s ON s.schema_id = t.schema_id
-            ORDER BY (SELECT COUNT(*) FROM sys.foreign_keys fk
-                      WHERE fk.referenced_object_id = t.object_id) DESC, t.name ASC
+            SELECT n.nspname, c.relname
+            FROM pg_catalog.pg_class c
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.relkind = 'r'
+              AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+              AND n.nspname NOT LIKE 'pg\_%'
+            ORDER BY (SELECT COUNT(*) FROM pg_catalog.pg_constraint con
+                      WHERE con.confrelid = c.oid AND con.contype = 'f') DESC,
+                     c.relname ASC
+            LIMIT @max
             """;
         command.Parameters.AddWithValue("@max", MaxCandidateTables);
 
@@ -292,7 +303,7 @@ public sealed class TargetDatabaseDiagnosticService : ITargetDatabaseDiagnosticS
     }
 
     private static async Task<List<(string Schema, string Name)>> ReadTableListAsync(
-        SqlCommand command, CancellationToken ct)
+        DbCommand command, CancellationToken ct)
     {
         var tables = new List<(string Schema, string Name)>();
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -304,27 +315,27 @@ public sealed class TargetDatabaseDiagnosticService : ITargetDatabaseDiagnosticS
     private static async Task<List<ColumnInfo>> LoadColumnsAsync(
         string connectionString, List<(string Schema, string Name)> tables, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(connectionString);
+        await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(ct);
 
         await using var command = connection.CreateCommand();
         command.CommandTimeout = CommandTimeoutSeconds;
 
         var sql = new StringBuilder("""
-            SELECT c.TABLE_SCHEMA, c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE,
-                   c.CHARACTER_MAXIMUM_LENGTH, c.NUMERIC_PRECISION, c.NUMERIC_SCALE,
-                   c.IS_NULLABLE,
-                   CASE WHEN kcu.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END AS IsPrimaryKey
-            FROM INFORMATION_SCHEMA.COLUMNS c
-            LEFT JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-                ON tc.TABLE_SCHEMA = c.TABLE_SCHEMA
-               AND tc.TABLE_NAME = c.TABLE_NAME
-               AND tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
-            LEFT JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
-                ON kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
-               AND kcu.TABLE_SCHEMA = c.TABLE_SCHEMA
-               AND kcu.TABLE_NAME = c.TABLE_NAME
-               AND kcu.COLUMN_NAME = c.COLUMN_NAME
+            SELECT c.table_schema, c.table_name, c.column_name, c.data_type,
+                   c.character_maximum_length, c.numeric_precision, c.numeric_scale,
+                   c.is_nullable,
+                   CASE WHEN kcu.column_name IS NOT NULL THEN 1 ELSE 0 END AS is_primary_key
+            FROM information_schema.columns c
+            LEFT JOIN information_schema.table_constraints tc
+                ON tc.table_schema = c.table_schema
+               AND tc.table_name = c.table_name
+               AND tc.constraint_type = 'PRIMARY KEY'
+            LEFT JOIN information_schema.key_column_usage kcu
+                ON kcu.constraint_name = tc.constraint_name
+               AND kcu.table_schema = c.table_schema
+               AND kcu.table_name = c.table_name
+               AND kcu.column_name = c.column_name
             WHERE 
             """);
 
@@ -332,13 +343,13 @@ public sealed class TargetDatabaseDiagnosticService : ITargetDatabaseDiagnosticS
         {
             if (i > 0)
                 sql.Append(" OR ");
-            sql.Append("(c.TABLE_SCHEMA = @s").Append(i)
-               .Append(" AND c.TABLE_NAME = @t").Append(i).Append(')');
+            sql.Append("(c.table_schema = @s").Append(i)
+               .Append(" AND c.table_name = @t").Append(i).Append(')');
             command.Parameters.AddWithValue($"@s{i}", tables[i].Schema);
             command.Parameters.AddWithValue($"@t{i}", tables[i].Name);
         }
 
-        sql.Append(" ORDER BY c.TABLE_SCHEMA, c.TABLE_NAME, c.ORDINAL_POSITION");
+        sql.Append(" ORDER BY c.table_schema, c.table_name, c.ordinal_position");
         command.CommandText = sql.ToString();
 
         var columns = new List<ColumnInfo>();
@@ -393,13 +404,12 @@ public sealed class TargetDatabaseDiagnosticService : ITargetDatabaseDiagnosticS
     {
         var type = col.DataType;
         if (col.MaxLength is { } len &&
-            type is "char" or "varchar" or "nchar" or "nvarchar" or "binary" or "varbinary")
+            type is "character" or "character varying" or "varchar" or "char" or "bit" or "bit varying")
         {
-            return len < 0 ? $"{type}(max)" : $"{type}({len})";
+            return $"{type}({len})";
         }
 
-        if (col.Precision is { } precision &&
-            type is "decimal" or "numeric")
+        if (col.Precision is { } precision && type is "decimal" or "numeric")
         {
             return $"{type}({precision},{col.Scale ?? 0})";
         }
@@ -420,7 +430,7 @@ public sealed class TargetDatabaseDiagnosticService : ITargetDatabaseDiagnosticS
         value.Replace("|", "\\|").Replace('\n', ' ').Replace('\r', ' ');
 
     private static string EscapeLikePattern(string value) =>
-        value.Replace("[", "[[]").Replace("%", "[%]").Replace("_", "[_]");
+        value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     private sealed record ColumnInfo(
         string Schema,

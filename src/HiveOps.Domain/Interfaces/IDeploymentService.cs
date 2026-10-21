@@ -11,4 +11,11 @@ public interface IDeploymentService
     /// Triggers re-test and deploy automatically.
     /// </summary>
     Task<string> OnMergeDeployedAsync(string branchName, string commitHash, CancellationToken ct = default);
+
+    /// <summary>
+    /// Opens a pull request for the fix branch via the configured provider
+    /// (GitHub / Azure DevOps). Returns the PR URL, or a "local-pr://" pseudo-URL
+    /// when no external provider credentials are configured.
+    /// </summary>
+    Task<string?> CreatePullRequestAsync(Guid tenantId, string branchName, string title, string body, CancellationToken ct = default);
 }

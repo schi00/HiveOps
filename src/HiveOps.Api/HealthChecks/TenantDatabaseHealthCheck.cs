@@ -1,5 +1,5 @@
-using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Npgsql;
 using HiveOps.Domain.Interfaces;
 using HiveOps.Infrastructure.Multitenancy;
 
@@ -40,7 +40,7 @@ public sealed class TenantDatabaseHealthCheck : IHealthCheck
                 return HealthCheckResult.Healthy("No tenant resolved; skipping tenant DB check.");
 
             var startTime = DateTime.UtcNow;
-            await using var connection = new SqlConnection(connectionString);
+            await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
             await using var cmd = connection.CreateCommand();
             cmd.CommandText = "SELECT 1";

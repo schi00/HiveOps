@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+:root {
+  --bg-black: #0B0F17;
+  --bg-ink: #161B22;
+  --bg-elevate: #1E293B;
+  --white: #FAFAFA;
+  --text-muted: #94A3B8;
+  --cyan-primary: #00F0FF;
+  --cyan-soft: #38BDF8;
+  --cyan-deep: #0284C7;
+  --cyan-pale: #7DF9FF;
+  --ok-primary: #10B981;
+}
+
+/* Remap de la escala cyan de Tailwind hacia el neón HiveOps */
+@theme {
+  --color-cyan-300: #7DF9FF;
+  --color-cyan-400: #00F0FF;
+  --color-cyan-500: #06CFE6;
+  --color-cyan-600: #0284C7;
+  --color-cyan-700: #0369A1;
+}
+
+@theme inline {
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+html,
+body {
+  background:
+    radial-gradient(circle at 82% 8%, rgba(0, 240, 255, 0.10) 0%, transparent 40%),
+    radial-gradient(circle at 12% 45%, rgba(2, 132, 199, 0.08) 0%, transparent 45%),
+    var(--bg-black);
+  color: var(--white);
+  font-family: var(--font-sans), Inter, system-ui, -apple-system, sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-display {
+  font-family: var(--font-display), Sora, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+body {
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+}
+
+.surface-card {
+  background: linear-gradient(165deg, rgba(30, 41, 59, 0.55) 0%, rgba(22, 27, 34, 0.85) 100%);
+  border: 1px solid rgba(0, 240, 255, 0.18);
+  backdrop-filter: blur(12px);
+  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.surface-card-hover:hover {
+  border-color: rgba(0, 240, 255, 0.45);
+  transform: translateY(-2px);
+  box-shadow: 0 0 40px rgba(0, 240, 255, 0.12), 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+}
+
+.cyan-text {
+  background: linear-gradient(100deg, #00F0FF 0%, #38BDF8 55%, #2563EB 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.cyan-glow {
+  box-shadow: 0 0 40px rgba(0, 240, 255, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.hive-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.1);
+  padding: 0.35rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #FCD34D;
+}
+
+.hive-badge-cyan {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  background: rgba(0, 240, 255, 0.08);
+  padding: 0.35rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cyan-pale);
+}
+
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(0, 240, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.04) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+.grain-overlay {
+  position: relative;
+}
+
+.grain-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.16;
+  background-image: radial-gradient(circle at 22% 20%, rgba(0, 240, 255, 0.14), transparent 46%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

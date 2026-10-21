@@ -35,6 +35,7 @@
 - Docker / Compose: [`deploy`](deploy)
 - Operations runbook: [`docs/operations.md`](docs/operations.md)
 - Simulation / proving ground: [`src/HiveArena`](src/HiveArena) (see [`docs/architecture/hivearena.md`](docs/architecture/hivearena.md)); legacy Sandpit UI: [`src/HiveOps.Sandpit`](src/HiveOps.Sandpit)
+- AI Support Engineer work plan (root cause, playbooks, snapshots, audit chain, outcomes): [`docs/plans/ai-support-engineer-master-plan.md`](docs/plans/ai-support-engineer-master-plan.md); operational surface documented in [`docs/operations.md`](docs/operations.md#ai-support-engineer-layer-root-cause-playbooks-snapshots-audit)
 
 ## Definition of done
 

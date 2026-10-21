@@ -186,7 +186,7 @@ return r.status===204?null:await r.json();
 function toast(msg,t='info'){
 const el=document.getElementById('toast'),ic=document.getElementById('ti'),tx=document.getElementById('tm');
 tx.textContent=msg;
-ic.className='w-6 h-6 rounded-full flex items-center justify-center text-sm '+(t==='success'?'bg-emerald-500/20 text-emerald-400':t==='error'?'bg-red-500/20 text-red-400':'bg-amber-500/20 text-amber-400');
+ic.className='w-6 h-6 rounded-full flex items-center justify-center text-sm '+(t==='success'?'bg-emerald-500/20 text-emerald-400':t==='error'?'bg-red-500/20 text-red-400':'bg-cyan-500/20 text-cyan-400');
 ic.innerHTML=t==='success'?'<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>':t==='error'?'<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>':'<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
 el.classList.add('show');
 setTimeout(()=>el.classList.remove('show'),4000);
@@ -267,7 +267,7 @@ renderKb(d||[]);
 }
 function renderKb(list){
 const el=document.getElementById('l-kb');
-el.innerHTML=list.length?list.map(k=>`<div class="hive-card p-5 cursor-pointer group"><div class="flex justify-between items-start mb-3"><h4 class="font-semibold group-hover:text-amber-500 transition-colors" style="color:var(--text-primary)">${esc(k.title)}</h4>${k.isPublished?'<span class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">Publicado</span>':'<span class="text-xs px-2.5 py-1 rounded-full bg-neutral-700 text-neutral-400">Borrador</span>'}</div><div class="text-sm line-clamp-3 mb-4" style="color:var(--text-secondary)">${esc(k.content||'')}</div><div class="flex flex-wrap gap-2">${(k.tags||[]).map(t=>`<span class="text-xs px-2 py-1 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20">${esc(t)}</span>`).join('')}</div></div>`).join(''):'<div class="hive-card p-8 text-center col-span-full" style="color:var(--text-secondary)">Sin articulos</div>';
+el.innerHTML=list.length?list.map(k=>`<div class="hive-card p-5 cursor-pointer group"><div class="flex justify-between items-start mb-3"><h4 class="font-semibold group-hover:text-cyan-400 transition-colors" style="color:var(--text-primary)">${esc(k.title)}</h4>${k.isPublished?'<span class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">Publicado</span>':'<span class="text-xs px-2.5 py-1 rounded-full bg-stone-700/60 text-stone-400">Borrador</span>'}</div><div class="text-sm line-clamp-3 mb-4" style="color:var(--text-secondary)">${esc(k.content||'')}</div><div class="flex flex-wrap gap-2">${(k.tags||[]).map(t=>`<span class="text-xs px-2 py-1 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">${esc(t)}</span>`).join('')}</div></div>`).join(''):'<div class="hive-card p-8 text-center col-span-full" style="color:var(--text-secondary)">Sin articulos</div>';
 anime({targets:el.children,scale:[0.95,1],opacity:[0,1],delay:anime.stagger(60),duration:500,easing:'easeOutCubic'});
 }
 async function sk(){
@@ -288,7 +288,7 @@ async function lm(){
 try{
 const d=await api('GET','/support/merge-queue');
 const el=document.getElementById('l-mer');
-el.innerHTML=(d||[]).length?d.map(m=>`<div class="hive-card p-4 flex items-center justify-between"><div><div class="font-semibold text-sm" style="color:var(--text-primary)">${esc(m.title||'Fix')}</div><div class="text-xs mt-1" style="color:var(--text-tertiary)">Branch: <code class="text-amber-500 font-mono">${esc(m.branch)}</code></div></div><button onclick="approveMerge('${m.id}')" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-all">Aprobar</button></div>`).join(''):`<div class="text-center py-6" style="color:var(--text-secondary)">Cola vacia</div>`;
+el.innerHTML=(d||[]).length?d.map(m=>`<div class="hive-card p-4 flex items-center justify-between"><div><div class="font-semibold text-sm" style="color:var(--text-primary)">${esc(m.title||'Fix')}</div><div class="text-xs mt-1" style="color:var(--text-tertiary)">Branch: <code class="text-cyan-400 font-mono">${esc(m.branch)}</code></div></div><button onclick="approveMerge('${m.id}')" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-all">Aprobar</button></div>`).join(''):`<div class="text-center py-6" style="color:var(--text-secondary)">Cola vacia</div>`;
 }catch(e){toast(e.message,'error');}
 }
 async function lh(){
@@ -306,7 +306,7 @@ document.getElementById('tt').textContent=d?.testsPassedLastRun!=null?(d.testsPa
 async function approveMerge(id){try{await api('POST',`/support/merge-queue/${id}/approve`);toast('Merge aprobado','success');lm();}catch(e){toast(e.message,'error');}}
 function rRow(i,compact){
 const sevColors={Critical:'bg-red-500',High:'bg-amber-500',Medium:'bg-yellow-500',Low:'bg-neutral-500'};
-const stColors={Open:'text-amber-500',InProgress:'text-amber-400',Resolved:'text-emerald-500',Closed:'text-neutral-400'};
+const stColors={Open:'text-cyan-400',InProgress:'text-cyan-300',Resolved:'text-emerald-500',Closed:'text-neutral-400'};
 const sev=sevColors[i.severity]||'bg-neutral-500';
 const st=stColors[i.status]||'text-neutral-400';
 // Derive deploy info from API if provided (server may add DeployStatus/LastCiResult soon)
@@ -318,7 +318,7 @@ else if(/FAILED|ROLLBACK/i.test(dStatus)) badgeClass='bg-red-500';
 let badgeHtml='';
 if(dStatus){ const inner=`<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] ${badgeClass} text-white align-middle">${esc(dStatus)}</span>`; badgeHtml=(s.isAdmin&&logUrl)?`<a href="${esc(logUrl)}" class="hover:opacity-90" target="_blank" rel="noopener noreferrer" title="Ver logs de despliegue">${inner}</a>`:inner; }
 const deployBadge=badgeHtml;
-return `<div onclick="od('${i.id}')" class="p-4 hover:bg-amber-500/5 transition-all cursor-pointer flex items-center gap-4 group ${compact?'':'border-b'}" style="border-color:var(--border-color)"><div class="w-2 h-2 rounded-full ${sev} flex-shrink-0 status-pulse"></div><div class="flex-1 min-w-0"><div class="font-medium text-sm truncate flex items-center gap-2" style="color:var(--text-primary)"><span>${esc(i.title)} ${deployBadge}</span><span id="rt-${i.id}" class="inline-block"></span></div><div class="text-xs mt-0.5" style="color:var(--text-tertiary)">${esc(i.category||'Other')} · ${timeAgo(i.createdAt)}</div></div><div class="text-xs font-medium ${st}">${i.status}</div></div>`;
+return `<div onclick="od('${i.id}')" class="p-4 hover:bg-cyan-500/5 transition-all cursor-pointer flex items-center gap-4 group ${compact?'':'border-b'}" style="border-color:var(--border-color)"><div class="w-2 h-2 rounded-full ${sev} flex-shrink-0 status-pulse"></div><div class="flex-1 min-w-0"><div class="font-medium text-sm truncate flex items-center gap-2" style="color:var(--text-primary)"><span>${esc(i.title)} ${deployBadge}</span><span id="rt-${i.id}" class="inline-block"></span></div><div class="text-xs mt-0.5" style="color:var(--text-tertiary)">${esc(i.category||'Other')} · ${timeAgo(i.createdAt)}</div></div><div class="text-xs font-medium ${st}">${i.status}</div></div>`;
 }
 function filterIncidents(filter){
 if(filter==='Open'||filter==='InProgress'||filter==='Resolved'||filter==='Closed'){
@@ -361,7 +361,7 @@ function renderMessages(msgs){
   el.innerHTML=msgs.map(m=>{
     const auto=isAutoFix(m.content||'');
     const pill= auto? '<span class="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-300 border border-white/10">Auto-Fix</span>':'';
-    const boxCls= auto? 'border-l-2 border-amber-500/60 bg-white/5' : '';
+    const boxCls= auto? 'border-l-2 border-cyan-500/60 bg-white/5' : '';
     return `<div class="p-3 rounded-lg mb-2 ${boxCls}"><div class="text-xs mb-1" style="color:var(--text-tertiary)">${esc(m.role)} · ${new Date(m.createdAt).toLocaleString()} ${pill}</div><div class="text-sm" style="color:var(--text-secondary)">${esc(m.content||'')}</div></div>`;
   }).join('');
 }
@@ -370,16 +370,16 @@ try{
 const d=await api('GET','/support/incidents/'+id);
 const sevColors={Critical:'bg-red-500',High:'bg-amber-500',Medium:'bg-yellow-500',Low:'bg-neutral-500'};
 const sev=sevColors[d.severity]||'bg-neutral-500';
-const stColors={Open:'text-amber-500',InProgress:'text-amber-400',Resolved:'text-emerald-500',Closed:'text-neutral-400'};
+const stColors={Open:'text-cyan-400',InProgress:'text-cyan-300',Resolved:'text-emerald-500',Closed:'text-neutral-400'};
 const st=stColors[d.status]||'text-neutral-400';
 let actions='';
 if(d.status==='Open'||d.status==='InProgress'){
 actions+=`<div class="flex gap-3 mt-5"><button onclick="upd('${id}','InProgress')" class="btn-primary px-4 py-2 rounded-lg text-xs flex-1">Marcar En Progreso</button><button onclick="upd('${id}','Resolved')" class="btn-secondary px-4 py-2 rounded-lg text-xs flex-1" style="background:var(--bg-tertiary);color:#10b981;border-color:#10b981">Resolver</button></div>`;
 }
 if(d.suggestedFixSql){
-actions+=`<div class="mt-5 p-4 rounded-xl hive-card" style="background:rgba(245,158,11,0.05)"><div class="text-xs mb-2" style="color:var(--text-tertiary)">Fix sugerido (SQL)</div><pre class="text-xs text-amber-400 overflow-x-auto font-mono">${esc(d.suggestedFixSql)}</pre><div class="flex gap-2 mt-3"><button onclick="appr('${id}')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs">Aprobar</button><button onclick="rej('${id}')" class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs">Rechazar</button></div></div>`;
+actions+=`<div class="mt-5 p-4 rounded-xl hive-card" style="background:rgba(34,211,238,0.05)"><div class="text-xs mb-2" style="color:var(--text-tertiary)">Fix sugerido (SQL)</div><pre class="text-xs text-cyan-300 overflow-x-auto font-mono">${esc(d.suggestedFixSql)}</pre><div class="flex gap-2 mt-3"><button onclick="appr('${id}')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs">Aprobar</button><button onclick="rej('${id}')" class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs">Rechazar</button></div></div>`;
 }
-document.getElementById('db').innerHTML=`<div class="flex items-center gap-3 mb-5"><div class="w-3 h-3 rounded-full ${sev} status-pulse"></div><div class="text-2xl font-bold" style="color:var(--text-primary)">${esc(d.title)}</div></div><div class="text-sm mb-1" style="color:var(--text-secondary)">Estado: <span class="${st} font-medium">${d.status}</span></div><div class="text-sm mb-5" style="color:var(--text-tertiary)">Creado: ${new Date(d.createdAt).toLocaleString()}</div><div class="hive-card p-4 mb-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Descripcion</div><div class="text-sm leading-relaxed whitespace-pre-wrap" style="color:var(--text-secondary)">${esc(d.description)}</div></div>${d.resolutionNotes?`<div class=\"hive-card p-4 mb-4\"><div class=\"text-xs uppercase tracking-wider mb-2\" style=\"color:var(--text-tertiary)\">Notas de resolucion</div><div class=\"text-sm whitespace-pre-wrap\" style=\"color:var(--text-secondary)\">${esc(d.resolutionNotes)}</div></div>`:''}${d.reasoning?`<div class=\"hive-card p-4 mb-4 border-l-2 border-amber-500\" style=\"background:rgba(245,158,11,0.03)\"><div class=\"text-xs text-amber-500 uppercase tracking-wider mb-2\">Analisis IA</div><div class=\"text-sm italic\" style=\"color:var(--text-secondary)\">${esc(d.reasoning)}</div></div>`:''}${d.gitBranch?`<div class=\"text-xs\" style=\"color:var(--text-tertiary)\">Branch: <code class=\"text-amber-500 font-mono\">${esc(d.gitBranch)}</code> · Commit: <code class=\"font-mono\" style=\"color:var(--text-secondary)\">${esc((d.gitCommitHash||'').substring(0,8))}</code></div>`:''}${actions}<div id=\"msgs\" class=\"hive-card p-4 mt-4\"><div class=\"text-xs uppercase tracking-wider mb-2\" style=\"color:var(--text-tertiary)\">Mensajes</div><div id=\"ml\"><div class=\"text-sm\" style=\"color:var(--text-secondary)\">Cargando mensajes...</div></div></div>`;
+document.getElementById('db').innerHTML=`<div class="flex items-center gap-3 mb-5"><div class="w-3 h-3 rounded-full ${sev} status-pulse"></div><div class="text-2xl font-bold" style="color:var(--text-primary)">${esc(d.title)}</div></div><div class="text-sm mb-1" style="color:var(--text-secondary)">Estado: <span class="${st} font-medium">${d.status}</span></div><div class="text-sm mb-5" style="color:var(--text-tertiary)">Creado: ${new Date(d.createdAt).toLocaleString()}</div><div class="hive-card p-4 mb-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Descripcion</div><div class="text-sm leading-relaxed whitespace-pre-wrap" style="color:var(--text-secondary)">${esc(d.description)}</div></div>${d.resolutionNotes?`<div class=\"hive-card p-4 mb-4\"><div class=\"text-xs uppercase tracking-wider mb-2\" style=\"color:var(--text-tertiary)\">Notas de resolucion</div><div class=\"text-sm whitespace-pre-wrap\" style=\"color:var(--text-secondary)\">${esc(d.resolutionNotes)}</div></div>`:''}${d.reasoning?`<div class=\"hive-card p-4 mb-4 border-l-2 border-cyan-500\" style=\"background:rgba(34,211,238,0.03)\"><div class=\"text-xs text-cyan-400 uppercase tracking-wider mb-2\">Analisis IA</div><div class=\"text-sm italic\" style=\"color:var(--text-secondary)\">${esc(d.reasoning)}</div></div>`:''}${d.gitBranch?`<div class=\"text-xs\" style=\"color:var(--text-tertiary)\">Branch: <code class=\"text-cyan-400 font-mono\">${esc(d.gitBranch)}</code> · Commit: <code class=\"font-mono\" style=\"color:var(--text-secondary)\">${esc((d.gitCommitHash||'').substring(0,8))}</code></div>`:''}${actions}<div id=\"msgs\" class=\"hive-card p-4 mt-4\"><div class=\"text-xs uppercase tracking-wider mb-2\" style=\"color:var(--text-tertiary)\">Mensajes</div><div id=\"ml\"><div class=\"text-sm\" style=\"color:var(--text-secondary)\">Cargando mensajes...</div></div></div>`;
 
  // Load and render messages with Auto-Fix labels
  try{

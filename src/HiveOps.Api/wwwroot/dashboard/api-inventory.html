@@ -6,7 +6,7 @@
 <title>API Inventory - HiveOps</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
 <script>
@@ -20,29 +20,36 @@ tailwind.config = {
           400: '#fbbf24', 500: '#f59e0b', 600: '#d97706', 700: '#b45309',
           800: '#92400e', 900: '#78350f', 950: '#451a03',
         },
-        hive: { dark: '#0a0a0a', darker: '#050505', card: '#111111', border: '#222222', amber: '#f59e0b' }
+        hive: { dark: '#07080A', darker: '#050608', card: '#0E1013', border: 'rgba(34, 211, 238, 0.15)', amber: '#22d3ee', cyan: '#22d3ee' }
       },
-      fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Sora', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+      }
     }
   }
 }
 </script>
 <style>
-:root { --bg-primary: #0a0a0a; --bg-secondary: #111111; --border-color: #222222; --text-primary: #fafafa; --amber-primary: #f59e0b; }
+:root { --bg-primary: #07080A; --bg-secondary: #0E1013; --border-color: rgba(34, 211, 238, 0.15); --text-primary: #FAFAFA; --amber-primary: #22d3ee; --cyan-primary: #22d3ee; }
 html.light { --bg-primary: #f9fafb; --bg-secondary: #ffffff; --border-color: #e5e7eb; --text-primary: #111827; --amber-primary: #ffb800; }
-body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-primary); color: var(--text-primary); }
-.hive-card { background: var(--bg-secondary); border: 1px solid rgba(245, 158, 11, 0.6); border-radius: 16px; }
+body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: radial-gradient(circle at 82% 8%, rgba(34, 211, 238, 0.11) 0%, transparent 38%), radial-gradient(circle at 12% 45%, rgba(245, 158, 11, 0.07) 0%, transparent 42%), var(--bg-primary); background-attachment: fixed; color: var(--text-primary); }
+html.light body { background: var(--bg-primary); }
+h1, h2, h3, h4 { font-family: 'Sora', 'Inter', system-ui, sans-serif; letter-spacing: -0.02em; }
+.hive-card { background: linear-gradient(165deg, rgba(250, 250, 250, 0.035) 0%, rgba(14, 16, 19, 0.8) 100%); border: 1px solid rgba(34, 211, 238, 0.18); border-radius: 16px; backdrop-filter: blur(12px); }
+.hive-card:hover { border-color: rgba(103, 232, 249, 0.42); }
 .light .hive-card { background: #ffffff; border: 1px solid #d1d5db; }
 .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
 .status-healthy { background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); }
 .status-learning { background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
 .status-drift { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
 .status-error { background: rgba(107, 114, 128, 0.2); color: #6b7280; border: 1px solid rgba(107, 114, 128, 0.3); }
-.btn-primary { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #0a0a0a; font-weight: 600; transition: all 0.3s ease; }
-.btn-primary:hover { box-shadow: 0 4px 20px rgba(245, 158, 11, 0.4); transform: translateY(-1px); }
+.btn-primary { background: linear-gradient(135deg, #22d3ee 0%, #0891b2 100%); color: #07080a; font-weight: 600; transition: all 0.3s ease; }
+.btn-primary:hover { box-shadow: 0 4px 20px rgba(34, 211, 238, 0.4); transform: translateY(-1px); }
 .input-field { background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); transition: all 0.3s ease; }
 .light .input-field { background: #ffffff; border-color: #d1d5db; color: #111827; }
-.input-field:focus { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1); outline: none; }
+.input-field:focus { border-color: #22d3ee; box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15); outline: none; }
 .provider-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
 .modal-overlay { opacity: 0; pointer-events: none; transition: opacity 0.3s ease; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 50; display: flex; align-items: center; justify-content: center; }
 .modal-overlay.open { opacity: 1; pointer-events: auto; }

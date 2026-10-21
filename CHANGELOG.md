@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+#### AI Support Engineer foundation (see `docs/plans/ai-support-engineer-master-plan.md`)
+- **Multi-source root-cause investigation**: `IRootCauseHypothesisService` / `RootCauseHypothesisService` crosses the tenant schema, read-only diagnostic SELECTs, application logs and recent git commits to produce a persisted `RootCauseBundle` (`Incident.RootCauseJson`) with a recommended remediation track (`Playbook` | `DatabaseFix` | `CodeFix` | `Escalate`) and a post-fix `VerificationQuery`
+- **`ITargetLogCollector` / `TargetDatabaseLogCollector`**: discovers log tables in the tenant database (`Logs`, `AppLogs`, `ErrorLogs`, `Serilog`, ...) via `INFORMATION_SCHEMA` and returns recent errors as `AppLogEvidence`
+- **`IGitService.GetRecentCommitsForFilesAsync`**: `TenantGitService` runs `git log` over suspicious file paths and returns `GitCommitEvidence` for the hypothesis prompt
+- **Deterministic L1/L2 playbooks**: `TenantPlaybook` entity + `IPlaybookRunner` / `PlaybookRunner` execute tenant-declared runbooks (`SqlTemplate` | `HttpWebhook` | `StoredProcedure`) with real `SqlParameter`s, transactional dry-run, `MaxAffectedRows` guard and optional `VerificationSqlQuery`; managed via `PlaybooksController` (`GET/POST/PUT/DELETE /api/support/playbooks`, `POST /api/support/playbooks/{id}/dry-run`)
+- **Row-level reversible remediation**: `IRowLevelSnapshotService` / `RowLevelSnapshotService` captures before/after JSON per affected row and generates exact inverse SQL by primary key (`IncidentRemediationSnapshot`), enabling one-click undo; exposed via `GET /api/support/incidents/{id}/snapshots` and `POST /api/support/incidents/{id}/snapshots/{snapshotId}/revert`
+- **Cryptographic audit pack**: `IIncidentAuditLedger` / `IncidentAuditLedger` appends SHA-256 hash-chained `IncidentAuditEntry` records per incident (`Triage`, `Hypothesis`, `DryRun`, `Approval`, `Execution`, `Verification`, `Rollback`, `ConfirmedClosed`) with `VerifyChainAsync` integrity check; exposed via `GET /api/support/incidents/{id}/audit-chain`
+- **Outcome metering & readiness**: `IOutcomeMeteringService` / `OutcomeMeteringService` counts verified autonomous resolutions per tenant (basis for resolution-based billing); `TenantReadinessController` exposes `GET /api/support/readiness/check` (validates DB + Git + KB + channel connectivity) and `GET /api/support/readiness/outcomes`
+- **Autonomous SWE loop**: `CodePatchAndTestGenerator` generates the code fix together with a regression test reproducing the bug; `InternalHiveArenaCallbacksController` pushes the validated fix branch and opens a real PR via `IDeploymentService.CreatePullRequestAsync`, persisting `Incident.PullRequestUrl` and `Incident.ArenaValidationStatus`
+- `IncidentResolutionMode.Playbook` (value `6`)
+- New `Incident` fields: `RootCauseJson`, `VerificationQuery`, `VerificationPassed`, `PullRequestUrl`, `ArenaValidationStatus`; new entities `IncidentRemediationSnapshot`, `TenantPlaybook`, `IncidentAuditEntry` (all tenant-scoped with query filters)
+
+### Changed
+- `IncidentAutoWorkflowService`: after triage it runs the multi-source investigation; when the hypothesis recommends the playbook track, the deterministic playbook executes before free-form SQL/code generation, and the post-fix verification query gates `VerificationPassed` before a resolution is counted
+- `PipelineDeploymentService`: implements `CreatePullRequestAsync` for `github` / `azdo` providers
+
+### Database Migration
+```bash
+sqlcmd -S <server> -d <database> -i db/V1.2__AiSupportEngineerFoundation.sql
+```
+
 ## [1.1.0] - 2026-05-07
 
 ### Added

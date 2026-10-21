@@ -1,8 +1,10 @@
 # Ordered SQL bootstrap for HiveOps (one path per line). Lines starting with # are ignored.
-# After schema, apply additive patches (idempotent).
+#
+# PostgreSQL (current engine): bootstrap.sh applies the consolidated script
+#   bootstrap.postgresql.sql
+# which already includes schema + RLS + seeds for all versions below.
+#
+# The legacy SQL Server (T-SQL) files remain in this directory for reference
+# only and are no longer applied by bootstrap.sh.
 
-create_hive_support_bot.sql
-AddTenantBillingAndStripe.sql
-AddEncryptedConnectionStringToTenants.sql
-AddIncidentChannelFields.sql
-AddConversationMessageMediaFields.sql
+bootstrap.postgresql.sql

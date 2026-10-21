@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HiveOps Dashboard</title>
+<title>HiveOps · AI Support Engineer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
 <script>
@@ -29,17 +29,19 @@ tailwind.config = {
           950: '#451a03',
         },
         hive: {
-          dark: '#0a0a0a',
-          darker: '#050505',
-          card: '#111111',
-          border: '#222222',
-          amber: '#f59e0b',
-          amberLight: '#fbbf24',
-          amberDark: '#d97706',
+          dark: '#07080A',
+          darker: '#050608',
+          card: '#0E1013',
+          border: 'rgba(34, 211, 238, 0.15)',
+          amber: '#22d3ee',
+          amberLight: '#67e8f9',
+          amberDark: '#0891b2',
         }
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Sora', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
       }
     }
   }
@@ -47,15 +49,24 @@ tailwind.config = {
 </script>
 <style>
 :root {
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #111111;
-  --bg-tertiary: #1a1a1a;
-  --border-color: #222222;
-  --text-primary: #fafafa;
-  --text-secondary: #a3a3a3;
-  --text-tertiary: #737373;
-  --amber-primary: #f59e0b;
-  --amber-glow: rgba(245, 158, 11, 0.15);
+  --bg-black: #07080A;
+  --bg-ink: #0E1013;
+  --bg-primary: #07080A;
+  --bg-secondary: #0E1013;
+  --bg-tertiary: #16191D;
+  --bg-card: #0E1013;
+  --border-color: rgba(34, 211, 238, 0.15);
+  --text-primary: #FAFAFA;
+  --text-secondary: #A8A29E;
+  --text-tertiary: #78716C;
+  --gold-primary: #22D3EE;
+  --gold-soft: #67E8F9;
+  --gold-deep: #0891B2;
+  --cyan-primary: #22D3EE;
+  --cyan-soft: #67E8F9;
+  --cyan-deep: #0891B2;
+  --cyan-primary: #22d3ee;
+  --cyan-glow: rgba(34, 211, 238, 0.15);
 }
 
 html.light {
@@ -66,40 +77,57 @@ html.light {
   --text-primary: #111827;
   --text-secondary: #4b5563;
   --text-tertiary: #6b7280;
-  --amber-primary: #ffb800;
-  --amber-glow: rgba(255, 184, 0, 0.12);
+  --cyan-primary: #06b6d4;
+  --cyan-glow: rgba(6, 182, 212, 0.12);
 }
 
 body {
-  font-family: 'Inter', system-ui, sans-serif;
-  background: var(--bg-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background:
+    radial-gradient(circle at 82% 8%, rgba(34, 211, 238, 0.11) 0%, transparent 38%),
+    radial-gradient(circle at 12% 45%, rgba(34, 211, 238, 0.07) 0%, transparent 42%),
+    var(--bg-black);
+  background-attachment: fixed;
   color: var(--text-primary);
   transition: background-color 0.4s ease, color 0.4s ease;
 }
 
+html.light body {
+  background: var(--bg-primary);
+}
+
+h1, h2, h3, h4, .font-display {
+  font-family: 'Sora', 'Inter', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+code, pre, .font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
 .hex-pattern {
-  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 5l21.65 12.5v25L30 55 8.35 42.5v-25z' fill='none' stroke='%23f59e0b' stroke-width='0.5' opacity='0.08'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 5l21.65 12.5v25L30 55 8.35 42.5v-25z' fill='none' stroke='%2322d3ee' stroke-width='0.5' opacity='0.08'/%3E%3C/svg%3E");
 }
 html.light .hex-pattern {
-  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 5l21.65 12.5v25L30 55 8.35 42.5v-25z' fill='none' stroke='%23d97706' stroke-width='0.5' opacity='0.10'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 5l21.65 12.5v25L30 55 8.35 42.5v-25z' fill='none' stroke='%230891b2' stroke-width='0.5' opacity='0.10'/%3E%3C/svg%3E");
 }
 
 .preset-selected {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
-  border-color: #f59e0b !important;
+  background: linear-gradient(135deg, #22d3ee 0%, #0891b2 100%) !important;
+  border-color: #22d3ee !important;
   color: #000000 !important;
-  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+  box-shadow: 0 4px 15px rgba(34, 211, 238, 0.3);
 }
 .preset-selected div {
   color: #000000 !important;
 }
 .preset-selected:hover {
-  box-shadow: 0 6px 25px rgba(245, 158, 11, 0.4);
+  box-shadow: 0 6px 25px rgba(34, 211, 238, 0.4);
 }
 
 .glass {
-  background: rgba(17, 17, 17, 0.6);
-  backdrop-filter: blur(20px) saturate(180%);
+  background: rgba(7, 8, 10, 0.8);
+  backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid var(--border-color);
   transition: all 0.3s ease;
 }
@@ -111,16 +139,16 @@ html.light .hex-pattern {
 }
 
 .glass-hover:hover {
-  background: rgba(245, 158, 11, 0.05);
-  border-color: rgba(245, 158, 11, 0.3);
-  box-shadow: 0 0 30px var(--amber-glow);
+  background: rgba(34, 211, 238, 0.05);
+  border-color: rgba(34, 211, 238, 0.3);
+  box-shadow: 0 0 30px var(--cyan-glow);
   transform: translateY(-2px);
 }
 
 .glass-strong {
-  background: rgba(10, 10, 10, 0.95);
+  background: rgba(7, 8, 10, 0.95);
   backdrop-filter: blur(24px) saturate(200%);
-  border: 1px solid #333;
+  border: 1px solid rgba(34, 211, 238, 0.25);
 }
 
 .light .glass-strong {
@@ -129,9 +157,10 @@ html.light .hex-pattern {
 }
 
 .hive-card {
-  background: var(--bg-secondary);
-  border: 1px solid rgba(245, 158, 11, 0.6);
+  background: linear-gradient(165deg, rgba(250, 250, 250, 0.035) 0%, rgba(14, 16, 19, 0.8) 100%);
+  border: 1px solid rgba(34, 211, 238, 0.18);
   border-radius: 16px;
+  backdrop-filter: blur(12px);
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -141,9 +170,9 @@ html.light .hex-pattern {
 }
 
 .hive-card:hover {
-  border-color: rgba(245, 158, 11, 0.4);
-  box-shadow: 0 8px 40px rgba(245, 158, 11, 0.12), 0 4px 12px rgba(0, 0, 0, 0.2);
-  transform: translateY(-3px);
+  border-color: rgba(103, 232, 249, 0.42);
+  box-shadow: 0 12px 32px -12px rgba(34, 211, 238, 0.22);
+  transform: translateY(-2px);
 }
 
 .light .hive-card:hover {
@@ -151,7 +180,7 @@ html.light .hex-pattern {
 }
 
 .hive-glow {
-  box-shadow: 0 0 40px rgba(245, 158, 11, 0.15);
+  box-shadow: 0 0 40px rgba(34, 211, 238, 0.15);
 }
 
 .drawer {
@@ -195,8 +224,8 @@ html.light .hex-pattern {
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
-  50% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(34, 211, 238, 0); }
 }
 
 @keyframes float {
@@ -226,13 +255,13 @@ html.light .hex-pattern {
   left: 50%;
   width: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, #f59e0b, transparent);
+  background: linear-gradient(90deg, transparent, #22d3ee, transparent);
   transition: all 0.3s ease;
   transform: translateX(-50%);
 }
 
 .light .nav-item::after {
-  background: linear-gradient(90deg, transparent, #ffb800, transparent);
+  background: linear-gradient(90deg, transparent, #06b6d4, transparent);
 }
 
 .nav-item:hover::after,
@@ -241,16 +270,16 @@ html.light .hex-pattern {
 }
 
 .nav-item.active {
-  color: #f59e0b;
+  color: #22d3ee;
 }
 
 .light .nav-item.active {
-  color: #ffb800;
+  color: #06b6d4;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: #0a0a0a;
+  background: linear-gradient(135deg, #22d3ee 0%, #0891b2 100%);
+  color: #07080A;
   font-weight: 600;
   transition: all 0.3s ease;
   position: relative;
@@ -273,12 +302,12 @@ html.light .hex-pattern {
 }
 
 .btn-primary:hover {
-  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.4);
+  box-shadow: 0 4px 20px rgba(34, 211, 238, 0.4);
   transform: translateY(-1px);
 }
 
 .light .btn-primary {
-  background: #b45309;
+  background: #0891b2;
   color: #fff;
   box-shadow: 0 8px 20px rgba(180, 83, 9, 0.25);
 }
@@ -295,8 +324,8 @@ html.light .hex-pattern {
 }
 
 .btn-secondary:hover {
-  border-color: rgba(245, 158, 11, 0.5);
-  background: rgba(245, 158, 11, 0.05);
+  border-color: rgba(34, 211, 238, 0.5);
+  background: rgba(34, 211, 238, 0.05);
 }
 
 .light .btn-secondary {
@@ -307,7 +336,7 @@ html.light .hex-pattern {
 
 .light .btn-secondary:hover {
   background: #f3f4f6;
-  border-color: #b45309;
+  border-color: #0891b2;
 }
 
 .input-field {
@@ -324,23 +353,23 @@ html.light .hex-pattern {
 }
 
 .input-field:focus {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+  border-color: #22d3ee;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1);
   outline: none;
 }
 
 .light .input-field:focus {
-  border-color: #ffb800;
+  border-color: #06b6d4;
   box-shadow: 0 0 0 3px rgba(255, 184, 0, 0.2);
 }
 
 .hive-logo {
-  filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.3));
+  filter: drop-shadow(0 0 10px rgba(34, 211, 238, 0.3));
   transition: all 0.3s ease;
 }
 
 .hive-logo:hover {
-  filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.5));
+  filter: drop-shadow(0 0 20px rgba(34, 211, 238, 0.5));
   transform: scale(1.05);
 }
 
@@ -358,7 +387,7 @@ html.light .hex-pattern {
 }
 
 .theme-toggle:hover {
-  border-color: rgba(245, 158, 11, 0.5);
+  border-color: rgba(34, 211, 238, 0.5);
   transform: rotate(15deg);
 }
 
@@ -384,18 +413,51 @@ html.light .hex-pattern {
   opacity: 1;
 }
 
-.gradient-text {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+.gradient-text, .gold-text {
+  background: linear-gradient(100deg, #A5F3FC 0%, #22D3EE 55%, #67E8F9 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.cyan-text {
+  background: linear-gradient(100deg, #67E8F9 0%, #22D3EE 55%, #38BDF8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gold-glow {
+  box-shadow: 0 0 28px rgba(34, 211, 238, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.hive-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  background: rgba(34, 211, 238, 0.1);
+  padding: 0.35rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold-soft);
+}
+
+.hero-grid {
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.05) 1px, transparent 1px);
+  background-size: 36px 36px;
 }
 
 .hero-glow {
   position: absolute;
   width: 600px;
   height: 600px;
-  background: radial-gradient(circle, rgba(245, 158, 11, 0.08) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.08) 0%, transparent 70%);
   top: -200px;
   left: 50%;
   transform: translateX(-50%);
@@ -403,7 +465,7 @@ html.light .hex-pattern {
 }
 
 .light .hero-glow {
-  background: radial-gradient(circle, rgba(245, 158, 11, 0.04) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.04) 0%, transparent 70%);
 }
 
 .user-dropdown {
@@ -443,7 +505,7 @@ html.light .hex-pattern {
 }
 
 .user-dropdown-item:hover {
-  background: rgba(245, 158, 11, 0.08);
+  background: rgba(34, 211, 238, 0.08);
   color: var(--text-primary);
 }
 
@@ -463,7 +525,7 @@ html.light .hex-pattern {
 }
 
 .delete-link:hover {
-  color: #b45309;
+  color: #f87171;
 }
 
 .stock-alert {
@@ -473,7 +535,7 @@ html.light .hex-pattern {
 }
 
 .light #user-avatar-btn {
-  background: #ffb800;
+  background: #06b6d4;
   color: #111827;
   border: 1px solid rgba(17, 24, 39, 0.08);
 }
@@ -490,22 +552,27 @@ html.light .hex-pattern {
   <div class="hive-card w-full max-w-md p-8 relative z-10">
     <div class="flex flex-col items-center gap-6 mb-8">
       <div class="hive-logo">
-        <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M32 4L36 10L32 16L28 10L32 4Z" fill="#f59e0b" class="hex-cell"/>
-          <path d="M44 10L48 16L44 22L40 16L44 10Z" fill="#d97706" class="hex-cell"/>
-          <path d="M20 10L24 16L20 22L16 16L20 10Z" fill="#d97706" class="hex-cell"/>
-          <path d="M32 16L36 22L32 28L28 22L32 16Z" fill="#fbbf24" class="hex-cell"/>
-          <path d="M44 22L48 28L44 34L40 28L44 22Z" fill="#f59e0b" class="hex-cell"/>
-          <path d="M20 22L24 28L20 34L16 28L20 22Z" fill="#f59e0b" class="hex-cell"/>
-          <path d="M32 28L36 34L32 40L28 34L32 28Z" fill="#fcd34d" class="hex-cell"/>
-          <path d="M44 34L48 40L44 46L40 40L44 34Z" fill="#fbbf24" class="hex-cell"/>
-          <path d="M20 34L24 40L20 46L16 40L20 34Z" fill="#fbbf24" class="hex-cell"/>
-          <path d="M32 40L36 46L32 52L28 46L32 40Z" fill="#f59e0b" class="hex-cell"/>
+        <svg width="56" height="56" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="hv-top" x1="18" y1="2" x2="18" y2="18" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#A5F3FC"/><stop offset="100%" stop-color="#22D3EE"/>
+            </linearGradient>
+            <linearGradient id="hv-left" x1="4" y1="14" x2="18" y2="33" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#22D3EE"/><stop offset="100%" stop-color="#0891B2"/>
+            </linearGradient>
+            <linearGradient id="hv-right" x1="18" y1="14" x2="32" y2="33" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#67E8F9"/><stop offset="100%" stop-color="#155E75"/>
+            </linearGradient>
+          </defs>
+          <polygon points="18,2.5 25.5,6.8 25.5,15.4 18,19.7 10.5,15.4 10.5,6.8" fill="url(#hv-top)" stroke="#CFFAFE" stroke-width="0.75" stroke-opacity="0.6"/>
+          <polygon points="10.5,15.4 18,19.7 18,28.3 10.5,32.6 3,28.3 3,19.7" fill="url(#hv-left)" stroke="#A5F3FC" stroke-width="0.75" stroke-opacity="0.45"/>
+          <polygon points="25.5,15.4 33,19.7 33,28.3 25.5,32.6 18,28.3 18,19.7" fill="url(#hv-right)" stroke="#A5F3FC" stroke-width="0.75" stroke-opacity="0.45"/>
+          <circle cx="18" cy="19.7" r="2.3" fill="#ECFEFF"/>
         </svg>
       </div>
       <div class="text-center">
-        <h1 class="text-3xl font-bold gradient-text mb-1">HiveOps</h1>
-        <p class="text-sm" style="color: var(--text-secondary)">Dashboard</p>
+        <h1 class="text-3xl font-display font-bold mb-1 text-white">Hive<span class="cyan-text">Ops</span></h1>
+        <p class="text-sm" style="color: var(--text-secondary)">AI Support Engineer</p>
       </div>
     </div>
     <form id="login-form" class="space-y-5">
@@ -519,10 +586,10 @@ html.light .hex-pattern {
         Ingresar
       </button>
       <div id="le" class="text-center text-sm text-red-500 hidden"></div>
-      <div class="mt-6 border-t border-gray-200 pt-4 text-center">
+      <div class="mt-6 border-t pt-4 text-center" style="border-color: var(--border-color)">
         <span class="text-sm" style="color: var(--text-tertiary)">¿Nuevo en HiveOps?</span>
         <a href="/onboarding/index.html"
-           class="ml-1 text-sm font-semibold text-indigo-400 hover:text-indigo-300 transition-colors">
+           class="ml-1 text-sm font-semibold text-cyan-400 hover:text-cyan-300 transition-colors">
           Crea una cuenta de organización
         </a>
       </div>
@@ -537,22 +604,17 @@ html.light .hex-pattern {
     <div class="flex items-center gap-6">
       <div class="flex items-center gap-3">
         <div class="hive-logo">
-          <svg width="40" height="40" viewBox="0 0 64 64" fill="none">
-            <path d="M32 4L36 10L32 16L28 10L32 4Z" fill="#f59e0b"/>
-            <path d="M44 10L48 16L44 22L40 16L44 10Z" fill="#d97706"/>
-            <path d="M20 10L24 16L20 22L16 16L20 10Z" fill="#d97706"/>
-            <path d="M32 16L36 22L32 28L28 22L32 16Z" fill="#fbbf24"/>
-            <path d="M44 22L48 28L44 34L40 28L44 22Z" fill="#f59e0b"/>
-            <path d="M20 22L24 28L20 34L16 28L20 22Z" fill="#f59e0b"/>
-            <path d="M32 28L36 34L32 40L28 34L32 28Z" fill="#fcd34d"/>
-            <path d="M44 34L48 40L44 46L40 40L44 34Z" fill="#fbbf24"/>
-            <path d="M20 34L24 40L20 46L16 40L20 34Z" fill="#fbbf24"/>
-            <path d="M32 40L36 46L32 52L28 46L32 40Z" fill="#f59e0b"/>
+          <svg width="34" height="34" viewBox="0 0 36 36" fill="none">
+            <polygon points="18,2.5 25.5,6.8 25.5,15.4 18,19.7 10.5,15.4 10.5,6.8" fill="url(#hv-top)" stroke="#CFFAFE" stroke-width="0.75" stroke-opacity="0.6"/>
+            <polygon points="10.5,15.4 18,19.7 18,28.3 10.5,32.6 3,28.3 3,19.7" fill="url(#hv-left)" stroke="#A5F3FC" stroke-width="0.75" stroke-opacity="0.45"/>
+            <polygon points="25.5,15.4 33,19.7 33,28.3 25.5,32.6 18,28.3 18,19.7" fill="url(#hv-right)" stroke="#A5F3FC" stroke-width="0.75" stroke-opacity="0.45"/>
+            <circle cx="18" cy="19.7" r="2.3" fill="#ECFEFF"/>
           </svg>
         </div>
         <div>
-          <span class="font-bold text-lg gradient-text">HiveOps</span>
-          <span class="text-xs block" style="color: var(--text-secondary)">Dashboard</span>
+          <span class="font-display font-bold text-lg text-white">Hive<span class="cyan-text">Ops</span></span>
+          <span class="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-widest text-cyan-300/90 ml-2">by HIVE</span>
+          <span class="text-xs block mt-0.5" style="color: var(--text-secondary)">AI Support Engineer</span>
         </div>
       </div>
       <div class="hidden md:flex items-center gap-1 ml-6 border-l pl-6" style="border-color: var(--border-color)">
@@ -573,10 +635,10 @@ html.light .hex-pattern {
       
       <!-- Theme Toggle -->
       <div class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema">
-        <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #f59e0b">
+        <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #22d3ee">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
         </svg>
-        <svg id="moon-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #f59e0b">
+        <svg id="moon-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #22d3ee">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
         </svg>
       </div>
@@ -595,7 +657,7 @@ html.light .hex-pattern {
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-secondary)">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
           </svg>
-          <span id="notif-badge" class="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 status-pulse"></span>
+          <span id="notif-badge" class="absolute top-1 right-1 w-2 h-2 rounded-full bg-cyan-500 status-pulse"></span>
         </button>
         <div id="notif-dropdown" class="hidden absolute right-0 mt-2 w-80 hive-card rounded-xl shadow-2xl border border-[var(--border-color)] z-50 overflow-hidden" style="background: var(--bg-card); backdrop-filter: blur(12px);">
           <div class="px-4 py-3 border-b flex justify-between items-center" style="border-color: var(--border-color)">
@@ -610,7 +672,7 @@ html.light .hex-pattern {
       
       <!-- User -->
       <div class="flex items-center gap-3 ml-2 relative" id="user-menu-container">
-        <div onclick="toggleUserDropdown()" class="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-white font-bold text-sm cursor-pointer hover:shadow-lg hover:shadow-amber-500/30 transition-all select-none" id="user-avatar-btn">
+        <div onclick="toggleUserDropdown()" class="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-white font-bold text-sm cursor-pointer hover:shadow-lg hover:shadow-cyan-500/30 transition-all select-none" id="user-avatar-btn">
           A
         </div>
         <div id="user-dropdown" class="user-dropdown">
@@ -630,12 +692,12 @@ html.light .hex-pattern {
 
   <!-- Main -->
   <div class="fixed inset-0 pointer-events-none overflow-hidden" style="z-index:0;">
-    <svg class="absolute float" style="top:10%;left:6%;width:140px;height:140px;opacity:0.36;" viewBox="0 0 100 100"><path fill="#f59e0b" fill-opacity="0.48" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
-    <svg class="absolute float-delayed" style="top:35%;right:10%;width:180px;height:180px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#ffb800" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
-    <svg class="absolute float-delayed-2" style="bottom:15%;left:18%;width:110px;height:110px;opacity:0.36;" viewBox="0 0 100 100"><path fill="#d97706" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
-    <svg class="absolute float" style="top:55%;right:28%;width:90px;height:90px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#f59e0b" fill-opacity="0.4" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
-    <svg class="absolute float-delayed" style="bottom:25%;right:5%;width:160px;height:160px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#b45309" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
-    <svg class="absolute float-delayed-2" style="top:8%;right:40%;width:70px;height:70px;opacity:0.24;" viewBox="0 0 100 100"><path fill="#ffb800" fill-opacity="0.48" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float" style="top:10%;left:6%;width:140px;height:140px;opacity:0.36;" viewBox="0 0 100 100"><path fill="#22d3ee" fill-opacity="0.48" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float-delayed" style="top:35%;right:10%;width:180px;height:180px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#06b6d4" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float-delayed-2" style="bottom:15%;left:18%;width:110px;height:110px;opacity:0.36;" viewBox="0 0 100 100"><path fill="#0891b2" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float" style="top:55%;right:28%;width:90px;height:90px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#22d3ee" fill-opacity="0.4" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float-delayed" style="bottom:25%;right:5%;width:160px;height:160px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#155e75" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float-delayed-2" style="top:8%;right:40%;width:70px;height:70px;opacity:0.24;" viewBox="0 0 100 100"><path fill="#06b6d4" fill-opacity="0.48" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
   </div>
   <main class="pt-24 pb-10 px-6 max-w-7xl mx-auto" style="position:relative; z-index:1;">
     
@@ -644,10 +706,10 @@ html.light .hex-pattern {
       <!-- Hero Stats -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         <div onclick="filterIncidents('Open')" class="hive-card p-6 relative overflow-hidden group cursor-pointer">
-          <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-amber-500/10 to-transparent rounded-bl-full"></div>
+          <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-cyan-500/10 to-transparent rounded-bl-full"></div>
           <div class="flex justify-between items-start mb-4">
             <span class="text-sm font-medium" style="color: var(--text-secondary)">Abiertos</span>
-            <div class="status-dot bg-amber-500 status-pulse"></div>
+            <div class="status-dot bg-cyan-500 status-pulse"></div>
           </div>
           <div class="text-4xl font-bold" id="c-open">0</div>
           <div class="mt-2 text-xs" style="color: var(--text-tertiary)">Incidentes activos</div>
@@ -674,10 +736,10 @@ html.light .hex-pattern {
         </div>
 
         <div class="hive-card p-6 relative overflow-hidden group">
-          <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-amber-500/10 to-transparent rounded-bl-full"></div>
+          <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-cyan-500/10 to-transparent rounded-bl-full"></div>
           <div class="flex justify-between items-start mb-4">
             <span class="text-sm font-medium" style="color: var(--text-secondary)">Tiempo medio</span>
-            <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
           </div>
@@ -706,7 +768,7 @@ html.light .hex-pattern {
       <div class="hive-card overflow-hidden">
         <div class="px-6 py-5 border-b flex justify-between items-center" style="border-color: var(--border-color)">
           <h2 class="font-semibold text-lg">Recientes</h2>
-          <button onclick="n('incidents')" class="text-sm flex items-center gap-1 hover:gap-2 transition-all" style="color: #f59e0b">
+          <button onclick="n('incidents')" class="text-sm flex items-center gap-1 hover:gap-2 transition-all" style="color: #22d3ee">
             Ver todos
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
@@ -775,7 +837,7 @@ html.light .hex-pattern {
           </div>
         </div>
         <div class="hive-card p-5 flex items-center gap-4">
-          <div class="w-3 h-3 rounded-full bg-amber-500"></div>
+          <div class="w-3 h-3 rounded-full bg-cyan-500"></div>
           <div>
             <div class="text-sm" style="color: var(--text-secondary)">Tests</div>
             <div id="tt" class="font-semibold">Pendiente</div>
@@ -817,15 +879,15 @@ html.light .hex-pattern {
       <div class="hive-card p-6">
         <h3 class="font-semibold text-lg mb-4">Preconfiguración rápida (LLM)</h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button id="preset-basic" type="button" onclick="applyPreset('basic')" class="hive-card p-4 text-left hover:border-amber-500/50 transition-all">
+          <button id="preset-basic" type="button" onclick="applyPreset('basic')" class="hive-card p-4 text-left hover:border-cyan-500/50 transition-all">
             <div class="font-semibold mb-2" style="color:var(--text-primary)">Básico</div>
             <div class="text-sm" style="color:var(--text-secondary)">Modelo rápido, menor costo</div>
           </button>
-          <button id="preset-standard" type="button" onclick="applyPreset('standard')" class="hive-card p-4 text-left hover:border-amber-500/50 transition-all">
+          <button id="preset-standard" type="button" onclick="applyPreset('standard')" class="hive-card p-4 text-left hover:border-cyan-500/50 transition-all">
             <div class="font-semibold mb-2" style="color:var(--text-primary)">Estándar</div>
             <div class="text-sm" style="color:var(--text-secondary)">Equilibrio recomendado</div>
           </button>
-          <button id="preset-advanced" type="button" onclick="applyPreset('advanced')" class="hive-card p-4 text-left hover:border-amber-500/50 transition-all">
+          <button id="preset-advanced" type="button" onclick="applyPreset('advanced')" class="hive-card p-4 text-left hover:border-cyan-500/50 transition-all">
             <div class="font-semibold mb-2" style="color:var(--text-primary)">Avanzado</div>
             <div class="text-sm" style="color:var(--text-secondary)">Más temperatura/tokens</div>
           </button>
@@ -839,8 +901,8 @@ html.light .hex-pattern {
           <button type="button" onclick="saveAgentRuntime()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar runtime</button>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-agent-enabled" type="checkbox" class="accent-amber-500"/> Agente habilitado</label>
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-planner" type="checkbox" class="accent-amber-500"/> Planner LLM</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-agent-enabled" type="checkbox" class="accent-cyan-500"/> Agente habilitado</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-planner" type="checkbox" class="accent-cyan-500"/> Planner LLM</label>
           <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Planner version</label>
             <input id="cfg-planner-version" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" value="v1"/></div>
           <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Tono conversacional</label>
@@ -856,7 +918,7 @@ html.light .hex-pattern {
           <h3 class="font-semibold text-lg">Modelo LLM (proveedor)</h3>
           <button type="button" onclick="saveLlmSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar LLM</button>
         </div>
-        <p id="cfg-llm-selfhosted-hint" class="hidden text-xs mb-4 rounded-lg px-3 py-2" style="color:var(--text-secondary);background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2)">Self-hosted: el campo <strong>Modelo</strong> debe ser un id de OpenRouter (p. ej. <code class="text-amber-500">meta-llama/llama-3.3-70b-instruct</code>), igual que en appsettings SemanticKernel.</p>
+        <p id="cfg-llm-selfhosted-hint" class="hidden text-xs mb-4 rounded-lg px-3 py-2" style="color:var(--text-secondary);background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2)">Self-hosted: el campo <strong>Modelo</strong> debe ser un id de OpenRouter (p. ej. <code class="text-cyan-500">meta-llama/llama-3.3-70b-instruct</code>), igual que en appsettings SemanticKernel.</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Proveedor</label>
             <select id="cfg-llm-provider" class="input-field w-full px-3 py-2 rounded-xl text-sm"><option value="openai">openai</option><option value="azure">azure</option><option value="anthropic">anthropic</option></select></div>
@@ -877,8 +939,8 @@ html.light .hex-pattern {
           <button type="button" onclick="saveDeployGitSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar Deploy/Git</button>
         </div>
         <div class="space-y-3">
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-auto-deploy" type="checkbox" class="accent-amber-500"/> Auto-deploy (workflow incidentes)</label>
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-manual-deploy" type="checkbox" class="accent-amber-500"/> Permitir deploy manual (panel/plugin/aprobaciones)</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-auto-deploy" type="checkbox" class="accent-cyan-500"/> Auto-deploy (workflow incidentes)</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-manual-deploy" type="checkbox" class="accent-cyan-500"/> Permitir deploy manual (panel/plugin/aprobaciones)</label>
           <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">URL repo Git (opcional)</label>
             <input id="cfg-git-url" type="url" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="https://github.com/org/repo"/></div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -895,8 +957,8 @@ html.light .hex-pattern {
           <button type="button" onclick="saveEscalationSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar escalación</button>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-esc-enable" type="checkbox" class="accent-amber-500"/> Escalación habilitada</label>
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-esc-frust" type="checkbox" class="accent-amber-500"/> Escalación por frustración</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-esc-enable" type="checkbox" class="accent-cyan-500"/> Escalación habilitada</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-esc-frust" type="checkbox" class="accent-cyan-500"/> Escalación por frustración</label>
           <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Fallos planner antes de escalar</label>
             <input id="cfg-esc-max-failures" type="number" min="1" max="10" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
           <div class="md:col-span-2"><label class="text-sm block mb-1" style="color:var(--text-secondary)">Keywords (coma)</label>
@@ -923,9 +985,9 @@ html.light .hex-pattern {
           <button type="button" onclick="saveChannelSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar canal</button>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-wa-buttons" type="checkbox" class="accent-amber-500"/> Botones interactivos</label>
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-wa-menu" type="checkbox" class="accent-amber-500"/> Menú interactivo</label>
-          <label class="flex items-center gap-2 text-sm cursor-pointer md:col-span-2"><input id="cfg-wa-list-long" type="checkbox" class="accent-amber-500"/> Lista larga cuando aplique</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-wa-buttons" type="checkbox" class="accent-cyan-500"/> Botones interactivos</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-wa-menu" type="checkbox" class="accent-cyan-500"/> Menú interactivo</label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer md:col-span-2"><input id="cfg-wa-list-long" type="checkbox" class="accent-cyan-500"/> Lista larga cuando aplique</label>
           <div><label class="text-sm block mb-1">Max botones rápidos (1–3)</label>
             <input id="cfg-wa-max-qr" type="number" min="1" max="3" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
         </div>
@@ -998,7 +1060,7 @@ html.light .hex-pattern {
       <textarea id="kb" rows="4" placeholder="Contenido del articulo..." class="input-field w-full px-4 py-3 rounded-xl text-sm resize-none" required></textarea>
       <textarea id="ks" rows="3" placeholder="Pasos de resolucion..." class="input-field w-full px-4 py-3 rounded-xl text-sm resize-none"></textarea>
       <div class="flex items-center gap-2">
-        <input id="kp" type="checkbox" class="w-4 h-4 rounded border-amber-500/50 accent-amber-500"/>
+        <input id="kp" type="checkbox" class="w-4 h-4 rounded border-cyan-500/50 accent-cyan-500"/>
         <label class="text-sm" style="color: var(--text-secondary)">Publicar articulo</label>
       </div>
       <div class="flex justify-end gap-3 pt-2">
@@ -1173,9 +1235,9 @@ initTheme();
       const d = await res.json();
       const isAdmin = (function(){ try{const u=JSON.parse(localStorage.getItem('user')||'null'); return u && (u.role==='SuperAdmin'||u.role==='Admin');}catch{return false;} })();
       if(!(d.deployStatus||d.deployRunId||d.deployLogUrl)) return;
-      const statusClass = d.deployStatus==='SUCCESS'?'text-emerald-500':(d.deployStatus==='FAILED'?'text-red-500':'text-amber-500');
+      const statusClass = d.deployStatus==='SUCCESS'?'text-emerald-500':(d.deployStatus==='FAILED'?'text-red-500':'text-cyan-500');
       const runSpan = d.deployRunId?` <span class="ml-2 text-xs" style="color:var(--text-tertiary)">(Run: ${escapeHtml(d.deployRunId)})</span>`:'';
-      const logLink = (isAdmin && d.deployLogUrl)?`<div class="mt-2"><a href="${escapeAttr(d.deployLogUrl)}" target="_blank" class="text-amber-500 hover:underline text-sm">Ver Logs de Ejecución</a>${runSpan}</div>`:'';
+      const logLink = (isAdmin && d.deployLogUrl)?`<div class="mt-2"><a href="${escapeAttr(d.deployLogUrl)}" target="_blank" class="text-cyan-500 hover:underline text-sm">Ver Logs de Ejecución</a>${runSpan}</div>`:'';
       let rollbackBtn = '';
       if (isAdmin && (d.deployStatus==='SUCCESS' || d.deployStatus==='FAILED')) {
         // Visual gating: check plan capability for current tenant via admin list
@@ -1193,11 +1255,11 @@ initTheme();
           rollbackBtn = `<div class="mt-3"><button data-incident="${escapeAttr(d.id)}" class="px-3 py-1.5 text-xs rounded-lg bg-red-600 hover:bg-red-500 text-white" id="rb-${escapeAttr(d.id)}">Rollback</button></div>`;
         } else {
           rollbackBtn = `<div class="mt-3 space-y-1">
-            <button class="px-3 py-1.5 text-xs rounded-lg bg-neutral-700 text-neutral-300 cursor-not-allowed flex items-center gap-1" disabled title="Disponible en Plan Pro">
+            <button class="px-3 py-1.5 text-xs rounded-lg bg-stone-700/60 text-stone-300 cursor-not-allowed flex items-center gap-1" disabled title="Disponible en Plan Pro">
               <span>Rollback</span>
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V6a5 5 0 00-5-5zm-3 8V6a3 3 0 016 0v3H9z"/></svg>
             </button>
-            <div class="text-[11px]" style="color:var(--text-tertiary)">Tu plan actual (Starter) no incluye reversión automática. <span class="text-amber-500">Mejora tu plan</span> para activar esta función.</div>
+            <div class="text-[11px]" style="color:var(--text-tertiary)">Tu plan actual (Starter) no incluye reversión automática. <span class="text-cyan-500">Mejora tu plan</span> para activar esta función.</div>
           </div>`;
         }
       }
@@ -1405,7 +1467,7 @@ initTheme();
       if(!badge){
         badge = document.createElement('span');
         badge.id = 'deploy-30-badge';
-        badge.className = 'ml-2 px-2 py-0.5 rounded-full text-[10px] bg-amber-500 text-black align-middle';
+        badge.className = 'ml-2 px-2 py-0.5 rounded-full text-[10px] bg-cyan-500 text-black align-middle';
         badge.title = 'Deploys exitosos en los últimos 30 días';
         // insert next to the Pipeline status value
         pipelineCard.parentElement?.appendChild(badge);
@@ -1448,7 +1510,7 @@ initTheme();
       if(!badge){
         badge = document.createElement('span');
         badge.id = 'tenant-plan-badge';
-        badge.className = 'ml-2 px-2 py-0.5 rounded-full text-[10px] bg-neutral-800 border';
+        badge.className = 'ml-2 px-2 py-0.5 rounded-full text-[10px] bg-stone-800 border';
         badge.style.borderColor = 'var(--border-color)';
         anchor.appendChild(badge);
       }

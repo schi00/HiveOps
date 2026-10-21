@@ -163,6 +163,28 @@ HiveArena (`src/HiveArena`) validates proposed code fixes in an **ephemeral file
 
 ---
 
+## AI Support Engineer layer (root cause, playbooks, snapshots, audit)
+
+Operational surface added on top of the auto-workflow (plan: [`docs/plans/ai-support-engineer-master-plan.md`](plans/ai-support-engineer-master-plan.md)). Requires migration [`db/V1.2__AiSupportEngineerFoundation.sql`](../db/V1.2__AiSupportEngineerFoundation.sql) (idempotent; already listed in `db/manifest.order.txt`).
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/support/playbooks` | List the effective tenant's playbooks |
+| `POST /api/support/playbooks` | Create a playbook (`SqlTemplate` \| `HttpWebhook` \| `StoredProcedure`) |
+| `PUT /api/support/playbooks/{id}` / `DELETE /api/support/playbooks/{id}` | Update / deactivate (`IsActive = false`) |
+| `POST /api/support/playbooks/{id}/dry-run` | Validate parameters + transactional dry-run without committing |
+| `GET /api/support/incidents/{id}/snapshots` | Row-level before/after JSON snapshots for an incident's remediations |
+| `POST /api/support/incidents/{id}/snapshots/{snapshotId}/revert` | One-click undo: executes the inverse SQL by primary key |
+| `GET /api/support/incidents/{id}/audit-chain` | SHA-256 hash-chained audit entries + `VerifyChainAsync` integrity result |
+| `GET /api/support/readiness/check` | One-call tenant connectivity check (DB + Git + KB + channels) |
+| `GET /api/support/readiness/outcomes` | Verified autonomous-resolution counts per tenant (billing basis) |
+
+**Processing order inside `IncidentAutoWorkflowService`:** triage → multi-source root-cause investigation (schema + diagnostic SELECTs + app logs + `git log`) → if the hypothesis recommends a matched playbook, it executes (respecting `RequiresApproval`) before any free-form SQL/code generation → the incident's `VerificationQuery` re-runs post-fix and only `RowCount == 0` sets `VerificationPassed = true`, which is what outcome metering counts.
+
+**Safety notes:** playbook `SqlTemplate` parameters bind via real `SqlParameter`s (never string interpolation); dry-run enforces `MaxAffectedRows` inside a rolled-back transaction; every step appends to the incident audit ledger, so the chain can be presented as an evidence pack.
+
+---
+
 ## Ephemeral CI (GitHub Actions)
 
 Workflow: [`.github/workflows/preview.yml`](../.github/workflows/preview.yml).

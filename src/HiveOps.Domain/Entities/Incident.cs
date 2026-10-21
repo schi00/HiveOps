@@ -55,10 +55,29 @@ public sealed class Incident : ITenantScoped
     /// <summary>Channel where the incident was reported (whatsapp, ticketing, api, ...).</summary>
     public string? SourceChannel { get; set; }
 
+    // AI Support Engineer fields
+
+    /// <summary>Serialized RootCauseBundle produced by the multi-source investigation step.</summary>
+    public string? RootCauseJson { get; set; }
+
+    /// <summary>Read-only SELECT returning 0 anomaly rows once the problem is fixed.</summary>
+    public string? VerificationQuery { get; set; }
+
+    /// <summary>Result of executing VerificationQuery after remediation (null = not verified yet).</summary>
+    public bool? VerificationPassed { get; set; }
+
+    /// <summary>URL of the pull request opened for an autonomous code fix.</summary>
+    public string? PullRequestUrl { get; set; }
+
+    /// <summary>HiveArena validation state for the fix branch: Pending | Survived | Defeated | Error.</summary>
+    public string? ArenaValidationStatus { get; set; }
+
     // Navigation
     public Tenant Tenant { get; set; } = null!;
     public Conversation Conversation { get; set; } = null!;
     public ICollection<IncidentAttachment> Attachments { get; set; } = [];
     public ICollection<DiagnosticLog> DiagnosticLogs { get; set; } = [];
     public ICollection<ConversationMessage> Messages { get; set; } = [];
+    public ICollection<IncidentRemediationSnapshot> RemediationSnapshots { get; set; } = [];
+    public ICollection<IncidentAuditEntry> AuditEntries { get; set; } = [];
 }

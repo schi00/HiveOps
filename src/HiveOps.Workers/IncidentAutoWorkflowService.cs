@@ -1,4 +1,4 @@
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -14,6 +14,7 @@ using HiveOps.Application.Services;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
 using HiveOps.Domain.Interfaces;
+using HiveOps.Domain.Models;
 using HiveOps.Domain.Validation;
 using SafetyValidator = HiveOps.Application.SafetyValidator;
 using HiveOps.Infrastructure;
@@ -22,6 +23,7 @@ using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
 using HiveOps.Infrastructure.Services;
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Security;
@@ -213,6 +215,17 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             "Diagnóstico completado. Estamos preparando una propuesta de corrección.",
             cancellationToken);
 
+        // Step 3b: if the multi-source investigation produced a root-cause
+        // bundle, let its recommended track drive the remediation: a matched
+        // deterministic playbook runs before any free-form SQL/code generation.
+        var bundle = TryDeserializeRootCauseBundle(incident);
+        if (bundle is not null
+            && await TryHandleRootCauseTrackAsync(incident, bundle, db, cancellationToken))
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
         // Step 4: Propose fix based on category
         if (incident.Category == IncidentCategory.Code)
         {
@@ -252,11 +265,308 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             "IncidentAutoWorkflow",
             cancellationToken);
 
+        // Multi-source root-cause investigation (WP-1): crosses tenant schema +
+        // read-only diagnostic queries + app logs + recent git commits and
+        // produces a structured hypothesis. Best effort — any failure leaves
+        // RootCauseJson null and the standard category dispatch runs unchanged.
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+            if (tenantContext is TenantContext tc && !tc.IsResolved)
+                tc.SetTenant(incident.TenantId);
+
+            var hypothesisEngine = scope.ServiceProvider.GetRequiredService<IRootCauseHypothesisService>();
+            var bundle = await hypothesisEngine.InvestigateAsync(incident, cancellationToken);
+            if (bundle is not null)
+            {
+                incident.RootCauseJson = JsonSerializer.Serialize(bundle);
+                incident.VerificationQuery = bundle.VerificationSqlQuery;
+
+                await _messageHistory.AppendMessageToIncidentAsync(
+                    incident.Id,
+                    MessageRole.Assistant,
+                    $"Hipótesis de causa raíz (vía {bundle.RecommendedTrack}, confianza {bundle.Confidence:P0}): {bundle.SummaryHypothesis}",
+                    "IncidentAutoWorkflow",
+                    cancellationToken);
+
+                await AppendAuditAsync(incident, "Hypothesis", new
+                {
+                    track = bundle.RecommendedTrack,
+                    confidence = bundle.Confidence,
+                    matchedPlaybookCode = bundle.MatchedPlaybookCode,
+                    databaseEvidenceCount = bundle.DatabaseEvidence.Count,
+                    recentCommitCount = bundle.RecentCommits.Count,
+                    applicationLogCount = bundle.ApplicationLogs.Count
+                }, cancellationToken);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Root-cause investigation failed for incident {IncidentId}; continuing with the standard fix flow.",
+                incident.Id);
+        }
+
         // Diagnostics logic depends on category - will be handled in fix proposal.
         // The tenant connection string (when needed) is resolved securely via
         // IDynamicConnectionStringResolver at proposal/apply time.
         incident.Status = IncidentStatus.InProgress;
         incident.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Deserializes <see cref="Incident.RootCauseJson"/> persisted by
+    /// <see cref="ExecuteDiagnosticsAsync"/>. Returns null when absent or
+    /// malformed so the standard category dispatch proceeds.
+    /// </summary>
+    private RootCauseBundle? TryDeserializeRootCauseBundle(Incident incident)
+    {
+        if (string.IsNullOrWhiteSpace(incident.RootCauseJson))
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<RootCauseBundle>(incident.RootCauseJson);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Incident {IncidentId} has malformed RootCauseJson; ignoring it.", incident.Id);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Executes the remediation track recommended by the root-cause hypothesis.
+    /// Returns true when the incident was fully handled (playbook resolved,
+    /// pending approval queued, or escalated) and the caller should stop.
+    /// Returns false to fall through to the normal category dispatch.
+    /// </summary>
+    private async Task<bool> TryHandleRootCauseTrackAsync(
+        Incident incident, RootCauseBundle bundle, AppDbContext db, CancellationToken cancellationToken)
+    {
+        if (string.Equals(bundle.RecommendedTrack, "Escalate", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation(
+                "Incident {IncidentId} escalated by root-cause hypothesis (confidence {Confidence}).",
+                incident.Id, bundle.Confidence);
+
+            incident.AssignedTo = "engineer";
+            incident.UpdatedAt = DateTimeOffset.UtcNow;
+            await _messageHistory.AppendMessageToIncidentAsync(
+                incident.Id,
+                MessageRole.Assistant,
+                $"La investigación automática recomienda escalación: {bundle.SummaryHypothesis}",
+                "IncidentAutoWorkflow",
+                cancellationToken);
+            await AppendAuditAsync(incident, "Escalate", new
+            {
+                track = bundle.RecommendedTrack,
+                confidence = bundle.Confidence,
+                hypothesis = bundle.SummaryHypothesis
+            }, cancellationToken);
+            return true;
+        }
+
+        var wantsPlaybook = string.Equals(bundle.RecommendedTrack, "Playbook", StringComparison.OrdinalIgnoreCase)
+            || !string.IsNullOrWhiteSpace(bundle.MatchedPlaybookCode);
+        if (!wantsPlaybook)
+            return false;
+
+        PlaybookExecutionResult result;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+            if (tenantContext is TenantContext tc && !tc.IsResolved)
+                tc.SetTenant(incident.TenantId);
+
+            var playbookRunner = scope.ServiceProvider.GetRequiredService<IPlaybookRunner>();
+            var playbook = await playbookRunner.FindMatchingPlaybookAsync(
+                incident.TenantId, incident, bundle.MatchedPlaybookCode, cancellationToken);
+            if (playbook is null)
+            {
+                _logger.LogInformation(
+                    "Incident {IncidentId}: hypothesis suggested playbook {Code} but none matched; falling back to the standard flow.",
+                    incident.Id, bundle.MatchedPlaybookCode);
+                return false;
+            }
+
+            var extractedArgs = ExtractPlaybookArgs(incident);
+            result = await playbookRunner.ExecuteAsync(playbook, incident, extractedArgs, cancellationToken);
+        }
+
+        if (result.Executed && result.Success)
+        {
+            await _messageHistory.AppendMessageToIncidentAsync(
+                incident.Id,
+                MessageRole.Assistant,
+                $"Playbook \"{result.PlaybookCode}\" ejecutado: {result.Summary}",
+                "IncidentAutoWorkflow",
+                cancellationToken);
+            await AppendAuditAsync(incident, "Playbook", new
+            {
+                result.PlaybookCode,
+                result.AffectedRows,
+                result.Summary
+            }, cancellationToken);
+
+            // Closed-loop verification: when a verification query exists the
+            // resolution only counts if the anomaly is gone from the target DB.
+            var verificationQuery = incident.VerificationQuery ?? bundle.VerificationSqlQuery;
+            if (!string.IsNullOrWhiteSpace(verificationQuery))
+            {
+                var verified = await VerifyPostFixConditionAsync(incident, verificationQuery, cancellationToken);
+                incident.VerificationPassed = verified;
+                await db.SaveChangesAsync(cancellationToken);
+                await AppendAuditAsync(incident, "Verification", new
+                {
+                    verified,
+                    query = verificationQuery
+                }, cancellationToken);
+            }
+
+            await ResolveIncidentAsync(
+                incident,
+                db,
+                $"Playbook \"{result.PlaybookCode}\" resolvió el incidente ({result.Summary})",
+                IncidentResolutionMode.Playbook,
+                cancellationToken);
+            return true;
+        }
+
+        if (!result.Executed && result.Success)
+        {
+            // Prepared and validated by the runner but RequiresApproval: queue
+            // the standard approval flow and stop processing this cycle.
+            incident.RequiresHumanApproval = true;
+            incident.Status = IncidentStatus.AwaitingApproval;
+            incident.UpdatedAt = DateTimeOffset.UtcNow;
+            incident.ResolutionNotes = $"Playbook {result.PlaybookCode}: {result.Summary}";
+
+            using var scope = _scopeFactory.CreateScope();
+            var approvalWorkflow = scope.ServiceProvider.GetRequiredService<IApprovalWorkflowService>();
+            var notifier = scope.ServiceProvider.GetRequiredService<ISupervisionNotifier>();
+            await approvalWorkflow.RequestApprovalAsync(incident.Id, $"Playbook {result.PlaybookCode} requires approval", cancellationToken);
+            await notifier.NotifyApprovalRequiredAsync(incident.TenantId, incident.Id, $"Playbook {result.PlaybookCode} awaiting approval", cancellationToken);
+            await NotifyChannelProgressAsync(incident, "Tenemos una acción operativa preparada para tu caso. Está pendiente de aprobación por el equipo.", cancellationToken);
+            await AppendAuditAsync(incident, "Approval", new
+            {
+                result.PlaybookCode,
+                result.AffectedRows,
+                result.Summary
+            }, cancellationToken);
+            return true;
+        }
+
+        // Failure: record it and let the normal category dispatch try the
+        // free-form remediation path — a failed playbook is not an escalation.
+        _logger.LogWarning(
+            "Playbook {PlaybookCode} did not resolve incident {IncidentId}: {Error}",
+            result.PlaybookCode, incident.Id, result.Error ?? result.Summary);
+        await _messageHistory.AppendMessageToIncidentAsync(
+            incident.Id,
+            MessageRole.Assistant,
+            $"El playbook \"{result.PlaybookCode}\" no resolvió el incidente ({result.Error ?? result.Summary}). Continuamos con el diagnóstico estándar.",
+            "IncidentAutoWorkflow",
+            cancellationToken);
+        await AppendAuditAsync(incident, "Playbook", new
+        {
+            result.PlaybookCode,
+            result.AffectedRows,
+            result.Summary,
+            result.Error,
+            failed = true
+        }, cancellationToken);
+        return false;
+    }
+
+    /// <summary>
+    /// Flattens the triage extracted-entities JSON (top-level scalar properties)
+    /// into playbook arguments. Regex-based extraction from the incident text is
+    /// merged downstream by <see cref="IPlaybookRunner.ExecuteAsync"/> itself.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string> ExtractPlaybookArgs(Incident incident)
+    {
+        var args = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(incident.ExtractedEntitiesJson))
+            return args;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(incident.ExtractedEntitiesJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return args;
+
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                switch (prop.Value.ValueKind)
+                {
+                    case JsonValueKind.String:
+                        args[prop.Name] = prop.Value.GetString() ?? string.Empty;
+                        break;
+                    case JsonValueKind.Number:
+                    case JsonValueKind.True:
+                    case JsonValueKind.False:
+                        args[prop.Name] = prop.Value.GetRawText();
+                        break;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Malformed entities JSON: no extracted args; the runner still tries
+            // text-based extraction from title/description.
+        }
+
+        return args;
+    }
+
+    /// <summary>
+    /// Runs the read-only post-fix verification query via the hypothesis engine,
+    /// resolved in its own scope. Any failure is treated as "not verified".
+    /// </summary>
+    private async Task<bool> VerifyPostFixConditionAsync(
+        Incident incident, string verificationQuery, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+            if (tenantContext is TenantContext tc && !tc.IsResolved)
+                tc.SetTenant(incident.TenantId);
+
+            var hypothesisEngine = scope.ServiceProvider.GetRequiredService<IRootCauseHypothesisService>();
+            return await hypothesisEngine.VerifyPostFixConditionAsync(incident.TenantId, verificationQuery, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Post-fix verification could not run for incident {IncidentId}; treating as not verified.",
+                incident.Id);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Best-effort append to the SHA-256 audit ledger. Ledger failures are
+    /// logged but never break the remediation flow.
+    /// </summary>
+    private async Task AppendAuditAsync(
+        Incident incident, string eventType, object payload, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var ledger = scope.ServiceProvider.GetRequiredService<IIncidentAuditLedger>();
+            await ledger.AppendAsync(
+                incident.TenantId, incident.Id, eventType,
+                "HiveOps.AutoEngine", payload, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Audit append ({EventType}) failed for incident {IncidentId}", eventType, incident.Id);
+        }
     }
 
     /// <summary>
@@ -427,17 +737,25 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             return;
         }
 
-        // Apply + compile loop: on build failure the files are reverted and the
-        // LLM is re-prompted with the compiler output (up to 2 retries).
+        // Apply + compile + regression-test loop: on build/test failure the
+        // files are reverted and the LLM is re-prompted with the output
+        // (up to 2 retries). Proposals are parsed with CodePatchAndTestGenerator
+        // so a generated [REGRESSION_TEST_PATCH] is applied alongside the fix.
         const int maxBuildAttempts = 3; // initial attempt + 2 retries
         var currentProposal = fixProposal;
         var modifiedFiles = new List<string>();
         string? lastFeedback = null;
+        string? testFilter = null;
         var applied = false;
 
         for (var attempt = 1; attempt <= maxBuildAttempts && !applied; attempt++)
         {
-            var fileChanges = ParseCodeChangesFromProposal(currentProposal);
+            var patch = CodePatchAndTestGenerator.Parse(currentProposal);
+            testFilter = patch.TestFilter;
+            var fileChanges = patch.ProductionChanges
+                .Concat(patch.TestChanges)
+                .Select(c => new FileChange { FilePath = c.FilePath, ChangeContent = c.ChangeContent })
+                .ToList();
             if (fileChanges.Count == 0)
             {
                 if (attempt == maxBuildAttempts)
@@ -535,6 +853,23 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
 
             // Build gate: the fix must compile in the tenant workspace.
             var (buildOk, buildOutput) = await TryBuildWorkspaceAsync(workspace, cancellationToken);
+
+            // Regression-test gate: when the generated patch added a test with a
+            // suggested filter, the tests must pass — a failing test counts the
+            // same as a build failure (revert + re-prompt).
+            if (buildOk && !string.IsNullOrWhiteSpace(testFilter))
+            {
+                var (testsOk, testOutput) = await TryRunRegressionTestsAsync(workspace, testFilter, cancellationToken);
+                if (!testsOk)
+                {
+                    buildOk = false;
+                    buildOutput = $"dotnet test --filter \"{testFilter}\" failed:\n{testOutput}";
+                    _logger.LogWarning(
+                        "Regression tests failed after applying fix for incident {IncidentId} (attempt {Attempt}/{Max}).",
+                        incident.Id, attempt, maxBuildAttempts);
+                }
+            }
+
             if (buildOk)
             {
                 applied = true;
@@ -605,8 +940,113 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
 
         _logger.LogInformation("Incident {IncidentId} fix proposed on branch {Branch}", incident.Id, incident.GitBranch);
 
+        // HiveArena gate (WP-4/WP-5): when the publisher is enabled the fix must
+        // survive the arena before a PR is opened or anything is deployed. The
+        // incident waits in "Pending"; the InternalHiveArenaCallbacksController
+        // drives the next step on the validation-completed callback.
+        if (_hiveArenaPublisherOptions.Enabled)
+        {
+            incident.ArenaValidationStatus = "Pending";
+            incident.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(cancellationToken);
+
+            await _messageHistory.AppendMessageToIncidentAsync(
+                incident.Id,
+                MessageRole.Assistant,
+                "Fix enviado a HiveArena para validación. El pull request y el despliegue quedan en pausa hasta el veredicto.",
+                "IncidentAutoWorkflow",
+                cancellationToken);
+            await AppendAuditAsync(incident, "Verification", new
+            {
+                gate = "HiveArena",
+                status = "Pending"
+            }, cancellationToken);
+            return;
+        }
+
+        // No arena gate: open the pull request (best effort) and deploy.
+        if (!string.IsNullOrWhiteSpace(incident.GitBranch))
+        {
+            try
+            {
+                // The provider needs the branch on the remote before a PR can be
+                // opened; DeployFixAsync pushes again idempotently afterwards.
+                await _gitService.PushAsync(incident.TenantId, incident.GitBranch, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Branch push before PR creation failed for incident {IncidentId}", incident.Id);
+            }
+
+            try
+            {
+                var prUrl = await _deploymentService.CreatePullRequestAsync(
+                    incident.TenantId,
+                    incident.GitBranch,
+                    $"[HiveOps] Auto-fix {incident.Id}: {incident.Title}",
+                    BuildPullRequestBody(incident),
+                    cancellationToken);
+
+                if (!string.IsNullOrWhiteSpace(prUrl))
+                {
+                    incident.PullRequestUrl = prUrl;
+                    incident.UpdatedAt = DateTimeOffset.UtcNow;
+                    await db.SaveChangesAsync(cancellationToken);
+
+                    await _messageHistory.AppendMessageToIncidentAsync(
+                        incident.Id,
+                        MessageRole.Assistant,
+                        $"Pull request abierto: {prUrl}",
+                        "IncidentAutoWorkflow",
+                        cancellationToken);
+                    await AppendAuditAsync(incident, "PullRequest", new
+                    {
+                        url = prUrl,
+                        branch = incident.GitBranch
+                    }, cancellationToken);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Pull request creation failed for incident {IncidentId}; continuing with deploy.", incident.Id);
+            }
+        }
+
         // Auto-deploy if threshold not exceeded
         await DeployFixAsync(incident, db, cancellationToken);
+    }
+
+    /// <summary>
+    /// Builds the pull-request body: incident reference plus the root-cause
+    /// hypothesis and evidence summary when a <see cref="RootCauseBundle"/> was
+    /// persisted on the incident.
+    /// </summary>
+    private string BuildPullRequestBody(Incident incident)
+    {
+        var body = new StringBuilder();
+        body.AppendLine($"Automated fix for incident `{incident.Id}`.");
+        body.AppendLine();
+        body.AppendLine($"**Title:** {incident.Title}");
+
+        var bundle = TryDeserializeRootCauseBundle(incident);
+        if (bundle is not null)
+        {
+            body.AppendLine();
+            body.AppendLine("## Root-cause hypothesis");
+            body.AppendLine(bundle.SummaryHypothesis);
+            body.AppendLine();
+            body.AppendLine($"Confidence: {bundle.Confidence:0.##} · Recommended track: {bundle.RecommendedTrack}");
+            var evidenceCount = bundle.DatabaseEvidence.Count + bundle.RecentCommits.Count + bundle.ApplicationLogs.Count;
+            if (evidenceCount > 0)
+            {
+                body.AppendLine(
+                    $"Evidence: {bundle.DatabaseEvidence.Count} DB probe(s), " +
+                    $"{bundle.RecentCommits.Count} recent commit(s), " +
+                    $"{bundle.ApplicationLogs.Count} application log line(s).");
+            }
+        }
+
+        return body.ToString();
     }
 
     private async Task EscalateCodeFixToEngineerAsync(
@@ -708,6 +1148,103 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
         {
             _logger.LogWarning(ex, "Failed to run 'dotnet build' in workspace {Workspace}", workspace);
             return (false, $"Build gate could not run: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Runs "dotnet test --no-build --filter ..." in the tenant workspace as a
+    /// regression gate for fixes that generated a test patch. Returns the
+    /// (truncated) test output on failure for LLM feedback.
+    /// </summary>
+    private async Task<(bool Success, string Output)> TryRunRegressionTestsAsync(
+        string workspace,
+        string testFilter,
+        CancellationToken cancellationToken)
+    {
+        const int timeoutMs = 180_000;
+        const int maxOutputChars = 6_000;
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                WorkingDirectory = workspace,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            psi.ArgumentList.Add("test");
+            psi.ArgumentList.Add("--no-build");
+            psi.ArgumentList.Add("--nologo");
+            psi.ArgumentList.Add("--filter");
+            psi.ArgumentList.Add(testFilter);
+
+            using var process = Process.Start(psi);
+            if (process is null)
+                return (false, "Could not start 'dotnet test' process.");
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(timeoutMs);
+
+            try
+            {
+                await process.WaitForExitAsync(timeoutCts.Token);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+                return (false, $"'dotnet test' timed out after {timeoutMs / 1000}s.");
+            }
+
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
+            var output = string.IsNullOrWhiteSpace(stderr) ? stdout : $"{stdout}\n{stderr}";
+
+            if (process.ExitCode == 0)
+                return (true, output);
+
+            if (output.Length > maxOutputChars)
+                output = output[^maxOutputChars..];
+
+            return (false, output);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to run 'dotnet test' in workspace {Workspace}", workspace);
+            return (false, $"Regression test gate could not run: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// True when the tenant workspace has a tests directory or any
+    /// <c>*Tests.csproj</c> project — i.e. a regression test can be generated.
+    /// </summary>
+    private static bool WorkspaceHasTests(string workspace)
+    {
+        try
+        {
+            if (Directory.Exists(Path.Combine(workspace, "tests"))
+                || Directory.Exists(Path.Combine(workspace, "Tests")))
+                return true;
+
+            return Directory.EnumerateFiles(
+                    workspace,
+                    "*Tests.csproj",
+                    new EnumerationOptions
+                    {
+                        RecurseSubdirectories = true,
+                        IgnoreInaccessible = true
+                    })
+                .Any();
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -1197,7 +1734,7 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
 
             // Transactional dry-run: execute inside a transaction that is ALWAYS
             // rolled back. The real row count feeds the approval threshold and a
-            // SqlException re-prompts the LLM with the engine error.
+            // PostgresException re-prompts the LLM with the engine error.
             var dryRun = await DryRunDatabaseFixAsync(connectionString, fixProposal, cancellationToken);
             if (!dryRun.Success)
             {
@@ -1458,10 +1995,10 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
     {
         try
         {
-            await using var connection = new SqlConnection(connectionString);
+            await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
 
-            await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            await using var transaction = (NpgsqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
             try
             {
                 await using var command = connection.CreateCommand();
@@ -1478,7 +2015,7 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
                 await transaction.RollbackAsync(CancellationToken.None);
             }
         }
-        catch (SqlException ex)
+        catch (PostgresException ex)
         {
             return (false, -1, ex.Message);
         }
@@ -1491,24 +2028,64 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
 
     private async Task ApplyDatabaseFixAsync(Incident incident, string fixProposal, string connectionString, AppDbContext db, CancellationToken cancellationToken)
     {
-        // Backup the rows targeted by the fix before modifying them.
+        // Primary safety mechanism (WP-3/WP-5): a row-level before-snapshot with
+        // a generated PK-keyed inverse SQL script. The classic backup-table flow
+        // below remains as the fallback when the script shape cannot be captured
+        // as a snapshot (mixed target tables or mixed mutation kinds) or the
+        // capture itself fails.
+        IncidentRemediationSnapshot? snapshot = null;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var snapshotService = scope.ServiceProvider.GetRequiredService<IRowLevelSnapshotService>();
+            snapshot = await snapshotService.CaptureBeforeSnapshotAsync(
+                incident.TenantId, incident.Id, connectionString, fixProposal, cancellationToken);
+
+            await _messageHistory.AppendMessageToIncidentAsync(
+                incident.Id,
+                MessageRole.Assistant,
+                $"Snapshot de filas capturado ({snapshot.AffectedRowCount} fila/s en {snapshot.TargetTable}) para rollback reversible.",
+                "IncidentAutoWorkflow",
+                cancellationToken);
+            await AppendAuditAsync(incident, "Snapshot", new
+            {
+                snapshotId = snapshot.Id,
+                snapshot.TargetTable,
+                snapshot.AffectedRowCount
+            }, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex,
+                "Row-level snapshot unavailable for incident {IncidentId}; falling back to the backup-table flow.",
+                incident.Id);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Snapshot capture failed for incident {IncidentId}; falling back to the backup-table flow.",
+                incident.Id);
+        }
+
+        // Backup the rows targeted by the fix before modifying them (fallback
+        // path, only when no row-level snapshot was captured).
         var tableName = SqlStatementParser.ExtractTableName(fixProposal);
         var whereClause = BuildSelectiveWhereClause(fixProposal, tableName);
         var isSelectiveUpdateOrDelete = !string.IsNullOrWhiteSpace(whereClause);
 
         string? backupTable = null;
         var selectiveBackup = false;
-        if (!string.IsNullOrEmpty(tableName))
+        if (snapshot is null && !string.IsNullOrEmpty(tableName))
         {
             // Check if table exists before attempting backup to avoid failing on placeholders
             var tableExists = false;
             try
             {
-                await using var cx = new SqlConnection(connectionString);
+                await using var cx = new NpgsqlConnection(connectionString);
                 await cx.OpenAsync(cancellationToken);
                 await using var existsCmd = cx.CreateCommand();
-                existsCmd.CommandText = "SELECT CASE WHEN OBJECT_ID(@tn) IS NOT NULL THEN 1 ELSE 0 END";
-                existsCmd.Parameters.AddWithValue("@tn", tableName);
+                existsCmd.CommandText = "SELECT CASE WHEN to_regclass(@tn) IS NOT NULL THEN 1 ELSE 0 END";
+                existsCmd.Parameters.AddWithValue("@tn", tableName.Replace("[", "").Replace("]", "").Replace("\"", ""));
                 var obj = await existsCmd.ExecuteScalarAsync(cancellationToken);
                 tableExists = obj is not null && Convert.ToInt32(obj) == 1;
             }
@@ -1564,7 +2141,7 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
         // Execute the SQL fix with real connection
         try
         {
-            await using var connection = new SqlConnection(connectionString);
+            await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
 
             await using var command = connection.CreateCommand();
@@ -1582,10 +2159,77 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
 
             _logger.LogInformation("SQL fix executed successfully for incident {IncidentId}. Rows affected: {Rows}", incident.Id, rowsAffected);
 
+            // Capture the after-image of the row-level snapshot (best effort).
+            if (snapshot is not null)
+            {
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var snapshotService = scope.ServiceProvider.GetRequiredService<IRowLevelSnapshotService>();
+                    await snapshotService.PopulateAfterSnapshotAsync(snapshot, connectionString, cancellationToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex,
+                        "After-snapshot population failed for incident {IncidentId}; the recorded diff may be partial.",
+                        incident.Id);
+                }
+            }
+
+            await AppendAuditAsync(incident, "Execution", new
+            {
+                rowsAffected,
+                snapshotId = snapshot?.Id,
+                backupTable
+            }, cancellationToken);
+
             await NotifyChannelProgressAsync(
                 incident,
                 $"Aplicamos una corrección sobre la base de datos ({rowsAffected} registro/s afectados).",
                 cancellationToken);
+
+            // Closed-loop verification (WP-5): when the root-cause hypothesis
+            // produced a verification query, the fix counts only if the anomaly
+            // is gone. On failure the change is rolled back (inverse SQL via
+            // the snapshot, or the backup restore) and escalated.
+            if (!string.IsNullOrWhiteSpace(incident.VerificationQuery))
+            {
+                var verified = await VerifyPostFixConditionAsync(incident, incident.VerificationQuery, cancellationToken);
+                incident.VerificationPassed = verified;
+                incident.UpdatedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(cancellationToken);
+                await AppendAuditAsync(incident, "Verification", new
+                {
+                    verified,
+                    query = incident.VerificationQuery
+                }, cancellationToken);
+
+                if (!verified)
+                {
+                    await RevertDatabaseFixAsync(
+                        incident, snapshot, connectionString, tableName,
+                        backupTable, selectiveBackup, whereClause, cancellationToken);
+
+                    incident.Status = IncidentStatus.Open;
+                    incident.AssignedTo = "engineer";
+                    incident.ResolutionNotes =
+                        "Post-fix verification failed — the change was automatically rolled back. Manual review required.";
+                    incident.UpdatedAt = DateTimeOffset.UtcNow;
+                    await db.SaveChangesAsync(cancellationToken);
+
+                    await _messageHistory.AppendMessageToIncidentAsync(
+                        incident.Id,
+                        MessageRole.Assistant,
+                        "La verificación post-fix detectó que la condición persiste. Se revirtió el cambio automáticamente y el caso fue escalado a ingeniero.",
+                        "IncidentAutoWorkflow",
+                        cancellationToken);
+                    await NotifyChannelProgressAsync(
+                        incident,
+                        "La corrección aplicada no superó la verificación automática y fue revertida; el caso fue derivado al equipo de ingeniería.",
+                        cancellationToken);
+                    return;
+                }
+            }
 
             await ResolveIncidentAsync(
                 incident,
@@ -1598,35 +2242,12 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
         {
             _logger.LogError(ex, "Failed to execute SQL fix for incident {IncidentId}", incident.Id);
 
-            // Attempt rollback if backup exists
-            if (!string.IsNullOrEmpty(backupTable) && !string.IsNullOrEmpty(tableName))
+            // Attempt rollback: inverse-SQL snapshot first, backup table otherwise.
+            if (snapshot is not null || (!string.IsNullOrEmpty(backupTable) && !string.IsNullOrEmpty(tableName)))
             {
-                try
-                {
-                    if (selectiveBackup)
-                    {
-                        // Selective restore: delete the touched rowset and re-insert
-                        // the pre-fix rows captured by BackupAffectedRowsAsync.
-                        await _databaseBackup.RestoreAffectedRowsAsync(
-                            connectionString, tableName, backupTable, whereClause, cancellationToken);
-                    }
-                    else
-                    {
-                        await _databaseBackup.RestoreTableAsync(connectionString, tableName, backupTable, cancellationToken);
-                    }
-
-                    await _messageHistory.AppendMessageToIncidentAsync(
-                        incident.Id,
-                        MessageRole.Assistant,
-                        "Rollback ejecutado: filas restauradas desde backup",
-                        "IncidentAutoWorkflow",
-                        cancellationToken);
-                    _logger.LogInformation("Rollback successful for incident {IncidentId}", incident.Id);
-                }
-                catch (Exception rollbackEx)
-                {
-                    _logger.LogError(rollbackEx, "Rollback failed for incident {IncidentId}", incident.Id);
-                }
+                await RevertDatabaseFixAsync(
+                    incident, snapshot, connectionString, tableName,
+                    backupTable, selectiveBackup, whereClause, cancellationToken);
             }
 
             // Mark incident as failed for manual intervention
@@ -1643,6 +2264,71 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
                 cancellationToken);
 
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Rolls back a database fix: prefers the row-level snapshot's inverse SQL
+    /// script when one was captured, otherwise falls back to the classic
+    /// backup-table restore. Best effort — failures are logged, never thrown.
+    /// </summary>
+    private async Task RevertDatabaseFixAsync(
+        Incident incident,
+        IncidentRemediationSnapshot? snapshot,
+        string connectionString,
+        string? tableName,
+        string? backupTable,
+        bool selectiveBackup,
+        string? whereClause,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (snapshot is not null)
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var snapshotService = scope.ServiceProvider.GetRequiredService<IRowLevelSnapshotService>();
+                await snapshotService.RevertSnapshotAsync(
+                    snapshot, connectionString, "HiveOps.AutoEngine", cancellationToken);
+            }
+            else if (!string.IsNullOrEmpty(backupTable) && !string.IsNullOrEmpty(tableName))
+            {
+                if (selectiveBackup)
+                {
+                    // Selective restore: delete the touched rowset and re-insert
+                    // the pre-fix rows captured by BackupAffectedRowsAsync.
+                    await _databaseBackup.RestoreAffectedRowsAsync(
+                        connectionString, tableName, backupTable, whereClause, cancellationToken);
+                }
+                else
+                {
+                    await _databaseBackup.RestoreTableAsync(connectionString, tableName, backupTable, cancellationToken);
+                }
+            }
+            else
+            {
+                return; // nothing captured to revert with
+            }
+
+            await AppendAuditAsync(incident, "Rollback", new
+            {
+                snapshotId = snapshot?.Id,
+                backupTable
+            }, cancellationToken);
+
+            await _messageHistory.AppendMessageToIncidentAsync(
+                incident.Id,
+                MessageRole.Assistant,
+                snapshot is not null
+                    ? "Rollback ejecutado: filas restauradas desde el snapshot a nivel fila"
+                    : "Rollback ejecutado: filas restauradas desde backup",
+                "IncidentAutoWorkflow",
+                cancellationToken);
+            _logger.LogInformation("Rollback successful for incident {IncidentId}", incident.Id);
+        }
+        catch (Exception rollbackEx) when (rollbackEx is not OperationCanceledException)
+        {
+            _logger.LogError(rollbackEx, "Rollback failed for incident {IncidentId}", incident.Id);
         }
     }
 
@@ -1981,70 +2667,61 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             // Locate real workspace files related to the incident so the LLM
             // proposes changes against actual source code, not guesses.
             string? codeContext = null;
+            string? workspacePath = null;
             try
             {
-                var workspace = await _gitService.GetWorkspacePathAsync(incident.TenantId, cancellationToken);
-                if (!string.IsNullOrWhiteSpace(workspace) && Directory.Exists(workspace))
-                    codeContext = await BuildCodeContextAsync(incident, workspace, cancellationToken);
+                workspacePath = await _gitService.GetWorkspacePathAsync(incident.TenantId, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(workspacePath) && Directory.Exists(workspacePath))
+                    codeContext = await BuildCodeContextAsync(incident, workspacePath, cancellationToken);
             }
             catch (Exception ctxEx)
             {
                 _logger.LogWarning(ctxEx, "Could not build code context for incident {IncidentId}; continuing without it", incident.Id);
             }
 
-            var contextSection = string.IsNullOrWhiteSpace(codeContext)
-                ? "No workspace files could be located. Base your diff strictly on paths and code mentioned in the report."
-                : $"""
-                  REAL FILES FROM THE TENANT WORKSPACE (relative path + numbered lines):
-                  {codeContext}
-                  """;
+            // Structured engineering prompt (WP-4): demands a [PRODUCTION_PATCH]
+            // section plus, when the workspace has tests, a [REGRESSION_TEST_PATCH]
+            // with an xUnit [Fact] that reproduces the reported bug.
+            var workspaceHasTests = !string.IsNullOrWhiteSpace(workspacePath)
+                && Directory.Exists(workspacePath)
+                && WorkspaceHasTests(workspacePath);
+            var rootCauseSummary = TryDeserializeRootCauseBundle(incident)?.SummaryHypothesis;
 
-            var feedbackSection = string.IsNullOrWhiteSpace(feedbackError)
-                ? ""
-                : $"""
-                  PREVIOUS ATTEMPT FAILED — fix these problems in the new proposal:
-                  {feedbackError}
-                  """;
+            var technicalNote = incident.TechnicalDiagnosticNote;
+            if (!string.IsNullOrWhiteSpace(feedbackError))
+            {
+                technicalNote = string.IsNullOrWhiteSpace(technicalNote)
+                    ? $"PREVIOUS ATTEMPT FAILED — fix these problems in the new proposal:\n{feedbackError}"
+                    : $"{technicalNote}\n\nPREVIOUS ATTEMPT FAILED — fix these problems in the new proposal:\n{feedbackError}";
+            }
+
+            var engineeringPrompt = CodePatchAndTestGenerator.BuildEngineeringPrompt(
+                incident.Title,
+                incident.Description,
+                technicalNote,
+                codeContext,
+                rootCauseSummary,
+                workspaceHasTests);
 
             var kernel = _kernelFactory.CreateForTenant(incident.TenantId);
-            var prompt = $"""
-                Generate a code fix for the following incident. The fix should be minimal and safe.
+            var chat = kernel.GetRequiredService<IChatCompletionService>();
 
-                Incident Title: {incident.Title}
-                Incident Description: {incident.Description}
-                Category: {incident.Category}
-                Severity: {incident.Severity}
+            var history = new ChatHistory();
+            history.AddSystemMessage(engineeringPrompt.SystemPrompt);
+            history.AddUserMessage(engineeringPrompt.UserPrompt);
 
-                {contextSection}
+            PromptExecutionSettings execSettings;
+            using (var llmScope = _scopeFactory.CreateScope())
+            {
+                var tenantConfigs = llmScope.ServiceProvider.GetRequiredService<ITenantConfigService>();
+                var deploymentOpts = llmScope.ServiceProvider.GetRequiredService<IOptions<HiveOpsDeploymentOptions>>();
+                execSettings = await TenantLlmExecutionHelper.GetChatExecutionSettingsAsync(
+                    incident.TenantId, tenantConfigs, deploymentOpts, cancellationToken);
+            }
 
-                {feedbackSection}
-
-                REQUIRED OUTPUT FORMAT (machine-applied):
-                1) One unified diff per file in standard git format, starting with lines:
-                   --- a/relative/path/File.cs
-                   +++ b/relative/path/File.cs
-                   @@ ... @@
-                   with context lines (space prefix) taken VERBATIM from the numbered file
-                   content above, removals (-), additions (+).
-                2) Alternatively, for each file output:
-                   File: relative/path/File.cs
-                   followed by one or more SEARCH/REPLACE blocks:
-                   <<<<<<< SEARCH
-                   exact lines copied from the file
-                   =======
-                   replacement lines
-                   >>>>>>> REPLACE
-                3) Do NOT rely on vague "replace line X" prose without a unified diff or
-                   SEARCH/REPLACE block. Use ONLY relative paths that exist above.
-                4) Keep the change set minimal.
-
-                After the diff(s) or SEARCH/REPLACE block(s), you may add a short
-                human-readable summary.
-                """;
-
-            var args = await CreateTenantPromptArgumentsAsync(incident.TenantId, cancellationToken);
-            var result = await kernel.InvokePromptAsync(prompt, args, cancellationToken: cancellationToken);
-            var fixProposal = result.ToString();
+            var response = await chat.GetChatMessageContentAsync(
+                history, execSettings, cancellationToken: cancellationToken);
+            var fixProposal = response.Content ?? string.Empty;
 
             if (string.IsNullOrWhiteSpace(fixProposal))
             {
@@ -2188,9 +2865,11 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
                 - Una sola sentencia o sentencias separadas por ';' cada una
                   UPDATE/DELETE con WHERE específico (nunca WHERE 1=1 ni vacío).
                 - Usá únicamente tablas y columnas del esquema provisto.
+                - Dialecto PostgreSQL: LIMIT en lugar de TOP, now() en lugar de
+                  GETDATE(), identificadores entre "comillas dobles" si hace falta.
                 - No uses alias en el target del UPDATE/DELETE: escribí
-                  UPDATE dbo.Tabla SET ... WHERE ..., nunca UPDATE alias SET ... FROM.
-                - No uses DROP, TRUNCATE, ALTER, EXEC ni SELECT * INTO.
+                  UPDATE public.tabla SET ... WHERE ..., nunca UPDATE alias SET ... FROM.
+                - No uses DROP, TRUNCATE, ALTER ni CREATE TABLE AS.
 
                 Provide the SQL statement that fixes the issue.
                 Make sure to include appropriate WHERE clauses to limit affected records.
@@ -2226,11 +2905,11 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
     {
         try
         {
-            await using var cx = new SqlConnection(connectionString);
+            await using var cx = new NpgsqlConnection(connectionString);
             await cx.OpenAsync(ct);
             await using var cmd = cx.CreateCommand();
-            cmd.CommandText = "SELECT CASE WHEN OBJECT_ID(@tn) IS NOT NULL THEN 1 ELSE 0 END";
-            cmd.Parameters.AddWithValue("@tn", tableName);
+            cmd.CommandText = "SELECT CASE WHEN to_regclass(@tn) IS NOT NULL THEN 1 ELSE 0 END";
+            cmd.Parameters.AddWithValue("@tn", tableName.Replace("[", "").Replace("]", "").Replace("\"", ""));
             var obj = await cmd.ExecuteScalarAsync(ct);
             return obj is not null && Convert.ToInt32(obj) == 1;
         }

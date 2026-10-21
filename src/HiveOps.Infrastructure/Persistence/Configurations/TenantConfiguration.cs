@@ -15,7 +15,7 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.ApiKey).HasMaxLength(128).IsRequired();
         builder.HasIndex(t => t.ApiKey).IsUnique();
         builder.HasIndex(t => t.WhatsAppNumber).IsUnique().HasFilter("[WhatsAppNumber] IS NOT NULL");
-        builder.Property(t => t.ConfigJson).HasColumnType("nvarchar(max)");
+        builder.Property(t => t.ConfigJson).HasColumnType("text");
 
         // Billing & Stripe
         builder.Property(t => t.Plan).HasConversion<int>();

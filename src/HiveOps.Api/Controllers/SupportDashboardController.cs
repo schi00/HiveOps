@@ -35,6 +35,9 @@ public sealed class SupportDashboardController : ControllerBase
     private readonly ITenantConfigService _tenantConfigService;
     private readonly IIncidentChannelNotifier _channelNotifier;
     private readonly IEmbeddingService _embeddingService;
+    private readonly IRowLevelSnapshotService _snapshotService;
+    private readonly IIncidentAuditLedger _auditLedger;
+    private readonly IDynamicConnectionStringResolver _connectionStringResolver;
     private readonly ILogger<SupportDashboardController> _logger;
 
     public SupportDashboardController(
@@ -49,6 +52,9 @@ public sealed class SupportDashboardController : ControllerBase
         ITenantConfigService tenantConfigService,
         IIncidentChannelNotifier channelNotifier,
         IEmbeddingService embeddingService,
+        IRowLevelSnapshotService snapshotService,
+        IIncidentAuditLedger auditLedger,
+        IDynamicConnectionStringResolver connectionStringResolver,
         ILogger<SupportDashboardController> logger)
     {
         _db = db;
@@ -62,6 +68,9 @@ public sealed class SupportDashboardController : ControllerBase
         _tenantConfigService = tenantConfigService;
         _channelNotifier = channelNotifier;
         _embeddingService = embeddingService;
+        _snapshotService = snapshotService;
+        _auditLedger = auditLedger;
+        _connectionStringResolver = connectionStringResolver;
         _logger = logger;
     }
 
@@ -522,6 +531,174 @@ public sealed class SupportDashboardController : ControllerBase
     }
 
     // ═══════════════════════════════════════════════════════════════════════
+    //  REMEDIATION SNAPSHOTS & AUDIT CHAIN (WP-5)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Row-level before/after snapshots captured for an incident's DB
+    /// remediation, including the generated inverse SQL for surgical rollback.
+    /// </summary>
+    [HttpGet("incidents/{id:guid}/snapshots")]
+    public async Task<ActionResult<IReadOnlyList<IncidentSnapshotDto>>> GetIncidentSnapshots(
+        Guid id, CancellationToken ct)
+    {
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue && !IsPrivileged) return Unauthorized();
+
+        var incidentQuery = _db.Incidents.AsNoTracking().Where(i => i.Id == id);
+        if (!IsPrivileged)
+            incidentQuery = incidentQuery.Where(i => i.TenantId == effectiveTenantId!.Value);
+        var incident = await incidentQuery.FirstOrDefaultAsync(ct);
+        if (incident is null) return NotFound();
+
+        // Privileged users often run without a resolved TenantContext on this
+        // exempt path — drop the query filter but stay scoped to the incident's
+        // tenant via an explicit predicate.
+        var snapshotsQuery = IsPrivileged
+            ? _db.IncidentRemediationSnapshots.IgnoreQueryFilters().AsNoTracking()
+                .Where(s => s.IncidentId == id && s.TenantId == incident.TenantId)
+            : _db.IncidentRemediationSnapshots.AsNoTracking()
+                .Where(s => s.IncidentId == id);
+
+        var items = await snapshotsQuery
+            .OrderByDescending(s => s.CreatedAt)
+            .Select(s => new IncidentSnapshotDto(
+                s.Id,
+                s.TargetTable,
+                s.AffectedRowCount,
+                s.IsReverted,
+                s.BeforeRowsJson,
+                s.AfterRowsJson,
+                s.InverseSqlScript,
+                s.CreatedAt,
+                s.RevertedAt,
+                s.RevertedBy))
+            .ToListAsync(ct);
+
+        return Ok(items);
+    }
+
+    /// <summary>
+    /// Executes the snapshot's inverse SQL on the tenant database. Privileged
+    /// only; the revert is sealed in the incident's audit chain.
+    /// </summary>
+    [HttpPost("incidents/{id:guid}/snapshots/{snapshotId:guid}/revert")]
+    public async Task<ActionResult> RevertSnapshot(Guid id, Guid snapshotId, CancellationToken ct)
+    {
+        if (!IsPrivileged) return StatusCode(StatusCodes.Status403Forbidden);
+        var effectiveTenantId = GetEffectiveTenantId();
+
+        var incident = await _db.Incidents.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(i => i.Id == id, ct);
+        if (incident is null) return NotFound();
+
+        // A privileged user impersonating a tenant stays inside that tenant.
+        if (effectiveTenantId.HasValue && incident.TenantId != effectiveTenantId.Value)
+            return Forbid();
+
+        var snapshot = await _db.IncidentRemediationSnapshots.IgnoreQueryFilters().AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == snapshotId && s.IncidentId == incident.Id && s.TenantId == incident.TenantId, ct);
+        if (snapshot is null) return NotFound();
+        if (snapshot.IsReverted)
+            return BadRequest(new { message = "Snapshot already reverted." });
+
+        string connectionString;
+        try
+        {
+            await _connectionStringResolver.WarmCacheAsync(incident.TenantId, ct);
+            connectionString = _connectionStringResolver.Resolve(incident.TenantId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Could not resolve tenant connection for snapshot revert (incident {IncidentId}).", id);
+            return StatusCode(500, new { message = "Could not resolve the tenant database connection." });
+        }
+
+        var revertedBy = User.Identity?.Name ?? "admin";
+
+        int rowsAffected;
+        try
+        {
+            rowsAffected = await _snapshotService.RevertSnapshotAsync(snapshot, connectionString, revertedBy, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Snapshot {SnapshotId} revert failed (incident {IncidentId}).", snapshotId, id);
+            return StatusCode(500, new { message = $"Snapshot revert failed: {ex.Message}" });
+        }
+
+        try
+        {
+            await _auditLedger.AppendAsync(
+                incident.TenantId,
+                incident.Id,
+                "Rollback",
+                revertedBy,
+                new
+                {
+                    snapshotId = snapshot.Id,
+                    snapshot.TargetTable,
+                    rowsAffected
+                },
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Audit append (Rollback) failed for incident {IncidentId}.", id);
+        }
+
+        await _hub.Clients.Group($"tenant:{incident.TenantId}")
+            .SendAsync("SnapshotReverted", new { incidentId = incident.Id, snapshotId, rowsAffected, at = DateTimeOffset.UtcNow }, ct);
+
+        return Ok(new { message = "Snapshot reverted.", rowsAffected });
+    }
+
+    /// <summary>
+    /// Returns the incident's SHA-256 hash-chained audit entries plus the
+    /// result of a full chain verification.
+    /// </summary>
+    [HttpGet("incidents/{id:guid}/audit-chain")]
+    public async Task<ActionResult> GetAuditChain(Guid id, CancellationToken ct)
+    {
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue && !IsPrivileged) return Unauthorized();
+
+        var incidentQuery = _db.Incidents.AsNoTracking().Where(i => i.Id == id);
+        if (!IsPrivileged)
+            incidentQuery = incidentQuery.Where(i => i.TenantId == effectiveTenantId!.Value);
+        var incident = await incidentQuery.FirstOrDefaultAsync(ct);
+        if (incident is null) return NotFound();
+
+        var entriesQuery = IsPrivileged
+            ? _db.IncidentAuditEntries.IgnoreQueryFilters().AsNoTracking()
+                .Where(e => e.IncidentId == id && e.TenantId == incident.TenantId)
+            : _db.IncidentAuditEntries.AsNoTracking()
+                .Where(e => e.IncidentId == id);
+
+        var entries = await entriesQuery
+            .OrderBy(e => e.SequenceNumber)
+            .Select(e => new AuditEntryDto(
+                e.SequenceNumber,
+                e.EventType,
+                e.Actor,
+                e.PayloadJson,
+                e.EntryHash,
+                e.PreviousHash,
+                e.CreatedAt))
+            .ToListAsync(ct);
+
+        var verification = await _auditLedger.VerifyChainAsync(incident.TenantId, incident.Id, ct);
+
+        return Ok(new
+        {
+            chainValid = verification.IsValid,
+            verification.TotalEntries,
+            verification.BrokenAtEntryId,
+            entries
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     //  MERGE QUEUE (SuperAdmin only)
     // ═══════════════════════════════════════════════════════════════════════
 
@@ -912,7 +1089,7 @@ public sealed class SupportDashboardController : ControllerBase
         var sandpitTenantId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
         // Set tenant context for RLS session context - MUST happen before any DB operation
-        // The TenantSessionContextInterceptor will automatically set SESSION_CONTEXT when DB operations occur
+        // The TenantSessionContextInterceptor will automatically set the app.tenant_id GUC when DB operations occur
         if (_tenantContext is TenantContext tc && !tc.IsResolved)
         {
             tc.SetTenant(sandpitTenantId);
@@ -1022,6 +1199,8 @@ public sealed record IncidentDetailDto(
     bool EligibleForEffectivenessKpi = false);
 
 public sealed record MergeRequestDto(Guid IncidentId, string Title, string Branch, string CommitHash, Guid TenantId, DateTimeOffset CreatedAt);
+public sealed record IncidentSnapshotDto(Guid Id, string TargetTable, int AffectedRowCount, bool IsReverted, string BeforeRowsJson, string AfterRowsJson, string InverseSqlScript, DateTimeOffset CreatedAt, DateTimeOffset? RevertedAt, string? RevertedBy);
+public sealed record AuditEntryDto(int SequenceNumber, string EventType, string Actor, string PayloadJson, string EntryHash, string PreviousHash, DateTimeOffset CreatedAt);
 public sealed record SystemHealthDto(bool DbHealthy, bool PipelineHealthy, string LastTestRun);
 public sealed record KbArticleDto(Guid Id, string Title, string Category, string Tags, DateTimeOffset CreatedAt);
 

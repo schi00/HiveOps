@@ -222,9 +222,33 @@ Archivo clave: `src/HiveOps.Workers/IncidentAutoWorkflowService.cs`
 Responsabilidades:
 - Procesar incidentes en background.
 - Ejecutar secuencia de análisis/diagnóstico/propuesta.
+- Tras el triage, invocar la investigación multi-fuente y, si la hipótesis lo recomienda, ejecutar el playbook determinista antes de la remediación libre.
+- Verificar post-fix con la query de verificación antes de dar por resuelto.
 - Respetar límites operativos y flujos de aprobación.
 
 Resultado: automatiza backlog de incidentes manteniendo control y auditabilidad.
+
+---
+
+### 10) Capa AI Support Engineer (investigación y remediación gobernada)
+
+Componentes clave (plan maestro: `docs/plans/ai-support-engineer-master-plan.md`):
+- `src/HiveOps.Agents/Support/RootCauseHypothesisService.cs`
+- `src/HiveOps.Infrastructure/Support/PlaybookRunner.cs`
+- `src/HiveOps.Infrastructure/Persistence/RowLevelSnapshotService.cs`
+- `src/HiveOps.Infrastructure/Services/IncidentAuditLedger.cs`
+- `src/HiveOps.Infrastructure/Services/OutcomeMeteringService.cs`
+- `src/HiveOps.Application/Support/CodePatchAndTestGenerator.cs`
+
+Responsabilidades:
+- **Root Cause Engine**: cruza esquema del tenant + SELECTs diagnósticas read-only + logs de aplicación + `git log` de archivos sospechosos, y persiste un `RootCauseBundle` con track recomendado (`Playbook` | `DatabaseFix` | `CodeFix` | `Escalate`).
+- **Playbooks L1/L2**: runbooks declarativos por tenant (`SqlTemplate` | `HttpWebhook` | `StoredProcedure`) con `SqlParameter`s reales, dry-run transaccional, guarda `MaxAffectedRows` y query de verificación; administrados vía `/api/support/playbooks`.
+- **Snapshots reversibles a nivel fila**: before/after JSON por fila afectada + SQL inverso exacto por PK, con undo de un clic vía dashboard (`/api/support/incidents/{id}/snapshots`).
+- **Audit Pack criptográfico**: cadena de `IncidentAuditEntry` firmada SHA-256 por incidente, verificable vía `/api/support/incidents/{id}/audit-chain`.
+- **Outcome metering**: cuenta resoluciones autónomas verificadas por tenant (base para facturación por resolución); readiness en `/api/support/readiness`.
+- **SWE loop autónomo**: genera el fix de código junto a un test de regresión; tras validación en HiveArena abre PR real (`Incident.PullRequestUrl`).
+
+Resultado: soporte L1/L2/L3 con evidencia verificable, rollback quirúrgico y outcomes medibles.
 
 ---
 
@@ -255,9 +279,14 @@ Referencias:
 
 ---
 
-## Estado del proyecto (Consolidación v1.0)
+## Estado del proyecto
 
-Actualmente el repositorio está orientado a:
+Versiones liberadas (ver `CHANGELOG.md`):
+- **v1.0** — Plataforma multi-tenant + detección de drift de APIs.
+- **v1.1** — Agente de soporte end-to-end (omnicanal, remediación gobernada, HiveArena).
+- **En curso (v1.2)** — Fundación AI Support Engineer: root-cause multi-fuente, playbooks L1/L2, snapshots reversibles por fila, audit chain SHA-256, outcome metering y PRs autónomos.
+
+El repositorio está orientado a:
 - Base sólida multi-tenant.
 - Orquestación híbrida de agentes.
 - Seguridad por defecto.

@@ -153,7 +153,7 @@ public static class AgentToolCatalog
                 Arguments = new Dictionary<string, AgentToolArgumentDefinition>
                 {
                     ["conversation_id"] = new() { Type = "string", Required = true, Description = "Conversation ID.", Example = "current_conversation_id" },
-                    ["sql_query"] = new() { Type = "string", Required = true, Description = "Read-only SELECT query.", Example = "SELECT TOP 10 * FROM Shifts ORDER BY CreatedAt DESC" }
+                    ["sql_query"] = new() { Type = "string", Required = true, Description = "Read-only SELECT query.", Example = "SELECT * FROM shifts ORDER BY created_at DESC LIMIT 10" }
                 },
                 Examples =
                 [
@@ -163,7 +163,7 @@ public static class AgentToolCatalog
                         ToolArgs = new Dictionary<string, string>
                         {
                             ["conversation_id"] = "current_conversation_id",
-                            ["sql_query"] = "SELECT TOP 10 * FROM Shifts ORDER BY CreatedAt DESC"
+                            ["sql_query"] = "SELECT * FROM shifts ORDER BY created_at DESC LIMIT 10"
                         }
                     }
                 ],

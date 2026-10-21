@@ -1,7 +1,7 @@
 using System.Security;
 using System.Text;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -145,10 +145,10 @@ public class DynamicConnectionStringResolver : IDynamicConnectionStringResolver
 
     protected virtual async Task<string?> ReadEncryptedConnectionStringAsync(Guid tenantId, CancellationToken cancellationToken)
     {
-        await using var connection = new SqlConnection(DefaultConnectionString);
+        await using var connection = new NpgsqlConnection(DefaultConnectionString);
         await connection.OpenAsync(cancellationToken);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT EncryptedConnectionString FROM Tenants WHERE Id = @id AND IsActive = 1";
+        cmd.CommandText = "SELECT \"EncryptedConnectionString\" FROM \"Tenants\" WHERE \"Id\" = @id AND \"IsActive\" = TRUE";
         cmd.Parameters.AddWithValue("@id", tenantId);
         var result = await cmd.ExecuteScalarAsync(cancellationToken);
         return result?.ToString();

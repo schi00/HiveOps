@@ -18,6 +18,8 @@ using HiveOps.Infrastructure.Secrets;
 using HiveOps.Infrastructure.Billing;
 using HiveOps.Infrastructure.Configuration;
 using HiveOps.Infrastructure.ApiDrift;
+using HiveOps.Infrastructure.Diagnostics;
+using HiveOps.Infrastructure.Support;
 using HiveOps.Infrastructure.Services;
 using HiveOps.Infrastructure.HiveArena;
 
@@ -74,14 +76,14 @@ public static class ServiceCollectionExtensions
         var deployment = configuration.GetSection(HiveOpsDeploymentOptions.SectionPath).Get<HiveOpsDeploymentOptions>()
             ?? new HiveOpsDeploymentOptions();
 
-        // ── EF Core + SQL Server ───────────────────────────────────────────
+        // ── EF Core + PostgreSQL ───────────────────────────────────────────
         services.AddDbContext<AppDbContext>((sp, options) =>
         {
             var connStr = configuration.GetConnectionString("DefaultConnection")
                 ?? throw new InvalidOperationException("Missing 'DefaultConnection' connection string.");
             var tenantInterceptor = sp.GetRequiredService<TenantSessionContextInterceptor>();
             var saveChangesInterceptor = sp.GetRequiredService<TenantSaveChangesInterceptor>();
-            options.UseSqlServer(connStr, sql =>
+            options.UseNpgsql(connStr, sql =>
             {
                 sql.EnableRetryOnFailure(3);
                 sql.CommandTimeout(30);
@@ -127,6 +129,15 @@ public static class ServiceCollectionExtensions
 
         // ── Tenant target-database diagnostics (read-only, e.g. HiveCrew) ───
         services.AddScoped<ITargetDatabaseDiagnosticService, TargetDatabaseDiagnosticService>();
+        services.AddScoped<ITargetLogCollector, TargetDatabaseLogCollector>();
+
+        // ── AI Support Engineer remediation building blocks (WP-1..WP-5) ────
+        // Scoped: PlaybookRunner consumes the scoped AppDbContext.
+        services.AddScoped<IPlaybookRunner, PlaybookRunner>();
+        // Singleton: scope-factory + logger only; each call opens its own scope.
+        services.AddSingleton<IRowLevelSnapshotService, RowLevelSnapshotService>();
+        services.AddSingleton<IIncidentAuditLedger, IncidentAuditLedger>();
+        services.AddSingleton<IOutcomeMeteringService, OutcomeMeteringService>();
 
         // ── Incident channels (notifier / dispatcher / ticketing / media) ──
         services.AddScoped<HiveOps.Domain.Interfaces.IIncidentChannelNotifier, HiveOps.Infrastructure.Messaging.IncidentChannelNotifier>();

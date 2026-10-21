@@ -30,7 +30,7 @@ internal sealed class ConversationMessageConfiguration : IEntityTypeConfiguratio
     public void Configure(EntityTypeBuilder<ConversationMessage> builder)
     {
         builder.HasKey(m => m.Id);
-        builder.Property(m => m.Content).HasColumnType("nvarchar(max)").IsRequired();
+        builder.Property(m => m.Content).HasColumnType("text").IsRequired();
         builder.Property(m => m.AgentName).HasMaxLength(100);
         builder.Property(m => m.ExternalMessageId).HasMaxLength(255);
         builder.HasIndex(m => new { m.ConversationId, m.CreatedAt });

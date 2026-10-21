@@ -1,3 +1,5 @@
+using HiveOps.Domain.Models;
+
 namespace HiveOps.Domain.Interfaces;
 
 /// <summary>Git operations scoped to a tenant workspace (self-hosted multi-repo) or the global <c>Git:RepoPath</c> fallback.</summary>
@@ -20,4 +22,12 @@ public interface IGitService
     /// (the per-tenant clone under <c>Git:WorkspacesRoot</c> or the <c>Git:RepoPath</c> fallback).
     /// </summary>
     Task<string> GetWorkspacePathAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the most recent commits that touched the given workspace-relative
+    /// paths ("git log -n maxCount -- paths"), for root-cause correlation.
+    /// Empty list when the workspace or git is unavailable.
+    /// </summary>
+    Task<IReadOnlyList<GitCommitEvidence>> GetRecentCommitsForFilesAsync(
+        Guid tenantId, IReadOnlyList<string> relativePaths, int maxCount = 5, CancellationToken ct = default);
 }

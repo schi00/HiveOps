@@ -10,10 +10,10 @@ internal sealed class BusinessConfigConfiguration : IEntityTypeConfiguration<Bus
     {
         builder.HasKey(bc => bc.Id);
         builder.HasIndex(bc => bc.TenantId).IsUnique();
-        builder.Property(bc => bc.OpeningHours).HasColumnType("nvarchar(max)");
-        builder.Property(bc => bc.Branches).HasColumnType("nvarchar(max)");
-        builder.Property(bc => bc.ShippingMethods).HasColumnType("nvarchar(max)");
-        builder.Property(bc => bc.ReturnPolicy).HasColumnType("nvarchar(max)");
+        builder.Property(bc => bc.OpeningHours).HasColumnType("text");
+        builder.Property(bc => bc.Branches).HasColumnType("text");
+        builder.Property(bc => bc.ShippingMethods).HasColumnType("text");
+        builder.Property(bc => bc.ReturnPolicy).HasColumnType("text");
         builder.Property(bc => bc.WelcomeMessage).HasMaxLength(1000);
         builder.Property(bc => bc.FallbackMessage).HasMaxLength(1000);
 

@@ -62,7 +62,7 @@ public sealed class IncidentAnalysisEngine
             RULES (violation = escalation):
             - NEVER generate SQL that modifies data (no INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE).
             - NEVER suggest destructive file operations.
-            - ONLY suggest SELECT queries for database diagnostics. The target application runs on SQL Server: use T-SQL syntax (TOP instead of LIMIT, GETDATE()/SYSDATETIMEOFFSET() instead of now()).
+            - ONLY suggest SELECT queries for database diagnostics. The target application runs on PostgreSQL: use PostgreSQL syntax (LIMIT instead of TOP, now() instead of GETDATE()).
             - The platform discovers the database schema by itself via INFORMATION_SCHEMA. Do NOT ask in missingInfo which database engine, tables or columns are used — suggestedDiagnostics may rely on schema inspection being available.
             - Only put items in missingInfo that the reporting USER must provide (e.g., an order id, a screenshot, steps to reproduce). When in doubt, leave missingInfo empty.
             - If the incident is critical (data loss, security breach, widespread outage), set requiresEscalation=true immediately.

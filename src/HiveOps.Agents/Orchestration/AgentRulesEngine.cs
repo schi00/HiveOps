@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
@@ -12,11 +13,22 @@ public sealed class AgentRulesEngine
 {
     private readonly IConversationStateManager _stateManager;
     private readonly AppDbContext _db;
+    private readonly IOutcomeMeteringService _outcomeMetering;
+    private readonly IIncidentAuditLedger _auditLedger;
+    private readonly ILogger<AgentRulesEngine> _logger;
 
-    public AgentRulesEngine(IConversationStateManager stateManager, AppDbContext db)
+    public AgentRulesEngine(
+        IConversationStateManager stateManager,
+        AppDbContext db,
+        IOutcomeMeteringService outcomeMetering,
+        IIncidentAuditLedger auditLedger,
+        ILogger<AgentRulesEngine> logger)
     {
         _stateManager = stateManager;
         _db = db;
+        _outcomeMetering = outcomeMetering;
+        _auditLedger = auditLedger;
+        _logger = logger;
     }
 
     // Free-text resolution confirmation keywords (channels without buttons:
@@ -177,6 +189,29 @@ public sealed class AgentRulesEngine
             incident.ResolvedAt = DateTimeOffset.UtcNow;
             incident.UpdatedAt = DateTimeOffset.UtcNow;
             await _db.SaveChangesAsync(ct);
+
+            // A user-confirmed resolution is a billable "verified autonomous
+            // resolution" (WP-6) and seals the incident's audit chain (WP-5).
+            // Best effort: metering/audit failures never break confirmation.
+            try
+            {
+                await _outcomeMetering.RecordVerifiedResolutionAsync(incident, ct);
+                await _auditLedger.AppendAsync(
+                    incident.TenantId,
+                    incident.Id,
+                    "ConfirmedClosed",
+                    $"user:{conversation.Channel ?? msg.Channel}",
+                    new
+                    {
+                        resolutionMode = incident.ResolutionMode.ToString(),
+                        confirmedVia = "btn_confirm_resolved"
+                    },
+                    ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Outcome metering/audit append failed for incident {IncidentId}.", incident.Id);
+            }
 
             state.State = ConversationState.Idle;
             state.FlowData.Remove("incidentId");

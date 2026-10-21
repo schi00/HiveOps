@@ -6,13 +6,18 @@ using HiveOps.Domain.Interfaces;
 namespace HiveOps.Infrastructure.Persistence;
 
 /// <summary>
-/// Writes TenantId into SQL Server SESSION_CONTEXT so DB-level Row-Level Security
-/// can enforce tenant isolation even if application filters are bypassed.
-/// 
+/// Writes TenantId into the PostgreSQL session GUC <c>app.tenant_id</c> so
+/// DB-level Row-Level Security policies (which read
+/// <c>current_setting('app.tenant_id', true)</c>) can enforce tenant isolation
+/// even if application query filters are bypassed.
+///
 /// RLS Setup Requirements:
-/// 1. Security predicate function must check SESSION_CONTEXT('TenantId')
-/// 2. Security policy must be applied to all tenant-scoped tables
-/// 3. SuperAdmin bypass should check user role, not just TenantId
+/// 1. Policies on tenant-scoped tables must compare
+///    <c>TenantId = current_setting('app.tenant_id', true)::uuid</c>
+/// 2. When the tenant is unresolved, the GUC stays unset and
+///    <c>current_setting(..., true)</c> returns NULL — the policies then filter
+///    out every row (secure default).
+/// 3. SuperAdmin bypass should check user role, not just TenantId.
 /// </summary>
 public sealed class TenantSessionContextInterceptor : DbConnectionInterceptor
 {
@@ -25,16 +30,6 @@ public sealed class TenantSessionContextInterceptor : DbConnectionInterceptor
         _logger = logger;
     }
 
-    public override async ValueTask<InterceptionResult> ConnectionOpeningAsync(
-        DbConnection connection,
-        ConnectionEventData eventData,
-        InterceptionResult result,
-        CancellationToken cancellationToken = default)
-    {
-        await base.ConnectionOpeningAsync(connection, eventData, result, cancellationToken);
-        return result;
-    }
-
     public override async Task ConnectionOpenedAsync(
         DbConnection connection,
         ConnectionEndEventData eventData,
@@ -42,8 +37,8 @@ public sealed class TenantSessionContextInterceptor : DbConnectionInterceptor
     {
         await base.ConnectionOpenedAsync(connection, eventData, cancellationToken);
 
-        // Skip SESSION_CONTEXT setup if tenant is not resolved
-        // This will cause RLS to filter out all rows (secure default)
+        // Skip GUC setup if tenant is not resolved — RLS will filter all rows
+        // for this connection (secure default).
         if (!_tenantContext.IsResolved)
         {
             _logger.LogDebug("Tenant context not resolved - RLS will filter all rows for this connection");
@@ -53,22 +48,23 @@ public sealed class TenantSessionContextInterceptor : DbConnectionInterceptor
         try
         {
             await using var cmd = connection.CreateCommand();
-            // Set read_only=1 to prevent tampering within the session
-            cmd.CommandText = "EXEC sp_set_session_context @key=N'TenantId', @value=@tenantId, @read_only=1;";
+            // set_config(name, value, is_local=false) applies for the whole
+            // session, mirroring sp_set_session_context semantics.
+            cmd.CommandText = "SELECT set_config('app.tenant_id', @tenantId, false);";
 
             var parameter = cmd.CreateParameter();
             parameter.ParameterName = "@tenantId";
-            parameter.Value = _tenantContext.TenantId;
+            parameter.Value = _tenantContext.TenantId.ToString("D");
             cmd.Parameters.Add(parameter);
 
             await cmd.ExecuteNonQueryAsync(cancellationToken);
-            _logger.LogDebug("RLS SESSION_CONTEXT set for TenantId: {TenantId}", _tenantContext.TenantId);
+            _logger.LogDebug("RLS app.tenant_id set for TenantId: {TenantId}", _tenantContext.TenantId);
         }
         catch (Exception ex)
         {
             // Log error but don't fail - RLS policies will still be active
             // and will filter based on NULL TenantId (blocking all access)
-            _logger.LogError(ex, "Failed to set RLS SESSION_CONTEXT for TenantId: {TenantId}. RLS will block access.", _tenantContext.TenantId);
+            _logger.LogError(ex, "Failed to set RLS app.tenant_id for TenantId: {TenantId}. RLS will block access.", _tenantContext.TenantId);
         }
     }
 }

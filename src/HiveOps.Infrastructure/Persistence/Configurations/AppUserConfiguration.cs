@@ -12,7 +12,7 @@ internal sealed class AppUserConfiguration : IEntityTypeConfiguration<AppUser>
 
         builder.Property(u => u.Username).HasMaxLength(100).IsRequired();
         builder.Property(u => u.Email).HasMaxLength(200).IsRequired();
-        builder.Property(u => u.PasswordHash).HasColumnType("nvarchar(max)").IsRequired();
+        builder.Property(u => u.PasswordHash).HasColumnType("text").IsRequired();
         builder.Property(u => u.Role).HasMaxLength(20).IsRequired();
         builder.Property(u => u.PasswordResetTokenHash).HasMaxLength(128);
 

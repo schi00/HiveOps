@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using HiveOps.Application.Configuration;
 using HiveOps.Application.Interfaces;
 using HiveOps.Domain.Interfaces;
+using HiveOps.Domain.Models;
 
 namespace HiveOps.Infrastructure.Git;
 
@@ -114,6 +115,93 @@ public sealed class TenantGitService : IGitService
 
     public Task<string> GetWorkspacePathAsync(Guid tenantId, CancellationToken ct = default) =>
         ResolveRepositoryPathAsync(tenantId, ct);
+
+    public async Task<IReadOnlyList<GitCommitEvidence>> GetRecentCommitsForFilesAsync(
+        Guid tenantId, IReadOnlyList<string> relativePaths, int maxCount = 5, CancellationToken ct = default)
+    {
+        if (relativePaths.Count == 0)
+            return [];
+
+        string repoPath;
+        try
+        {
+            repoPath = await ResolveRepositoryPathAsync(tenantId, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Workspace unavailable for tenant {TenantId}; returning empty commit evidence.", tenantId);
+            return [];
+        }
+
+        var validPaths = relativePaths
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Replace('\\', '/'))
+            .Where(p => ValidFilePathPattern.IsMatch(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(20)
+            .ToList();
+        if (validPaths.Count == 0)
+            return [];
+
+        var args = new List<string>
+        {
+            "log",
+            $"-n{Math.Clamp(maxCount, 1, 50)}",
+            "--date=iso-strict",
+            "--name-only",
+            "--pretty=format:--commit--%H|%an|%ad|%s",
+            "--"
+        };
+        args.AddRange(validPaths);
+
+        string output;
+        try
+        {
+            output = await RunGitAsync(repoPath, args.ToArray(), ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "git log failed in workspace {Workspace} for tenant {TenantId}", repoPath, tenantId);
+            return [];
+        }
+
+        var commits = new List<GitCommitEvidence>();
+        var lines = output.Replace("\r\n", "\n").Split('\n');
+        string? hash = null, author = null, subject = null;
+        var committedAt = DateTimeOffset.MinValue;
+        var touched = new List<string>();
+
+        void Flush()
+        {
+            if (hash is null)
+                return;
+            commits.Add(new GitCommitEvidence(hash, author ?? string.Empty, committedAt, subject ?? string.Empty, touched.ToArray()));
+            touched.Clear();
+        }
+
+        foreach (var line in lines)
+        {
+            if (line.StartsWith("--commit--", StringComparison.Ordinal))
+            {
+                Flush();
+                var parts = line["--commit--".Length..].Split('|', 4);
+                if (parts.Length == 4)
+                {
+                    hash = parts[0];
+                    author = parts[1];
+                    committedAt = DateTimeOffset.TryParse(parts[2], out var dt) ? dt : DateTimeOffset.MinValue;
+                    subject = parts[3];
+                }
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(line) && hash is not null)
+                touched.Add(line.Trim());
+        }
+
+        Flush();
+        return commits;
+    }
 
     private async Task<string> GetDefaultBranchNameAsync(Guid tenantId, CancellationToken ct)
     {

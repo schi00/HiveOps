@@ -8,5 +8,6 @@ public enum IncidentResolutionMode
     AutoCode = 2,
     AutoDatabase = 3,
     Hybrid = 4,
-    Assisted = 5
+    Assisted = 5,
+    Playbook = 6
 }

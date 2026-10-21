@@ -33,6 +33,9 @@ public static class AgentsServiceCollectionExtensions
         // ── Support engine (incident triage) ───────────────────────────────
         services.AddScoped<IncidentAnalysisEngine>();
 
+        // ── Multi-source root-cause hypothesis engine (WP-1) ───────────────
+        services.AddScoped<IRootCauseHypothesisService, RootCauseHypothesisService>();
+
         // ── MediatR — scan this assembly for handlers ──────────────────────
         services.AddMediatR(cfg =>
             cfg.RegisterServicesFromAssembly(typeof(IncomingMessageHandler).Assembly));

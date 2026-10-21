@@ -40,7 +40,24 @@ public sealed class AgentRulesEngineTests
                     It.IsAny<ConversationStateContext>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
-            Engine = new AgentRulesEngine(StateManager.Object, Db);
+            var metering = new Mock<IOutcomeMeteringService>();
+            metering
+                .Setup(m => m.RecordVerifiedResolutionAsync(It.IsAny<Incident>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
+            var auditLedger = new Mock<IIncidentAuditLedger>();
+            auditLedger
+                .Setup(l => l.AppendAsync(
+                    It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                    It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new IncidentAuditEntry());
+
+            Engine = new AgentRulesEngine(
+                StateManager.Object,
+                Db,
+                metering.Object,
+                auditLedger.Object,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentRulesEngine>.Instance);
             Conversation = new Conversation { TenantId = TenantId, ChannelUserId = "user-1" };
         }
 

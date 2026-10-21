@@ -14,15 +14,16 @@ using HiveOps.Infrastructure.Persistence;
 namespace HiveOps.IntegrationTests;
 
 /// <summary>
-/// Runs the API against a real SQL Server + Redis (CI ephemeral stack). Requires env
-/// <c>HIVEOPS_EPHEMERAL_SQL</c> and <c>HIVEOPS_EPHEMERAL_REDIS</c>. Database must already exist (run db/bootstrap).
+/// Runs the API against a real PostgreSQL + Redis (CI ephemeral stack). Requires env
+/// <c>HIVEOPS_EPHEMERAL_PG</c> (PostgreSQL connection string) and <c>HIVEOPS_EPHEMERAL_REDIS</c>.
+/// Database must already exist (apply db/bootstrap.postgresql.sql).
 /// </summary>
 public sealed class EphemeralSqlWebApplicationFactory : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        var sql = Environment.GetEnvironmentVariable("HIVEOPS_EPHEMERAL_SQL")
-            ?? throw new InvalidOperationException("HIVEOPS_EPHEMERAL_SQL is not set.");
+        var sql = Environment.GetEnvironmentVariable("HIVEOPS_EPHEMERAL_PG")
+            ?? throw new InvalidOperationException("HIVEOPS_EPHEMERAL_PG is not set.");
         var redis = Environment.GetEnvironmentVariable("HIVEOPS_EPHEMERAL_REDIS") ?? "localhost:6379";
 
         builder.UseEnvironment("Development");
@@ -71,10 +72,10 @@ public sealed class EphemeralSqlWebApplicationFactory : WebApplicationFactory<Pr
 
             services.AddDbContext<AppDbContext>((sp, options) =>
             {
-                options.UseSqlServer(sql, sqlOpts =>
+                options.UseNpgsql(sql, npgsqlOpts =>
                 {
-                    sqlOpts.EnableRetryOnFailure(3);
-                    sqlOpts.CommandTimeout(60);
+                    npgsqlOpts.EnableRetryOnFailure(3);
+                    npgsqlOpts.CommandTimeout(60);
                 });
                 var tenantInterceptor = sp.GetRequiredService<TenantSessionContextInterceptor>();
                 var saveChangesInterceptor = sp.GetRequiredService<TenantSaveChangesInterceptor>();

@@ -1,5 +1,5 @@
 using System.Text.RegularExpressions;
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using HiveOps.Application.Support;
@@ -39,14 +39,14 @@ public sealed class DatabaseBackupService
 
         try
         {
-            await using var connection = new SqlConnection(connectionString);
+            await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
 
             // Validate table exists before attempting backup
             using (var existsCmd = connection.CreateCommand())
             {
-                existsCmd.CommandText = "SELECT CASE WHEN OBJECT_ID(@tn) IS NOT NULL THEN 1 ELSE 0 END";
-                existsCmd.Parameters.AddWithValue("@tn", tableName);
+                existsCmd.CommandText = "SELECT CASE WHEN to_regclass(@tn) IS NOT NULL THEN 1 ELSE 0 END";
+                existsCmd.Parameters.AddWithValue("@tn", FlattenIdentifier(tableName));
                 var existsObj = await existsCmd.ExecuteScalarAsync(cancellationToken);
                 var exists = existsObj is not null && Convert.ToInt32(existsObj) == 1;
                 if (!exists)
@@ -58,8 +58,8 @@ public sealed class DatabaseBackupService
 
             using var cmd = connection.CreateCommand();
             cmd.CommandText = $@"
-                SELECT * INTO {backupTableName}
-                FROM {tableName}";
+                CREATE TABLE {QuoteTableIdentifier(backupTableName)} AS
+                SELECT * FROM {QuoteTableIdentifier(tableName)}";
 
             await cmd.ExecuteNonQueryAsync(cancellationToken);
 
@@ -74,16 +74,33 @@ public sealed class DatabaseBackupService
     }
 
     // Simple identifier validation to avoid SQL injection through table names
-    // (table identifiers cannot be parameterized in T-SQL).
+    // (table identifiers cannot be parameterized). Accepts bare, [bracketed]
+    // and "double-quoted" parts with an optional single schema qualifier.
     private static readonly Regex TableIdentifierPattern = new(
-        @"^(?:\[?\w+\]?\.)?\[?\w+\]?$",
+        @"^(?:(?:\[\w+\]|""[^""]+""|\w+)\.)?(?:\[\w+\]|""[^""]+""|\w+)$",
         RegexOptions.Compiled);
 
     private static string BuildBackupTableName(string tableName)
     {
-        var flatName = tableName.Replace("[", "").Replace("]", "").Replace('.', '_');
+        var flatName = FlattenIdentifier(tableName).Replace('.', '_');
         return $"Backups_{flatName}_{DateTimeOffset.UtcNow:yyyyMMddHHmmss}";
     }
+
+    /// <summary>Strips all quoting characters, leaving the flat schema.table form.</summary>
+    private static string FlattenIdentifier(string tableName) =>
+        tableName.Replace("[", "").Replace("]", "").Replace("\"", "");
+
+    /// <summary>Emits a safely double-quoted, possibly schema-qualified identifier.</summary>
+    private static string QuoteTableIdentifier(string tableName) =>
+        string.Join('.', FlattenIdentifier(tableName)
+            .Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => $"\"{part}\""));
+
+    /// <summary>Returns the unqualified (last) part of an identifier, unquoted.</summary>
+    private static string UnqualifiedName(string tableName) =>
+        FlattenIdentifier(tableName)
+            .Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Last();
 
     private static void ValidateTableIdentifier(string tableName)
     {
@@ -113,14 +130,14 @@ public sealed class DatabaseBackupService
 
         try
         {
-            await using var connection = new SqlConnection(connectionString);
+            await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
 
             // Validate table exists before attempting backup
             using (var existsCmd = connection.CreateCommand())
             {
-                existsCmd.CommandText = "SELECT CASE WHEN OBJECT_ID(@tn) IS NOT NULL THEN 1 ELSE 0 END";
-                existsCmd.Parameters.AddWithValue("@tn", tableName);
+                existsCmd.CommandText = "SELECT CASE WHEN to_regclass(@tn) IS NOT NULL THEN 1 ELSE 0 END";
+                existsCmd.Parameters.AddWithValue("@tn", FlattenIdentifier(tableName));
                 var existsObj = await existsCmd.ExecuteScalarAsync(cancellationToken);
                 var exists = existsObj is not null && Convert.ToInt32(existsObj) == 1;
                 if (!exists)
@@ -131,9 +148,10 @@ public sealed class DatabaseBackupService
             }
 
             using var cmd = connection.CreateCommand();
+            var createSql = $"CREATE TABLE {QuoteTableIdentifier(backupTableName)} AS SELECT * FROM {QuoteTableIdentifier(tableName)}";
             cmd.CommandText = string.IsNullOrWhiteSpace(whereClause)
-                ? $"SELECT * INTO {backupTableName} FROM {tableName}"
-                : $"SELECT * INTO {backupTableName} FROM {tableName} {whereClause}";
+                ? createSql
+                : $"{createSql} {whereClause}";
 
             var backedUpRows = await cmd.ExecuteNonQueryAsync(cancellationToken);
 
@@ -171,9 +189,9 @@ public sealed class DatabaseBackupService
 
         try
         {
-            await using var connection = new SqlConnection(connectionString);
+            await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
-            await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            await using var transaction = (NpgsqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
 
             try
             {
@@ -182,7 +200,7 @@ public sealed class DatabaseBackupService
                 {
                     await using var deleteCmd = connection.CreateCommand();
                     deleteCmd.Transaction = transaction;
-                    deleteCmd.CommandText = $"DELETE FROM {originalTableName} {whereClause}";
+                    deleteCmd.CommandText = $"DELETE FROM {QuoteTableIdentifier(originalTableName)} {whereClause}";
                     await deleteCmd.ExecuteNonQueryAsync(cancellationToken);
                 }
                 else
@@ -190,14 +208,15 @@ public sealed class DatabaseBackupService
                     // Without a WHERE clause the backup covered the whole table.
                     await using var truncateCmd = connection.CreateCommand();
                     truncateCmd.Transaction = transaction;
-                    truncateCmd.CommandText = $"DELETE FROM {originalTableName}";
+                    truncateCmd.CommandText = $"DELETE FROM {QuoteTableIdentifier(originalTableName)}";
                     await truncateCmd.ExecuteNonQueryAsync(cancellationToken);
                 }
 
                 // ... then re-insert the pre-fix rows captured by the selective backup.
                 await using var insertCmd = connection.CreateCommand();
                 insertCmd.Transaction = transaction;
-                insertCmd.CommandText = $"INSERT INTO {originalTableName} SELECT * FROM {backupTableName}";
+                insertCmd.CommandText =
+                    $"INSERT INTO {QuoteTableIdentifier(originalTableName)} SELECT * FROM {QuoteTableIdentifier(backupTableName)}";
                 var restored = await insertCmd.ExecuteNonQueryAsync(cancellationToken);
 
                 await transaction.CommitAsync(cancellationToken);
@@ -236,19 +255,33 @@ public sealed class DatabaseBackupService
 
         try
         {
-            await using var connection = new SqlConnection(connectionString);
+            await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
 
-            // Drop original table
-            using var dropCmd = connection.CreateCommand();
-            dropCmd.CommandText = $"DROP TABLE {originalTableName}";
-            await dropCmd.ExecuteNonQueryAsync(cancellationToken);
+            // PostgreSQL DDL is transactional: drop + rename run atomically.
+            await using var transaction = (NpgsqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                // Drop original table
+                await using var dropCmd = connection.CreateCommand();
+                dropCmd.Transaction = transaction;
+                dropCmd.CommandText = $"DROP TABLE {QuoteTableIdentifier(originalTableName)}";
+                await dropCmd.ExecuteNonQueryAsync(cancellationToken);
 
-            // Rename backup to original
-            using var renameCmd = connection.CreateCommand();
-            renameCmd.CommandText = $@"
-                EXEC sp_rename '{backupTableName}', '{originalTableName}'";
-            await renameCmd.ExecuteNonQueryAsync(cancellationToken);
+                // Rename backup to original (RENAME TO takes the unqualified name)
+                await using var renameCmd = connection.CreateCommand();
+                renameCmd.Transaction = transaction;
+                renameCmd.CommandText =
+                    $"ALTER TABLE {QuoteTableIdentifier(backupTableName)} RENAME TO {QuoteTableIdentifier(UnqualifiedName(originalTableName))}";
+                await renameCmd.ExecuteNonQueryAsync(cancellationToken);
+
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+                throw;
+            }
 
             _logger.LogInformation("Restore completed successfully: {OriginalTableName}", originalTableName);
         }
@@ -269,7 +302,7 @@ public sealed class DatabaseBackupService
     {
         try
         {
-            await using var connection = new SqlConnection(connectionString);
+            await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
 
             // Extract WHERE clause to estimate affected records
@@ -321,21 +354,30 @@ public sealed class DatabaseBackupService
 
         try
         {
-            await using var connection = new SqlConnection(connectionString);
+            await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
 
+            // Cutoff is computed in C# (generated value, not user input) because
+            // DO blocks cannot carry bind parameters.
+            var cutoff = DateTimeOffset.UtcNow.AddDays(-_options.RetentionDays)
+                .ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture);
+
             using var cmd = connection.CreateCommand();
-            cmd.CommandText = $@"
-                DECLARE @CutoffDate DATE = DATEADD(DAY, -{_options.RetentionDays}, GETDATE())
-                
-                DECLARE @Sql NVARCHAR(MAX) = ''
-                
-                SELECT @Sql = @Sql + 'DROP TABLE [' + TABLE_NAME + '];'
-                FROM INFORMATION_SCHEMA.TABLES
-                WHERE TABLE_NAME LIKE 'Backups_%'
-                  AND TABLE_NAME LIKE '%' + CONVERT(VARCHAR(8), @CutoffDate, 112) + '%'
-                
-                EXEC sp_executesql @Sql";
+            cmd.CommandText = $$"""
+                DO $$
+                DECLARE r record;
+                BEGIN
+                    FOR r IN
+                        SELECT table_schema, table_name
+                        FROM information_schema.tables
+                        WHERE table_name ILIKE 'backups\_%'
+                          AND substring(table_name from '(\d{14})$') < '{{cutoff}}'
+                    LOOP
+                        EXECUTE format('DROP TABLE %I.%I', r.table_schema, r.table_name);
+                    END LOOP;
+                END
+                $$;
+                """;
 
             await cmd.ExecuteNonQueryAsync(cancellationToken);
 

@@ -1,8 +1,8 @@
 using System.Text;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Microsoft.Extensions.Options;
 using HiveOps.Api.Authentication;
 using HiveOps.Api.Services;
@@ -152,8 +152,8 @@ public sealed class AdminTenantsController : ControllerBase
         var trimmed = request.ConnectionString.Trim();
         try
         {
-            var builder = new SqlConnectionStringBuilder(trimmed) { ConnectTimeout = 5 };
-            await using var probe = new SqlConnection(builder.ConnectionString);
+            var builder = new NpgsqlConnectionStringBuilder(trimmed) { Timeout = 5 };
+            await using var probe = new NpgsqlConnection(builder.ConnectionString);
             await probe.OpenAsync(ct);
         }
         catch (Exception ex)

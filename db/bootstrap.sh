@@ -1,54 +1,58 @@
 #!/usr/bin/env bash
-# Idempotent-friendly bootstrap: runs SQL files listed in manifest.order.txt in order.
-# Requires: sqlcmd (Microsoft ODBC driver + mssql-tools18 on Linux, or install from docs/operations.md).
+# Idempotent bootstrap for HiveOps on PostgreSQL.
+# Runs db/bootstrap.postgresql.sql (consolidated schema + RLS + seeds).
+#
+# Requires: psql (PostgreSQL client).
 # Environment:
-#   HIVEOPS_SQL_HOST   (default: localhost)
-#   HIVEOPS_SQL_PORT   (default: 1433)
-#   HIVEOPS_SQL_USER   (default: sa)
-#   HIVEOPS_SQL_PASSWORD (required)
+#   HIVEOPS_PG_HOST     (default: localhost)
+#   HIVEOPS_PG_PORT     (default: 5432)
+#   HIVEOPS_PG_USER     (default: postgres)
+#   HIVEOPS_PG_DB       (default: hive)
+#   HIVEOPS_PG_PASSWORD (required, exported as PGPASSWORD)
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SQL_HOST="${HIVEOPS_SQL_HOST:-localhost}"
-SQL_PORT="${HIVEOPS_SQL_PORT:-1433}"
-SQL_USER="${HIVEOPS_SQL_USER:-sa}"
-SQL_PASSWORD="${HIVEOPS_SQL_PASSWORD:?Set HIVEOPS_SQL_PASSWORD}"
-MANIFEST="$ROOT/db/manifest.order.txt"
+PG_HOST="${HIVEOPS_PG_HOST:-localhost}"
+PG_PORT="${HIVEOPS_PG_PORT:-5432}"
+PG_USER="${HIVEOPS_PG_USER:-postgres}"
+PG_DB="${HIVEOPS_PG_DB:-hive}"
+export PGPASSWORD="${HIVEOPS_PG_PASSWORD:?Set HIVEOPS_PG_PASSWORD}"
+SCRIPT="$ROOT/db/bootstrap.postgresql.sql"
 
-if ! command -v sqlcmd >/dev/null 2>&1; then
-  echo "sqlcmd is not on PATH. Install Microsoft sqlcmd (mssql-tools18) and ODBC Driver 18."
+if ! command -v psql >/dev/null 2>&1; then
+  echo "psql is not on PATH. Install the PostgreSQL client tools."
   exit 1
 fi
 
-CONN=( -S "${SQL_HOST},${SQL_PORT}" -U "$SQL_USER" -P "$SQL_PASSWORD" -C )
-
-wait_for_sql() {
-  local i
-  for i in $(seq 1 60); do
-    if sqlcmd "${CONN[@]}" -Q "SET NOCOUNT ON; SELECT 1" -b -h -1 >/dev/null 2>&1; then
-      echo "SQL Server is reachable."
-      return 0
-    fi
-    echo "Waiting for SQL Server (${i}/60)..."
-    sleep 2
-  done
-  echo "SQL Server did not become ready in time."
+if [[ ! -f "$SCRIPT" ]]; then
+  echo "Missing bootstrap script: $SCRIPT"
   exit 1
-}
+fi
 
-wait_for_sql
-
-while IFS= read -r line || [[ -n "$line" ]]; do
-  [[ -z "${line// }" ]] && continue
-  [[ "$line" =~ ^# ]] && continue
-  script="$ROOT/db/$line"
-  if [[ ! -f "$script" ]]; then
-    echo "Missing script: $script"
+# Wait for PostgreSQL to accept connections.
+for i in $(seq 1 60); do
+  if pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" >/dev/null 2>&1; then
+    echo "PostgreSQL is reachable."
+    break
+  fi
+  echo "Waiting for PostgreSQL (${i}/60)..."
+  sleep 2
+  if [[ "$i" == "60" ]]; then
+    echo "PostgreSQL did not become ready in time."
     exit 1
   fi
-  echo "Running $line ..."
-  sqlcmd "${CONN[@]}" -d master -b -I -i "$script"
-done < "$MANIFEST"
+done
+
+# Create the database if it does not exist yet.
+if ! psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d postgres \
+      -tAc "SELECT 1 FROM pg_database WHERE datname = '$PG_DB'" | grep -q 1; then
+  echo "Creating database '$PG_DB' ..."
+  psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d postgres -c "CREATE DATABASE \"$PG_DB\""
+fi
+
+echo "Applying bootstrap.postgresql.sql on database '$PG_DB' ..."
+psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DB" \
+  -v ON_ERROR_STOP=1 -f "$SCRIPT"
 
 echo "Bootstrap finished."

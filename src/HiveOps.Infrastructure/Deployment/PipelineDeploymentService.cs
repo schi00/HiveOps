@@ -81,6 +81,73 @@ public sealed class PipelineDeploymentService : IDeploymentService
         };
     }
 
+    public async Task<string?> CreatePullRequestAsync(
+        Guid tenantId, string branchName, string title, string body, CancellationToken ct = default)
+    {
+        var token = ApiToken;
+        if (Provider != ProviderGitHub || string.IsNullOrEmpty(token))
+        {
+            _logger.LogWarning(
+                "CreatePullRequestAsync: provider '{Provider}' has no PR support configured (tenant {TenantId}). Returning local pseudo-URL.",
+                Provider, tenantId);
+            return $"local-pr://{branchName}";
+        }
+
+        var baseBranch = _configuration["DeployGit:DefaultBranch"];
+        if (string.IsNullOrWhiteSpace(baseBranch))
+            baseBranch = "main";
+
+        var url = $"{GetGitHubRepoApiBase()}/pulls";
+        using var request = CreateGitHubRequest(HttpMethod.Post, url, token);
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(new { title, head = branchName, @base = baseBranch, body }),
+            Encoding.UTF8,
+            "application/json");
+
+        using var response = await s_http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning("GitHub pull request creation failed with {StatusCode}: {Body}", response.StatusCode, errorBody);
+
+            // 422 usually means a PR already exists for this branch — look it up.
+            if ((int)response.StatusCode == 422)
+            {
+                var existing = await FindExistingPullRequestUrlAsync(branchName, token, ct);
+                if (existing is not null)
+                    return existing;
+            }
+
+            throw new InvalidOperationException($"GitHub pull request creation failed ({(int)response.StatusCode}).");
+        }
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        return doc.RootElement.TryGetProperty("html_url", out var htmlUrl) ? htmlUrl.GetString() : null;
+    }
+
+    private async Task<string?> FindExistingPullRequestUrlAsync(string branchName, string token, CancellationToken ct)
+    {
+        try
+        {
+            var owner = _configuration["DeployGit:Owner"];
+            var url = $"{GetGitHubRepoApiBase()}/pulls?state=open&head={Uri.EscapeDataString($"{owner}:{branchName}")}";
+            using var request = CreateGitHubRequest(HttpMethod.Get, url, token);
+            using var response = await s_http.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            if (doc.RootElement.ValueKind == JsonValueKind.Array && doc.RootElement.GetArrayLength() > 0)
+                return doc.RootElement[0].TryGetProperty("html_url", out var u) ? u.GetString() : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to look up existing PR for branch {Branch}", branchName);
+        }
+
+        return null;
+    }
+
     // ── GitHub Actions ──────────────────────────────────────────────────────
 
     private static HttpRequestMessage CreateGitHubRequest(HttpMethod method, string url, string token)

@@ -1,0 +1,77 @@
+# VPS coexistence stack: HiveOps runs alongside HiveCrew on the same host.
+#
+# - Shares the HiveCrew postgres container (dedicated `hiveops` database,
+#   dedicated `hiveops_app` login) and redis container (logical DB index 1)
+#   over the external `app_internal` network created by HiveCrew's compose.
+# - Ingress stays behind hivecrew-caddy; add the two sslip.io site blocks
+#   (hiveops.* -> hiveops-landing:3000, api-hiveops.* -> hiveops-api:8080)
+#   to /opt/hivecrew/app/Caddyfile and `caddy reload`.
+# - No host ports are published by this stack.
+#
+# One-time DB bootstrap (run as postgres superuser inside hivecrew-postgres):
+#   psql -c "CREATE ROLE hiveops_app LOGIN PASSWORD '<HIVEOPS_DB_PASSWORD>';"
+#   psql -c "CREATE DATABASE hiveops;"
+#   psql -d hiveops -f bootstrap.postgresql.sql   (objects owned by postgres)
+#   psql -d hiveops -c "GRANT CONNECT ON DATABASE hiveops TO hiveops_app;
+#     GRANT USAGE ON SCHEMA public TO hiveops_app;
+#     GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO hiveops_app;
+#     GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO hiveops_app;
+#     ALTER DEFAULT PRIVILEGES IN SCHEMA public
+#       GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO hiveops_app;"
+#   RLS stays enforced for the non-owner role (ENABLE ROW LEVEL SECURITY is
+#   already applied by the bootstrap; FORCE is unnecessary for non-owners).
+#
+# Env file (/opt/hiveops/.env):
+#   HIVEOPS_DB_PASSWORD, JWT_KEY, ADMIN_API_KEY, SK_OPENROUTER_API_KEY,
+#   plus optional SK_ACTIVE_PROFILE / NEXT_PUBLIC_DASHBOARD_URL overrides.
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: hiveops-api:latest
+    container_name: hiveops-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Production"
+      ConnectionStrings__DefaultConnection: "Host=hivecrew-postgres;Port=5432;Database=hiveops;Username=hiveops_app;Password=${HIVEOPS_DB_PASSWORD}"
+      Redis__ConnectionString: "hivecrew-redis:6379,defaultDatabase=1"
+      Jwt__Key: "${JWT_KEY}"
+      Jwt__Issuer: "HiveOps"
+      Jwt__Audience: "HiveOpsUsers"
+      Admin__ApiKey: "${ADMIN_API_KEY}"
+      Git__RepoPath: "/tmp/hiveops-git-work"
+      Git__WorkspacesRoot: "/tmp/hiveops-git-workspaces"
+      HiveOps__DataProtectionKeysPath: "/app/data/dataprotection"
+      HiveOps__Deployment__Mode: "SaaS"
+      HiveOps__Deployment__Billing: "None"
+      Secrets__UseAws: "false"
+      SemanticKernel__ActiveProfile: "${SK_ACTIVE_PROFILE:-Production}"
+      SemanticKernel__OpenRouter__ApiKey: "${SK_OPENROUTER_API_KEY:-}"
+    volumes:
+      - hiveops_dataprotection:/app/data/dataprotection
+      - hiveops_gitwork:/tmp/hiveops-git-work
+      - hiveops_git_workspaces:/tmp/hiveops-git-workspaces
+    networks:
+      - app_internal
+
+  landing:
+    build:
+      context: ../apps/hiveops-landing
+      args:
+        NEXT_PUBLIC_DASHBOARD_URL: "${NEXT_PUBLIC_DASHBOARD_URL:-https://api-hiveops.13.140.227.225.sslip.io/dashboard/}"
+    image: hiveops-landing:latest
+    container_name: hiveops-landing
+    restart: unless-stopped
+    networks:
+      - app_internal
+
+volumes:
+  hiveops_dataprotection:
+  hiveops_gitwork:
+  hiveops_git_workspaces:
+
+networks:
+  app_internal:
+    external: true

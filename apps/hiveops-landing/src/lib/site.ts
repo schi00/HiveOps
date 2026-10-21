@@ -1,0 +1,76 @@
+export const siteConfig = {
+  parentBrand: "HIVE",
+  name: "HiveOps",
+  description:
+    "HiveOps es el AI Support Engineer del ecosistema HIVE: un agente autónomo de soporte L1/L2/L3 que recibe incidentes por WhatsApp, ticketing o API, investiga la causa raíz en tu base de datos, logs y código, y remedia con aprobaciones humanas, dry-run y rollback garantizado.",
+  url: "https://hiveops.ai",
+  appUrl:
+    process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:5198/dashboard/",
+  supportEmail: "ventas@hiveops.ai",
+  keywords: [
+    "ai support engineer",
+    "agente de soporte ia autonomo",
+    "soporte l1 l2 l3 automatizado",
+    "resolucion autonoma de incidentes software",
+    "soporte tecnico whatsapp ia",
+    "root cause analysis automatico",
+    "hive software ecosistema",
+    "hiveops",
+  ],
+};
+
+export const pricingPlans = [
+  {
+    name: "Starter",
+    badge: "Automatización L1 para equipos de soporte y PyMEs",
+    priceLabel: "desde USD 199",
+    priceDetail: "/mes base",
+    metering: "Hasta 40 resoluciones verificadas/mes · extra USD 5,90 c/u",
+    cta: "Empezar con Starter",
+    highlight: false,
+    features: [
+      "Intake omnicanal: WhatsApp Business + webhooks",
+      "Enrutamiento con IA y reglas deterministas (AgentRulesEngine)",
+      "Gestión de incidentes L1 con playbooks en dry-run",
+      "Aislamiento multi-tenant estándar",
+      "Aprobación humana obligatoria en cada acción",
+      "Dashboard de incidentes + informe de MTTR",
+    ],
+  },
+  {
+    name: "Pro",
+    badge: "Para SaaS, e-commerce y operaciones técnicas",
+    priceLabel: "desde USD 699",
+    priceDetail: "/mes base",
+    metering: "Hasta 150 resoluciones verificadas/mes · extra USD 3,90 c/u",
+    cta: "Solicitar demo de Pro",
+    highlight: true,
+    features: [
+      "Todo lo de Starter, más:",
+      "Detección automática de API Drift con alertas en tiempo real",
+      "Diagnóstico de base de datos read-only y root cause multi-fuente",
+      "Playbooks L1/L2 con umbrales de aprobación configurables",
+      "Snapshots reversibles fila a fila + SQL inverso",
+      "Ledger de auditoría SHA-256 encadenado",
+      "Conectores avanzados: Git, CI/CD, observabilidad",
+    ],
+  },
+  {
+    name: "Enterprise",
+    badge: "AI Support Engineer completo · dedicado o self-hosted",
+    priceLabel: "desde USD 1.999",
+    priceDetail: "/mes o licencia anual",
+    metering: "Paquetes de resoluciones a medida · licencia self-hosted opcional",
+    cta: "Hablemos de Enterprise",
+    highlight: false,
+    features: [
+      "Todo lo de Pro, más:",
+      "Bucle autónomo L3: codefix + tests → validación en HiveArena → PR en GitHub/Azure DevOps",
+      "Remediación reversible con 1-click (IncidentRemediationSnapshot)",
+      "Audit Pack criptográfico exportable a tu SIEM",
+      "Self-hosted en tu infraestructura con FailClosedTenantConnection",
+      "SLA de respuesta, ventanas de remediación y gobierno dedicado",
+      "Traé tus propias API keys de LLM (OpenAI / Anthropic) si el volumen lo requiere",
+    ],
+  },
+] as const;

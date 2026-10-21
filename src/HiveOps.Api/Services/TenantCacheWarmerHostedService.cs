@@ -1,4 +1,3 @@
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using HiveOps.Domain.Interfaces;
 using HiveOps.Infrastructure.Multitenancy;
