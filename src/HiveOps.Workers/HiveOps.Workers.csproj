@@ -12,6 +12,12 @@
     <PackageReference Include="Npgsql" Version="9.0.3" />
   </ItemGroup>
 
+  <!-- Avoid NETSDK1152: this project's appsettings collide with the API's when published transitively -->
+  <ItemGroup>
+    <None Update="appsettings*.json" CopyToPublishDirectory="Never" />
+    <Content Update="appsettings*.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\HiveOps.Application\HiveOps.Application.csproj" />
     <ProjectReference Include="..\HiveOps.Infrastructure\HiveOps.Infrastructure.csproj" />
