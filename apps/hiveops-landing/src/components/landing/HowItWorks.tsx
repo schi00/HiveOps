@@ -51,10 +51,15 @@ export function HowItWorks() {
         </div>
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {steps.map((step) => (
-            <article key={step.title} className="surface-card surface-card-hover relative rounded-2xl p-6 sm:p-7">
+            <article
+              key={step.title}
+              className="surface-card surface-card-hover pipeline-step relative overflow-hidden rounded-2xl p-6 sm:p-7"
+            >
               <div className="mb-4 flex items-center justify-between">
-                <span className="font-mono text-2xl font-bold text-[var(--cyan-soft)]">{step.number}</span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-slate-300">
+                <span className="font-mono text-3xl font-extrabold text-[var(--cyan-primary)] [text-shadow:0_0_18px_rgba(0,240,255,0.45)]">
+                  {step.number}
+                </span>
+                <span className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-cyan-200">
                   {step.badge}
                 </span>
               </div>

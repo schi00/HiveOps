@@ -79,6 +79,21 @@ a {
   box-shadow: 0 0 40px rgba(0, 240, 255, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
+/* Pipeline connector: hairline flow along the top of each step card */
+.pipeline-step::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(0, 240, 255, 0.55), rgba(0, 240, 255, 0.12) 60%, transparent);
+}
+
+.pipeline-step:hover::before {
+  background: linear-gradient(90deg, rgba(0, 240, 255, 0.9), rgba(0, 240, 255, 0.25) 60%, transparent);
+}
+
 .hive-badge {
   display: inline-flex;
   align-items: center;

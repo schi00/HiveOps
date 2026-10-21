@@ -64,7 +64,7 @@ const integrations = [
     ),
   },
   {
-    name: "SQL Server",
+    name: "PostgreSQL",
     icon: (
       <svg className="h-4 w-4 text-cyan-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
         <ellipse cx="12" cy="6" rx="8" ry="3" />
