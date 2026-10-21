@@ -151,10 +151,15 @@ HiveArena (`src/HiveArena`) validates proposed code fixes in an **ephemeral file
 | `HiveArena:ProvingGround:GitTimeoutSeconds` / `BuildTimeoutSeconds` / `TestTimeoutSeconds` | Defaults `240` / `600` / `900`. |
 | `HiveArena:ProvingGround:RunTestsWhenPresent` | `false` → build gate only. |
 | `HiveArena:ProvingGround:ExcludedTestProjectPatterns` | Project name fragments to skip, e.g. `["IntegrationTests"]` when the environment lacks their external dependencies (live Postgres, Redis). |
+| `HiveArena:ProvingGround:SetupCommand` | Optional command run in the checked-out workspace before build — e.g. `docker compose -f deploy/test-env.yml up -d --wait` to provision dependencies (DB, cache). Failure → outcome `Error`. |
+| `HiveArena:ProvingGround:TeardownCommand` | Optional command always run after the replay (e.g. `docker compose -f deploy/test-env.yml down -v`). |
+| `HiveArena:ProvingGround:TestEnvironmentVariables` | Env vars injected into `dotnet test` (e.g. `ConnectionStrings__Default` pointing at the provisioned database, `ASPNETCORE_ENVIRONMENT`). |
 
 **HiveOps side** (`HiveOps.Api` / `HiveOps.Workers`): `HiveArena:Publisher:Enabled` publishes a validation request after each auto-fix commit; `RepoUrl` names the repository under validation (single-repo MVP — per-tenant repo URLs are a later phase).
 
-**Code-fix workspace:** in `SelfHosted` mode the worker clones `runtimeConfiguration.deployGit.gitRepositoryUrl` per tenant into `Git:WorkspacesRoot`; in other modes it falls back to `Git:RepoPath` (e.g. a sandbox clone at `c:/temp/hiveops-work`).
+**Code-fix workspace:** in `SelfHosted` mode the worker clones `runtimeConfiguration.deployGit.gitRepositoryUrl` per tenant into `Git:WorkspacesRoot`; in other modes it falls back to `Git:RepoPath` (e.g. a sandbox clone at `c:/temp/hiveops-work`). Git push uses the machine's git credentials (credential manager); workflow dispatch uses `DeployGit:ApiToken` via env var `DeployGit__ApiToken`.
+
+**Validation loop:** a `Defeat`/`Error` callback reopens the incident to `Open`+`bot` (the arena report stays in the message history as evidence for the next fix attempt); after 3 failed validations the incident escalates to `engineer` instead of looping.
 
 ---
 

@@ -23,4 +23,24 @@ public sealed class ProvingGroundOptions
     /// (e.g. "IntegrationTests" requiring a live database).
     /// </summary>
     public string[] ExcludedTestProjectPatterns { get; set; } = [];
+
+    /// <summary>
+    /// Optional command run inside the checked-out workspace before the build —
+    /// e.g. <c>docker compose -f deploy/test-env.yml up -d --wait</c> to provision
+    /// dependencies (database, cache) for the run.
+    /// </summary>
+    public string? SetupCommand { get; set; }
+
+    /// <summary>
+    /// Optional command run after the replay finishes (always, even on failure) —
+    /// e.g. <c>docker compose -f deploy/test-env.yml down -v</c>.
+    /// </summary>
+    public string? TeardownCommand { get; set; }
+
+    /// <summary>
+    /// Extra environment variables injected into the <c>dotnet test</c> process,
+    /// e.g. connection strings pointing at the provisioned dependencies
+    /// (<c>ConnectionStrings__Default</c>, <c>ASPNETCORE_ENVIRONMENT</c>).
+    /// </summary>
+    public Dictionary<string, string> TestEnvironmentVariables { get; set; } = new();
 }

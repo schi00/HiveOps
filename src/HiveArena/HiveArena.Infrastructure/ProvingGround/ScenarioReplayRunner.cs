@@ -42,9 +42,29 @@ public sealed class ScenarioReplayRunner(
             return ValidationOutcome.Error;
         }
 
+        var setup = await RunSetupAsync(workspacePath, cancellationToken);
+        if (setup is not null)
+        {
+            logger.LogWarning("Environment setup failed in {Workspace}: {Message}", workspacePath, setup);
+            return ValidationOutcome.Error;
+        }
+
+        try
+        {
+            return await RunBuildAndTestsAsync(scenarioId, seed, workspacePath, target, cancellationToken);
+        }
+        finally
+        {
+            await RunTeardownAsync(workspacePath, cancellationToken);
+        }
+    }
+
+    private async Task<ValidationOutcome> RunBuildAndTestsAsync(
+        string scenarioId, int seed, string workspacePath, string target, CancellationToken cancellationToken)
+    {
         var buildLog = Path.Combine(workspacePath, "arena-build.log");
         var build = await RunDotnetAsync($"build \"{target}\" -c Release --nologo -v:m", workspacePath, buildLog,
-            options.Value.BuildTimeoutSeconds, cancellationToken);
+            options.Value.BuildTimeoutSeconds, cancellationToken, environment: null);
 
         if (build.Kind != DotnetRunKind.Success)
         {
@@ -67,7 +87,8 @@ public sealed class ScenarioReplayRunner(
                 cancellationToken.ThrowIfCancellationRequested();
                 var test = await RunDotnetAsync(
                     $"test \"{project}\" -c Release --no-build --nologo -v:m", workspacePath, testLog,
-                    options.Value.TestTimeoutSeconds, cancellationToken, appendLog: true);
+                    options.Value.TestTimeoutSeconds, cancellationToken,
+                    environment: options.Value.TestEnvironmentVariables, appendLog: true);
 
                 if (test.Kind == DotnetRunKind.Failed) anyFailed = true;
                 else if (test.Kind == DotnetRunKind.Error) anyError = true;
@@ -87,6 +108,76 @@ public sealed class ScenarioReplayRunner(
             scenarioId, seed);
         return ValidationOutcome.Survival;
     }
+
+    /// <summary>Returns an error message when the setup command fails, null on success/skip.</summary>
+    private async Task<string?> RunSetupAsync(string workspacePath, CancellationToken ct)
+    {
+        var command = options.Value.SetupCommand;
+        if (string.IsNullOrWhiteSpace(command))
+            return null;
+
+        var (exitCode, output) = await RunShellAsync(command, workspacePath, options.Value.BuildTimeoutSeconds, ct);
+        if (exitCode == 0)
+        {
+            logger.LogInformation("Environment setup completed in {Workspace}", workspacePath);
+            return null;
+        }
+
+        return $"SetupCommand exited {exitCode}: {Truncate(output)}";
+    }
+
+    private async Task RunTeardownAsync(string workspacePath, CancellationToken ct)
+    {
+        var command = options.Value.TeardownCommand;
+        if (string.IsNullOrWhiteSpace(command))
+            return;
+
+        try
+        {
+            var (exitCode, output) = await RunShellAsync(command, workspacePath, 120, CancellationToken.None);
+            if (exitCode != 0)
+                logger.LogWarning("TeardownCommand exited {ExitCode}: {Output}", exitCode, Truncate(output));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "TeardownCommand threw in {Workspace}", workspacePath);
+        }
+    }
+
+    private static async Task<(int ExitCode, string Output)> RunShellAsync(
+        string command, string workingDir, int timeoutSeconds, CancellationToken ct)
+    {
+        var psi = Environment.OSVersion.Platform == PlatformID.Win32NT
+            ? new ProcessStartInfo("cmd.exe", $"/c {command}")
+            : new ProcessStartInfo("/bin/sh", new[] { "-c", command });
+
+        psi.WorkingDirectory = workingDir;
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.UseShellExecute = false;
+        psi.CreateNoWindow = true;
+
+        using var process = Process.Start(psi)
+            ?? throw new InvalidOperationException($"Could not start shell for command '{command}'.");
+
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+
+        try
+        {
+            await process.WaitForExitAsync(ct).WaitAsync(TimeSpan.FromSeconds(timeoutSeconds), CancellationToken.None);
+        }
+        catch (TimeoutException)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+            return (-1, $"command timed out after {timeoutSeconds}s");
+        }
+
+        return (process.ExitCode, $"{await stdout}\n{await stderr}".Trim());
+    }
+
+    private static string Truncate(string output) =>
+        output.Length <= 2000 ? output : output[^2000..];
 
     private static string? LocateBuildTarget(string workspacePath)
     {
@@ -115,7 +206,7 @@ public sealed class ScenarioReplayRunner(
 
     private async Task<DotnetRunResult> RunDotnetAsync(
         string arguments, string workingDir, string logFile, int timeoutSeconds, CancellationToken ct,
-        bool appendLog = false)
+        IDictionary<string, string>? environment = null, bool appendLog = false)
     {
         var psi = new ProcessStartInfo("dotnet", arguments)
         {
@@ -125,6 +216,10 @@ public sealed class ScenarioReplayRunner(
             UseShellExecute = false,
             CreateNoWindow = true
         };
+
+        if (environment is not null)
+            foreach (var (key, value) in environment)
+                psi.Environment[key] = value;
 
         try
         {
