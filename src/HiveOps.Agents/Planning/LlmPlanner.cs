@@ -40,38 +40,56 @@ public sealed class LlmPlanner : IAgentPlanner
     {
         var prompt = await _promptBuilder.BuildPlannerPromptAsync(context, cancellationToken);
 
-        try
+        PlannerDecision? parsed = null;
+        Exception? lastError = null;
+        for (var attempt = 0; attempt < 3 && parsed is null; attempt++)
         {
-            var exec = await TenantLlmExecutionHelper.GetChatExecutionSettingsAsync(
-                context.TenantId, _tenantConfigService, _deploymentOptions, cancellationToken);
-            var args = new KernelArguments
+            try
             {
-                ExecutionSettings = new Dictionary<string, PromptExecutionSettings>(StringComparer.OrdinalIgnoreCase)
+                var exec = await TenantLlmExecutionHelper.GetChatExecutionSettingsAsync(
+                    context.TenantId, _tenantConfigService, _deploymentOptions, cancellationToken);
+                var args = new KernelArguments
                 {
-                    [PromptExecutionSettings.DefaultServiceId] = exec
+                    ExecutionSettings = new Dictionary<string, PromptExecutionSettings>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [PromptExecutionSettings.DefaultServiceId] = exec
+                    }
+                };
+                var result = await kernel.InvokePromptAsync(prompt, args, cancellationToken: cancellationToken);
+                var raw = result.GetValue<string>()?.Trim();
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    lastError = new InvalidOperationException("LLM planner returned empty payload.");
+                    continue;
                 }
-            };
-            var result = await kernel.InvokePromptAsync(prompt, args, cancellationToken: cancellationToken);
-            var raw = result.GetValue<string>()?.Trim();
-            if (string.IsNullOrWhiteSpace(raw))
-            {
-                return PlannerDecision.CreateRespond(string.Empty, 0.0, "LLM planner returned empty payload.");
-            }
 
-            var normalized = NormalizeJson(raw);
-            var parsed = JsonSerializer.Deserialize<PlannerDecision>(normalized, JsonOptions);
-            if (parsed is null)
-            {
-                return PlannerDecision.CreateRespond(string.Empty, 0.0, "LLM planner payload could not be parsed.");
+                var normalized = NormalizeJson(raw);
+                parsed = JsonSerializer.Deserialize<PlannerDecision>(normalized, JsonOptions);
+                if (parsed is null)
+                    lastError = new InvalidOperationException("LLM planner payload deserialized to null.");
             }
+            catch (Exception ex)
+            {
+                lastError = ex;
+                _logger.LogWarning(ex, "LLM planner invocation failed (attempt {Attempt}/3).", attempt + 1);
 
+                // Back off on provider rate limits (HTTP 429).
+                if (ex.Message.Contains("429", StringComparison.Ordinal))
+                {
+                    try { await Task.Delay(TimeSpan.FromSeconds(5 * (attempt + 1)), cancellationToken); }
+                    catch (OperationCanceledException) { throw; }
+                }
+            }
+        }
+
+        if (parsed is not null)
             return parsed;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "LLM planner invocation failed.");
-            return PlannerDecision.CreateRespond(string.Empty, 0.0, "LLM planner failed; fallback required.");
-        }
+
+        if (lastError is not null)
+            _logger.LogWarning(lastError, "LLM planner failed after retries.");
+        else
+            _logger.LogWarning("LLM planner failed after retries.");
+        return PlannerDecision.CreateRespond(string.Empty, 0.0, lastError?.Message ?? "LLM planner failed; fallback required.");
     }
 
     private static string NormalizeJson(string raw)

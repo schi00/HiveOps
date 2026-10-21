@@ -33,6 +33,9 @@ public sealed class SupportDashboardController : ControllerBase
     private readonly ISupervisionNotifier _notifier;
     private readonly IHubContext<SupervisionHub> _hub;
     private readonly ITenantConfigService _tenantConfigService;
+    private readonly IIncidentChannelNotifier _channelNotifier;
+    private readonly IEmbeddingService _embeddingService;
+    private readonly ILogger<SupportDashboardController> _logger;
 
     public SupportDashboardController(
         AppDbContext db,
@@ -43,7 +46,10 @@ public sealed class SupportDashboardController : ControllerBase
         ITenantDataFixerService dataFixer,
         ISupervisionNotifier notifier,
         IHubContext<SupervisionHub> hub,
-        ITenantConfigService tenantConfigService)
+        ITenantConfigService tenantConfigService,
+        IIncidentChannelNotifier channelNotifier,
+        IEmbeddingService embeddingService,
+        ILogger<SupportDashboardController> logger)
     {
         _db = db;
         _tenantContext = tenantContext;
@@ -54,6 +60,9 @@ public sealed class SupportDashboardController : ControllerBase
         _notifier = notifier;
         _hub = hub;
         _tenantConfigService = tenantConfigService;
+        _channelNotifier = channelNotifier;
+        _embeddingService = embeddingService;
+        _logger = logger;
     }
 
     private bool IsSuperAdmin => User.IsInRole(AppRoles.SuperAdmin);
@@ -62,8 +71,17 @@ public sealed class SupportDashboardController : ControllerBase
 
     private Guid? ResolveTenantFromHeader()
     {
-        if (Request.Headers.TryGetValue("X-Tenant-Id", out var headerValue) && Guid.TryParse(headerValue.ToString(), out var tenantId))
+        // /api/support is exempt from TenantResolutionMiddleware, so when a privileged
+        // dashboard user impersonates a tenant via X-Tenant-Id we must also mark the
+        // TenantContext resolved — otherwise EF query filters keep CurrentTenantId = Empty
+        // and tenant-scoped lookups silently return nothing.
+        if (Request.Headers.TryGetValue("X-Tenant-Id", out var headerValue)
+            && Guid.TryParse(headerValue.ToString(), out var tenantId)
+            && !_tenantContext.IsResolved)
+        {
+            _tenantContext.SetTenant(tenantId);
             return tenantId;
+        }
         return null;
     }
 
@@ -97,11 +115,13 @@ public sealed class SupportDashboardController : ControllerBase
             query = query.Where(i => i.TenantId == effectiveTenantId.Value);
 
         var totalOpen = await query.CountAsync(i => i.Status != IncidentStatus.Closed && i.Status != IncidentStatus.Resolved, ct);
-        var totalResolved = await query.CountAsync(i => i.Status == IncidentStatus.Resolved, ct);
+        var totalResolved = await query.CountAsync(
+            i => i.Status == IncidentStatus.Resolved || i.Status == IncidentStatus.Closed,
+            ct);
         var totalCritical = await query.CountAsync(i => i.Severity == IncidentSeverity.Critical && i.Status != IncidentStatus.Closed && i.Status != IncidentStatus.Resolved, ct);
 
         var resolvedTimes = await query
-            .Where(i => i.Status == IncidentStatus.Resolved && i.ResolvedAt.HasValue)
+            .Where(i => (i.Status == IncidentStatus.Resolved || i.Status == IncidentStatus.Closed) && i.ResolvedAt.HasValue)
             .Select(i => new { i.CreatedAt, ResolvedAt = i.ResolvedAt!.Value })
             .ToListAsync(ct);
         var avgResolution = resolvedTimes.Count == 0
@@ -214,17 +234,29 @@ public sealed class SupportDashboardController : ControllerBase
         _db.Incidents.Add(incident);
         await _db.SaveChangesAsync(ct);
 
-        // LLM triage — non-blocking; failure should not prevent incident creation
         IncidentAnalysisResult? analysis = null;
         try
         {
             analysis = await _analysisEngine.AnalyzeAsync(
                 effectiveTenantId.Value, request.Description, incident.Id, ct);
+            IncidentTriageApplier.ApplyAnalysis(incident, analysis);
 
-            if (Enum.TryParse<IncidentCategory>(analysis.Category, true, out var cat))
-                incident.Category = cat;
-            if (Enum.TryParse<IncidentSeverity>(analysis.Severity, true, out var sev))
-                incident.Severity = sev;
+            var oldest = await _db.Incidents
+                .Where(i => i.TenantId == effectiveTenantId.Value
+                            && i.Fingerprint == incident.Fingerprint
+                            && i.Status != IncidentStatus.Closed
+                            && i.Status != IncidentStatus.Resolved)
+                .OrderBy(i => i.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            if (oldest is not null && oldest.Id != incident.Id)
+            {
+                oldest.Description += $"\n[Merged duplicate {incident.Id}]\n{incident.Description}";
+                oldest.OccurrenceCount += incident.OccurrenceCount;
+                oldest.UpdatedAt = DateTimeOffset.UtcNow;
+                _db.Incidents.Remove(incident);
+                incident = oldest;
+            }
 
             incident.UpdatedAt = DateTimeOffset.UtcNow;
             await _db.SaveChangesAsync(ct);
@@ -299,7 +331,14 @@ public sealed class SupportDashboardController : ControllerBase
             null,
             incident.DeployStatus,
             runId,
-            logUrl));
+            logUrl,
+            incident.FinalUserResponse,
+            incident.TechnicalDiagnosticNote,
+            incident.TriageConfidence,
+            incident.Fingerprint,
+            incident.OccurrenceCount,
+            incident.ResolutionMode.ToString(),
+            incident.EligibleForEffectivenessKpi));
     }
 
     [HttpGet("incidents/{id:guid}/messages")]
@@ -386,6 +425,10 @@ public sealed class SupportDashboardController : ControllerBase
         incident.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _db.SaveChangesAsync(ct);
+
+        await NotifyChannelSafelyAsync(incident.TenantId, incident.Id,
+            $"✅ Se aplicó una corrección de datos en tu ticket #{incident.Id.ToString("N")[..8]} ({fixResult.RowsAffected} registros afectados). Estamos verificando que todo funcione correctamente.", ct);
+
         return Ok(new { message = "DB fix executed successfully.", fixResult.RowsAffected, fixResult.Message });
     }
 
@@ -403,6 +446,10 @@ public sealed class SupportDashboardController : ControllerBase
         incident.ResolutionNotes = (incident.ResolutionNotes ?? "") + $"\nFix rejected: {request.Reason}";
         incident.UpdatedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
+
+        await NotifyChannelSafelyAsync(incident.TenantId, incident.Id,
+            "Se descartó el cambio propuesto para tu ticket. Nuestro equipo lo revisará manualmente.", ct);
+
         return Ok(new { message = "Fix rejected. Incident reopened." });
     }
 
@@ -501,7 +548,11 @@ public sealed class SupportDashboardController : ControllerBase
     public async Task<ActionResult> ApproveMerge(Guid incidentId, CancellationToken ct)
     {
         if (!IsPrivileged) return StatusCode(StatusCodes.Status403Forbidden);
-        var incident = await _db.Incidents.FindAsync(new object[] { incidentId }, ct);
+        // IgnoreQueryFilters: privileged dashboard users often run without a resolved
+        // TenantContext (the /api/support path is exempt from TenantResolutionMiddleware),
+        // which would make CurrentTenantId = Guid.Empty and this lookup always miss.
+        var incident = await _db.Incidents.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(i => i.Id == incidentId, ct);
         if (incident is null) return NotFound();
 
         if (string.IsNullOrWhiteSpace(incident.GitBranch))
@@ -530,6 +581,9 @@ public sealed class SupportDashboardController : ControllerBase
         incident.ResolvedAt = DateTimeOffset.UtcNow;
         incident.UpdatedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
+
+        await NotifyChannelSafelyAsync(incident.TenantId, incident.Id,
+            $"✅ Se aprobó y desplegó la corrección de tu ticket #{incident.Id.ToString("N")[..8]}. Te confirmamos en breve.", ct);
 
         return Ok(new { message = "Merged and deployed.", deployId });
     }
@@ -595,12 +649,16 @@ public sealed class SupportDashboardController : ControllerBase
     [Authorize(Roles = AppRoles.SuperAdmin)]
     public async Task<ActionResult> CreateKbArticle([FromBody] CreateKbRequest request, CancellationToken ct)
     {
-        if (!_tenantContext.IsResolved) return Unauthorized();
+        // GetEffectiveTenantId resolves either the JWT tenant claim or, for privileged
+        // dashboard users, the X-Tenant-Id header (TenantContext is not resolved by the
+        // middleware because /api/support is an exempt path).
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue) return Unauthorized();
 
         var article = new KbArticle
         {
             Id = Guid.NewGuid(),
-            TenantId = _tenantContext.TenantId,
+            TenantId = effectiveTenantId.Value,
             Title = request.Title,
             Content = request.Content,
             Category = request.Category,
@@ -611,14 +669,100 @@ public sealed class SupportDashboardController : ControllerBase
             UpdatedAt = DateTimeOffset.UtcNow
         };
 
+        await TryGenerateArticleEmbeddingAsync(article, ct);
+
         _db.KbArticles.Add(article);
         await _db.SaveChangesAsync(ct);
         return Ok(new { id = article.Id });
     }
 
+    /// <summary>Auto-resolution effectiveness per <c>docs/architecture/incident-effectiveness-kpi.md</c>.</summary>
+    [HttpGet("effectiveness-metrics")]
+    public async Task<ActionResult<object>> GetEffectivenessMetrics([FromQuery] int windowDays = 28, CancellationToken ct = default)
+    {
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue && !IsPrivileged) return Unauthorized();
+
+        windowDays = Math.Clamp(windowDays, 1, 365);
+        var since = DateTimeOffset.UtcNow.AddDays(-windowDays);
+
+        var query = IsPrivileged
+            ? _db.Incidents.IgnoreQueryFilters().AsNoTracking()
+            : _db.Incidents.AsNoTracking();
+        if (effectiveTenantId.HasValue)
+            query = query.Where(i => i.TenantId == effectiveTenantId.Value);
+
+        var resolvedEligible = query.Where(i =>
+            i.EligibleForEffectivenessKpi
+            && i.ResolvedAt >= since
+            && (i.Status == IncidentStatus.Closed || i.Status == IncidentStatus.Resolved));
+
+        var denominator = await resolvedEligible.CountAsync(ct);
+        var numerator = await resolvedEligible.CountAsync(
+            i => i.ResolutionMode == IncidentResolutionMode.AutoCode
+                || i.ResolutionMode == IncidentResolutionMode.AutoDatabase
+                || i.ResolutionMode == IncidentResolutionMode.Hybrid,
+            ct);
+
+        double? rate = denominator == 0 ? null : (double)numerator / denominator;
+
+        return Ok(new
+        {
+            windowDays,
+            since,
+            denominatorEligibleResolved = denominator,
+            numeratorAutoResolved = numerator,
+            autoResolutionEffectiveness = rate,
+            target = 0.70
+        });
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     //  HELPERS
     // ═══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Sends a user-facing progress message to the channel where the incident was
+    /// reported. Notification failures must never break the dashboard endpoints.
+    /// </summary>
+    private async Task NotifyChannelSafelyAsync(Guid tenantId, Guid incidentId, string message, CancellationToken ct)
+    {
+        try
+        {
+            await _channelNotifier.NotifyIncidentProgressAsync(tenantId, incidentId, message, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Channel notification failed for incident {IncidentId}.", incidentId);
+        }
+    }
+
+    /// <summary>
+    /// Best-effort embedding for KB semantic search. Failures leave the article
+    /// without a vector; keyword search remains the fallback.
+    /// </summary>
+    private async Task TryGenerateArticleEmbeddingAsync(KbArticle article, CancellationToken ct)
+    {
+        try
+        {
+            var vector = await _embeddingService.GenerateEmbeddingAsync(
+                $"{article.Title}\n{article.Content}\n{article.ResolutionSteps}", ct);
+            if (vector is { Length: > 0 })
+                article.EmbeddingVector = EmbeddingMath.FloatsToLittleEndianBytes(vector);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Embedding generation failed for KB article {ArticleId}; saving without vector.", article.Id);
+        }
+    }
 
     private static IncidentDetailDto MapToDetail(Incident i, IncidentAnalysisResult? analysis = null)
     {
@@ -641,7 +785,14 @@ public sealed class SupportDashboardController : ControllerBase
             analysis is null ? null : analysis.Reasoning,
             i.DeployStatus,
             null,
-            null);
+            null,
+            i.FinalUserResponse,
+            i.TechnicalDiagnosticNote,
+            i.TriageConfidence,
+            i.Fingerprint,
+            i.OccurrenceCount,
+            i.ResolutionMode.ToString(),
+            i.EligibleForEffectivenessKpi);
     }
 
     /// <summary>
@@ -723,12 +874,7 @@ public sealed class SupportDashboardController : ControllerBase
             try
             {
                 analysis = await _analysisEngine.AnalyzeAsync(devTenantId, description, incident.Id, ct);
-
-                if (Enum.TryParse<IncidentCategory>(analysis.Category, true, out var cat))
-                    incident.Category = cat;
-                if (Enum.TryParse<IncidentSeverity>(analysis.Severity, true, out var sev))
-                    incident.Severity = sev;
-
+                IncidentTriageApplier.ApplyAnalysis(incident, analysis);
                 incident.UpdatedAt = DateTimeOffset.UtcNow;
                 await _db.SaveChangesAsync(ct);
             }
@@ -821,12 +967,7 @@ public sealed class SupportDashboardController : ControllerBase
         try
         {
             analysis = await _analysisEngine.AnalyzeAsync(sandpitTenantId, request.Description, incident.Id, ct);
-
-            if (Enum.TryParse<IncidentCategory>(analysis.Category, true, out var cat))
-                incident.Category = cat;
-            if (Enum.TryParse<IncidentSeverity>(analysis.Severity, true, out var sev))
-                incident.Severity = sev;
-
+            IncidentTriageApplier.ApplyAnalysis(incident, analysis);
             incident.UpdatedAt = DateTimeOffset.UtcNow;
             await _db.SaveChangesAsync(ct);
         }
@@ -871,14 +1012,29 @@ public sealed record IncidentDetailDto(
     string? LlmReasoning = null,
     string? DeployStatus = null,
     string? DeployRunId = null,
-    string? DeployLogUrl = null);
+    string? DeployLogUrl = null,
+    string? FinalUserResponse = null,
+    string? TechnicalDiagnosticNote = null,
+    double? TriageConfidence = null,
+    string? Fingerprint = null,
+    int OccurrenceCount = 1,
+    string? ResolutionMode = null,
+    bool EligibleForEffectivenessKpi = false);
 
 public sealed record MergeRequestDto(Guid IncidentId, string Title, string Branch, string CommitHash, Guid TenantId, DateTimeOffset CreatedAt);
 public sealed record SystemHealthDto(bool DbHealthy, bool PipelineHealthy, string LastTestRun);
 public sealed record KbArticleDto(Guid Id, string Title, string Category, string Tags, DateTimeOffset CreatedAt);
 
 public sealed record CreateIncidentRequest(Guid? ConversationId, string Title, string Description, string? Category, string? Severity);
-public sealed record CreateIncidentFromSandpitRequest(string Title, string Description);
+public sealed record CreateIncidentFromSandpitRequest(
+    string Title,
+    string Description,
+    bool? IsSynthetic = null,
+    Guid? SimulationRunId = null,
+    string? ScenarioId = null,
+    string? FaultType = null,
+    int? Seed = null,
+    Guid? ArenaEnvironmentId = null);
 public sealed record AddAttachmentRequest(IncidentAttachmentType Type, string FileName, string Content);
 public sealed record RejectFixRequest(string Reason);
 public sealed record MessageDto(Guid Id, string Role, string Content, DateTimeOffset CreatedAt);

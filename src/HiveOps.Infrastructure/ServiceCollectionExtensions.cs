@@ -17,6 +17,9 @@ using StackExchange.Redis;
 using HiveOps.Infrastructure.Secrets;
 using HiveOps.Infrastructure.Billing;
 using HiveOps.Infrastructure.Configuration;
+using HiveOps.Infrastructure.ApiDrift;
+using HiveOps.Infrastructure.Services;
+using HiveOps.Infrastructure.HiveArena;
 
 namespace HiveOps.Infrastructure;
 
@@ -122,12 +125,30 @@ public static class ServiceCollectionExtensions
         // ── Tenant Data Fixer ────────────────────────────────────────────────
         services.AddScoped<ITenantDataFixerService, TenantDataFixerService>();
 
+        // ── Tenant target-database diagnostics (read-only, e.g. HiveCrew) ───
+        services.AddScoped<ITargetDatabaseDiagnosticService, TargetDatabaseDiagnosticService>();
+
+        // ── Incident channels (notifier / dispatcher / ticketing / media) ──
+        services.AddScoped<HiveOps.Domain.Interfaces.IIncidentChannelNotifier, HiveOps.Infrastructure.Messaging.IncidentChannelNotifier>();
+        services.AddScoped<HiveOps.Domain.Interfaces.IChannelDispatcher, HiveOps.Infrastructure.Messaging.ChannelDispatcher>();
+        services.AddHttpClient<HiveOps.Infrastructure.Ticketing.TicketingChannel>();
+        services.AddHttpClient<HiveOps.Infrastructure.AI.MultimodalMediaProcessor>();
+
         // ── Billing ─────────────────────────────────────────────────────────
         services.Configure<StripeOptions>(configuration.GetSection(StripeOptions.SectionName));
         if (deployment.Billing == HiveOpsBillingMode.Stripe)
             services.AddScoped<IStripeService, StripeService>();
         else
             services.AddScoped<IStripeService, DisabledStripeService>();
+
+        // ── API Drift Detection ───────────────────────────────────────────────
+        services.AddSingleton<JsonSchemaHasher>();
+        services.AddScoped<IIncidentService, IncidentService>();
+
+        // ── HiveArena validation publisher (optional; gated by HiveArena:Publisher:Enabled) ──
+        services.Configure<HiveArenaPublisherOptions>(configuration.GetSection(HiveArenaPublisherOptions.SectionName));
+        services.AddHttpClient(nameof(HiveArenaValidationHttpPublisher));
+        services.AddSingleton<IHiveArenaValidationPublisher, HiveArenaValidationHttpPublisher>();
 
         return services;
     }

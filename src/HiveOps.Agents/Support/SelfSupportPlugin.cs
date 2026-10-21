@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
@@ -14,35 +15,55 @@ using HiveOps.Infrastructure.Persistence;
 namespace HiveOps.Agents.Support;
 
 /// <summary>
-/// SelfSupportPlugin — allows the bot to inspect its own codebase and database.
-/// Phase 1: supports self-healing of HiveOps itself.
+/// SelfSupportPlugin — allows the bot to inspect the tenant's own application
+/// repository (per-tenant git workspace) and the HiveOps system database.
+/// The repository is resolved via <see cref="IGitService.GetWorkspacePathAsync"/>.
 /// </summary>
 public sealed class SelfSupportPlugin
 {
     private readonly AppDbContext _db;
     private readonly IConversationStateManager _stateManager;
+    private readonly IGitService _gitService;
 
-    public SelfSupportPlugin(AppDbContext db, IConversationStateManager stateManager)
+    public SelfSupportPlugin(AppDbContext db, IConversationStateManager stateManager, IGitService gitService)
     {
         _db = db;
         _stateManager = stateManager;
+        _gitService = gitService;
     }
 
     // Valid file path pattern: alphanumeric, hyphens, underscores, dots, forward slashes
-    // Must stay within src directory, no parent directory traversal
+    // Must stay within the workspace, no parent directory traversal
     private static readonly Regex ValidSourcePathPattern = new(
-        @"^[a-zA-Z0-9][a-zA-Z0-9._\-/]*\.(cs|json|md|txt|yml|yaml)$",
+        @"^[a-zA-Z0-9][a-zA-Z0-9._\-/]*\.(cs|cshtml|razor|ts|tsx|js|json|md|txt|yml|yaml|sql|xml|config)$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly string[] ValidExtensions =
+        [".cs", ".cshtml", ".razor", ".ts", ".tsx", ".js", ".json", ".md", ".txt", ".yml", ".yaml", ".sql", ".xml", ".config"];
+
+    private static readonly HashSet<string> ExcludedDirectories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".git", ".vs", ".idea", "bin", "obj", "node_modules", "packages"
+    };
+
     [KernelFunction("read_own_source")]
-    [Description("Reads a source file from the HiveOps repository to inspect code for diagnostics.")]
+    [Description("Reads a source file from the tenant application repository to inspect code for diagnostics.")]
     public async Task<string> ReadOwnSourceAsync(
         Kernel kernel,
-        [Description("Relative file path within the repo (e.g., src/HiveOps.Agents/Support/SupportPlugin.cs).")] string filePath,
+        [Description("Relative file path within the tenant repo (e.g., src/Web/Controllers/OrdersController.cs).")] string filePath,
         CancellationToken cancellationToken = default)
     {
         var tenantId = GetTenantId(kernel);
-        var repoRoot = FindRepoRoot();
+
+        string repoRoot;
+        try
+        {
+            repoRoot = await _gitService.GetWorkspacePathAsync(tenantId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return $"Unable to resolve the tenant repository workspace: {ex.Message}";
+        }
 
         // Validate file path to prevent path traversal attacks
         if (!IsValidSourceFilePath(filePath))
@@ -51,7 +72,7 @@ public sealed class SelfSupportPlugin
         var fullPath = Path.Combine(repoRoot, filePath.Replace('/', Path.DirectorySeparatorChar));
         fullPath = Path.GetFullPath(fullPath);
 
-        // Ensure the resolved path is still within the repo root
+        // Ensure the resolved path is still within the workspace
         var repoRootFull = Path.GetFullPath(repoRoot);
         if (!fullPath.StartsWith(repoRootFull, StringComparison.OrdinalIgnoreCase))
             return "Access denied: Path is outside the repository.";
@@ -93,35 +114,173 @@ public sealed class SelfSupportPlugin
     }
 
     [KernelFunction("search_own_source")]
-    [Description("Searches the HiveOps codebase for files matching a pattern or containing text.")]
-    public Task<string> SearchOwnSourceAsync(
+    [Description("Searches the tenant application codebase for files matching a pattern or containing text. Returns numbered lines with context.")]
+    public async Task<string> SearchOwnSourceAsync(
         Kernel kernel,
-        [Description("Glob pattern or search term (alphanumeric only, max 50 chars).")] string pattern,
+        [Description("Search term (alphanumeric only, max 50 chars).")] string pattern,
         [Description("File extension filter (e.g., .cs).")] string? extension = ".cs",
         CancellationToken cancellationToken = default)
     {
-        var repoRoot = FindRepoRoot();
-        var srcPath = Path.Combine(repoRoot, "src");
-        if (!Directory.Exists(srcPath))
-            return Task.FromResult("Source directory not found.");
+        var tenantId = GetTenantId(kernel);
+
+        string repoRoot;
+        try
+        {
+            repoRoot = await _gitService.GetWorkspacePathAsync(tenantId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return $"Unable to resolve the tenant repository workspace: {ex.Message}";
+        }
+
+        if (!Directory.Exists(repoRoot))
+            return "Tenant repository workspace not found on this host.";
 
         // Sanitize pattern to prevent regex injection
         var sanitizedPattern = SanitizeSearchPattern(pattern);
         if (string.IsNullOrEmpty(sanitizedPattern))
-            return Task.FromResult("Invalid search pattern. Only alphanumeric characters, hyphens, and underscores are allowed.");
+            return "Invalid search pattern. Only alphanumeric characters, hyphens, and underscores are allowed.";
 
         // Validate extension
-        var validExtensions = new[] { ".cs", ".json", ".md", ".txt", ".yml", ".yaml", ".xml", ".config" };
-        if (!validExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
-            return Task.FromResult($"Invalid extension. Allowed: {string.Join(", ", validExtensions)}");
+        if (!ValidExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+            return $"Invalid extension. Allowed: {string.Join(", ", ValidExtensions)}";
 
-        var files = Directory.EnumerateFiles(srcPath, $"*{extension}", SearchOption.AllDirectories)
-            .Where(f => f.Contains(sanitizedPattern, StringComparison.OrdinalIgnoreCase) ||
-                        File.ReadAllText(f).Contains(sanitizedPattern, StringComparison.OrdinalIgnoreCase))
-            .Take(10)
-            .Select(f => f.Replace(repoRoot + Path.DirectorySeparatorChar, "").Replace('\\', '/'));
+        const int MaxFiles = 10;
+        const int MaxChars = 4000;
+        const int ContextLines = 3;
 
-        return Task.FromResult($"Found matches:\n{string.Join("\n", files)}");
+        var result = new StringBuilder();
+        var filesMatched = 0;
+
+        foreach (var file in EnumerateWorkspaceFiles(repoRoot, $"*{extension}"))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (filesMatched >= MaxFiles || result.Length >= MaxChars)
+                break;
+
+            var relative = Path.GetRelativePath(repoRoot, file).Replace('\\', '/');
+
+            string[] lines;
+            try
+            {
+                lines = await File.ReadAllLinesAsync(file, cancellationToken);
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            var matchIndices = new List<int>();
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Contains(sanitizedPattern, StringComparison.OrdinalIgnoreCase))
+                    matchIndices.Add(i);
+            }
+
+            var nameMatch = relative.Contains(sanitizedPattern, StringComparison.OrdinalIgnoreCase);
+            if (matchIndices.Count == 0 && !nameMatch)
+                continue;
+
+            var block = new StringBuilder();
+            block.Append(relative).Append('\n');
+
+            foreach (var (start, end) in MergeContextRanges(matchIndices, ContextLines, lines.Length))
+            {
+                for (var i = start; i <= end; i++)
+                    block.Append("  ").Append(i + 1).Append(" | ").Append(TruncateLine(lines[i])).Append('\n');
+                block.Append("  ---\n");
+            }
+
+            if (result.Length + block.Length > MaxChars)
+                break;
+
+            result.Append(block);
+            filesMatched++;
+        }
+
+        if (filesMatched == 0)
+            return $"No matches for '{sanitizedPattern}' in *{extension} files.";
+
+        return $"Found matches (showing up to {MaxFiles} files):\n{result}";
+    }
+
+    /// <summary>Merges ±<paramref name="context"/> line windows around each match into non-overlapping ranges.</summary>
+    private static IEnumerable<(int Start, int End)> MergeContextRanges(List<int> matchIndices, int context, int lineCount)
+    {
+        var current = (Start: -1, End: -1);
+        foreach (var index in matchIndices)
+        {
+            var start = Math.Max(0, index - context);
+            var end = Math.Min(lineCount - 1, index + context);
+
+            if (current.Start == -1)
+            {
+                current = (start, end);
+            }
+            else if (start <= current.End + 1)
+            {
+                current.End = Math.Max(current.End, end);
+            }
+            else
+            {
+                yield return current;
+                current = (start, end);
+            }
+        }
+
+        if (current.Start != -1)
+            yield return current;
+    }
+
+    private static string TruncateLine(string line) =>
+        line.Length > 200 ? line[..200] + "…" : line;
+
+    /// <summary>
+    /// Enumerates workspace files skipping build outputs and VCS internals
+    /// (<c>.git</c>, <c>bin</c>, <c>obj</c>, <c>node_modules</c>, …).
+    /// </summary>
+    private static IEnumerable<string> EnumerateWorkspaceFiles(string root, string searchPattern)
+    {
+        var pending = new Stack<string>();
+        pending.Push(root);
+
+        while (pending.Count > 0)
+        {
+            var dir = pending.Pop();
+
+            List<string> files;
+            try
+            {
+                files = Directory.EnumerateFiles(dir, searchPattern).ToList();
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            foreach (var file in files)
+                yield return file;
+
+            List<string> subdirs;
+            try
+            {
+                subdirs = Directory.EnumerateDirectories(dir).ToList();
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            foreach (var subdir in subdirs)
+            {
+                if (!ExcludedDirectories.Contains(Path.GetFileName(subdir)))
+                    pending.Push(subdir);
+            }
+        }
     }
 
     private static string SanitizeSearchPattern(string pattern)
@@ -139,7 +298,7 @@ public sealed class SelfSupportPlugin
     }
 
     [KernelFunction("check_own_db_health")]
-    [Description("Runs basic health checks on the bot's own database tables.")]
+    [Description("Runs basic health checks on the HiveOps system database (conversations, tenants, configuration). Does NOT inspect the tenant application database.")]
     public async Task<string> CheckOwnDbHealthAsync(
         Kernel kernel,
         CancellationToken cancellationToken = default)
@@ -170,24 +329,40 @@ public sealed class SelfSupportPlugin
             return $"DB health check failed: {ex.Message}";
         }
 
-        return $"DB Health:\n{string.Join("\n", results)}";
+        return $"HiveOps system DB health:\n{string.Join("\n", results)}";
     }
 
     [KernelFunction("run_unit_tests")]
-    [Description("Runs unit tests for a specific project and returns results. Requires dotnet CLI.")]
+    [Description("Runs unit tests for a project inside the tenant repository workspace and returns results. Requires dotnet CLI.")]
     public async Task<string> RunUnitTestsAsync(
         Kernel kernel,
-        [Description("Project name or path (e.g., tests/HiveOps.UnitTests).")] string projectPath,
+        [Description("Project name or path relative to the workspace (e.g., tests/HiveCrew.UnitTests). Defaults to the 'tests' directory.")] string projectPath,
         CancellationToken cancellationToken = default)
     {
         var tenantId = GetTenantId(kernel);
-        var repoRoot = FindRepoRoot();
-        var fullProjectPath = Path.Combine(repoRoot, projectPath.Replace('/', Path.DirectorySeparatorChar));
+
+        string repoRoot;
+        try
+        {
+            repoRoot = await _gitService.GetWorkspacePathAsync(tenantId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return $"Unable to resolve the tenant repository workspace: {ex.Message}";
+        }
+
+        // Convention: test projects live under the "tests" directory of the workspace.
+        var testsRoot = Path.Combine(Path.GetFullPath(repoRoot), "tests");
+        if (!Directory.Exists(testsRoot))
+            return "No 'tests' directory found under the tenant repository workspace.";
+
+        var relativePath = string.IsNullOrWhiteSpace(projectPath) ? "tests" : projectPath;
+        var fullProjectPath = Path.Combine(repoRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
 
         if (!Directory.Exists(fullProjectPath))
-            return $"Project not found: {fullProjectPath}";
+            return $"Project not found: {relativePath}";
 
-        // Validate project path to prevent command injection
+        // Validate project path to prevent command injection / escaping the workspace
         if (!IsValidProjectPath(fullProjectPath, repoRoot))
             return "Invalid project path. Path must be within the repository tests directory.";
 
@@ -219,8 +394,8 @@ public sealed class SelfSupportPlugin
             await LogDiagnosticAsync(tenantId, "run_unit_tests", $"ExitCode={process.ExitCode}\n{output}\n{error}", success, cancellationToken);
 
             return success
-                ? $"Tests passed for {projectPath}."
-                : $"Tests FAILED for {projectPath}. Output:\n{output}\n{error}";
+                ? $"Tests passed for {relativePath}."
+                : $"Tests FAILED for {relativePath}. Output:\n{output}\n{error}";
         }
         catch (Exception ex)
         {
@@ -251,26 +426,9 @@ public sealed class SelfSupportPlugin
         }
     }
 
-    private static string FindRepoRoot()
-    {
-        var current = Directory.GetCurrentDirectory();
-        while (!string.IsNullOrEmpty(current))
-        {
-            if (Directory.Exists(Path.Combine(current, ".git")) ||
-                Directory.Exists(Path.Combine(current, "src")) && File.Exists(Path.Combine(current, "HiveOps.slnx")))
-            {
-                return current;
-            }
-            var parent = Directory.GetParent(current);
-            if (parent is null) break;
-            current = parent.FullName;
-        }
-        return Directory.GetCurrentDirectory();
-    }
-
     private static bool IsValidProjectPath(string projectPath, string repoRoot)
     {
-        // Must be within repo
+        // Must be within workspace
         var fullPath = Path.GetFullPath(Path.Combine(repoRoot, projectPath));
         var repoRootFull = Path.GetFullPath(repoRoot);
 

@@ -13,34 +13,34 @@ public sealed class ToolResolverTests
     public async Task ResolveAsync_Should_Filter_By_AllowedTools_And_State_And_Priority()
     {
         var config = TenantConfiguration.CreateDefault();
-        config.Agent.AllowedTools = ["search_products", "get_store_info", "start_checkout"];
+        config.Agent.AllowedTools = ["analyze_incident", "get_incident_status", "approve_fix"];
         config.Tools.RestrictToAllowedTools = true;
-        config.Tools.ToolSettings["search_products"] = new ToolSettings
+        config.Tools.ToolSettings["analyze_incident"] = new ToolSettings
         {
             Enabled = true,
             Priority = 20,
             AllowedStates = [ConversationState.Idle]
         };
-        config.Tools.ToolSettings["get_store_info"] = new ToolSettings
+        config.Tools.ToolSettings["get_incident_status"] = new ToolSettings
         {
             Enabled = true,
             Priority = 10,
             AllowedStates = [ConversationState.Idle]
         };
-        config.Tools.ToolSettings["start_checkout"] = new ToolSettings
+        config.Tools.ToolSettings["approve_fix"] = new ToolSettings
         {
             Enabled = true,
             Priority = 5,
-            AllowedStates = [ConversationState.InOrderFlow]
+            AllowedStates = [ConversationState.AwaitingIncidentApproval]
         };
 
         var resolver = new ToolResolver(new StubTenantConfigService(config));
 
         var idleTools = await resolver.ResolveAsync(Guid.NewGuid(), ConversationState.Idle);
-        idleTools.Select(t => t.Name).Should().Equal("get_store_info", "search_products");
+        idleTools.Select(t => t.Name).Should().Equal("get_incident_status", "analyze_incident");
 
-        var orderTools = await resolver.ResolveAsync(Guid.NewGuid(), ConversationState.InOrderFlow);
-        orderTools.Select(t => t.Name).Should().ContainSingle().Which.Should().Be("start_checkout");
+        var approvalTools = await resolver.ResolveAsync(Guid.NewGuid(), ConversationState.AwaitingIncidentApproval);
+        approvalTools.Select(t => t.Name).Should().ContainSingle().Which.Should().Be("approve_fix");
     }
 
     [Fact]
@@ -53,8 +53,8 @@ public sealed class ToolResolverTests
 
         var tools = await resolver.ResolveAsync(Guid.NewGuid(), ConversationState.Idle);
 
-        tools.Should().Contain(t => t.Name == "search_products");
-        tools.Should().Contain(t => t.Name == "get_store_info");
+        tools.Should().Contain(t => t.Name == "analyze_incident");
+        tools.Should().Contain(t => t.Name == "search_kb");
         tools.Should().Contain(t => t.Name == "escalate_to_human");
     }
 

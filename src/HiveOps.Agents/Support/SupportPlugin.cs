@@ -26,6 +26,10 @@ public sealed class SupportPlugin
     private readonly IDeploymentService _deploymentService;
     private readonly ISupervisionNotifier _notifier;
     private readonly ITenantConfigService _tenantConfigService;
+    private readonly IncidentAnalysisEngine _analysisEngine;
+    private readonly HiveOps.Domain.Interfaces.IEmbeddingService _embeddingService;
+    private readonly ITargetDatabaseDiagnosticService _targetDbDiagnostic;
+    private readonly ITenantDataFixerService _dataFixer;
 
     public SupportPlugin(
         AppDbContext db,
@@ -33,7 +37,11 @@ public sealed class SupportPlugin
         IGitService gitService,
         IDeploymentService deploymentService,
         ISupervisionNotifier notifier,
-        ITenantConfigService tenantConfigService)
+        ITenantConfigService tenantConfigService,
+        IncidentAnalysisEngine analysisEngine,
+        HiveOps.Domain.Interfaces.IEmbeddingService embeddingService,
+        ITargetDatabaseDiagnosticService targetDbDiagnostic,
+        ITenantDataFixerService dataFixer)
     {
         _db = db;
         _stateManager = stateManager;
@@ -41,6 +49,10 @@ public sealed class SupportPlugin
         _deploymentService = deploymentService;
         _notifier = notifier;
         _tenantConfigService = tenantConfigService;
+        _analysisEngine = analysisEngine;
+        _embeddingService = embeddingService;
+        _targetDbDiagnostic = targetDbDiagnostic;
+        _dataFixer = dataFixer;
     }
 
     [KernelFunction("analyze_incident")]
@@ -57,11 +69,11 @@ public sealed class SupportPlugin
 
         var ctx = await GetOrCreateStateAsync(tenantId, convId, cancellationToken);
 
-        // Create or update incident record
         var incident = await _db.Incidents
             .FirstOrDefaultAsync(i => i.ConversationId == convId && i.Status != IncidentStatus.Closed, cancellationToken);
 
-        if (incident is null)
+        var isNew = incident is null;
+        if (isNew)
         {
             incident = new Incident
             {
@@ -74,11 +86,44 @@ public sealed class SupportPlugin
                 AssignedTo = "bot"
             };
             _db.Incidents.Add(incident);
+            await _db.SaveChangesAsync(cancellationToken);
         }
         else
         {
-            incident.Description += $"\n[Follow-up]: {description}";
+            incident!.Description += $"\n[Follow-up]: {description}";
             incident.UpdatedAt = DateTimeOffset.UtcNow;
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        var analysis = await _analysisEngine.AnalyzeAsync(tenantId, incident!.Description, incident.Id, cancellationToken);
+        IncidentTriageApplier.ApplyAnalysis(incident, analysis);
+
+        // When triage is complete and does not require escalation, hand the incident
+        // to the auto workflow (it only picks up Status == Open && AssignedTo == "bot").
+        if (analysis.MissingInfo.Count == 0 && !analysis.RequiresEscalation)
+        {
+            incident.Status = IncidentStatus.Open;
+            incident.AssignedTo = "bot";
+        }
+
+        if (isNew)
+        {
+            var oldest = await _db.Incidents
+                .Where(i => i.TenantId == tenantId
+                            && i.Fingerprint == incident.Fingerprint
+                            && i.Status != IncidentStatus.Closed
+                            && i.Status != IncidentStatus.Resolved)
+                .OrderBy(i => i.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (oldest is not null && oldest.Id != incident.Id)
+            {
+                oldest.Description += $"\n[Merged duplicate {incident.Id}]\n{incident.Description}";
+                oldest.OccurrenceCount += incident.OccurrenceCount;
+                oldest.UpdatedAt = DateTimeOffset.UtcNow;
+                _db.Incidents.Remove(incident);
+                incident = oldest;
+            }
         }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -89,26 +134,17 @@ public sealed class SupportPlugin
 
         await _notifier.NotifyIncidentCreatedAsync(tenantId, incident.Id, incident.Title, incident.Severity.ToString(), cancellationToken);
 
-        // If critical keywords, escalate immediately
         if (incident.Severity == IncidentSeverity.Critical)
-        {
             return $"CRITICAL incident detected (ID: {incident.Id}). Escalating to engineer immediately.";
-        }
 
-        // Determine if more info is needed
-        var missing = GetMissingInfo(description, incident.Category);
-        if (missing.Count > 0)
-        {
-            incident.Status = IncidentStatus.PendingInfo;
-            await _db.SaveChangesAsync(cancellationToken);
-            return $"Incident {incident.Id} recorded. To diagnose, I need: {string.Join(", ", missing)}.";
-        }
+        if (incident.Status == IncidentStatus.PendingInfo && analysis.MissingInfo.Count > 0)
+            return $"Incident {incident.Id} recorded. {incident.FinalUserResponse}";
 
-        return $"Incident {incident.Id} analyzed. Category: {incident.Category}. Ready for diagnosis.";
+        return $"Incident {incident.Id} analyzed. {incident.FinalUserResponse}";
     }
 
     [KernelFunction("query_database_diagnostic")]
-    [Description("Runs safe read-only SQL diagnostics. Only SELECT, EXPLAIN, SHOW allowed.")]
+    [Description("Runs safe read-only SQL diagnostics against the tenant database. Only SELECT allowed.")]
     public async Task<string> QueryDatabaseDiagnosticAsync(
         Kernel kernel,
         [Description("Conversation ID.")] string conversationId,
@@ -119,32 +155,269 @@ public sealed class SupportPlugin
         if (!Guid.TryParse(conversationId, out var convId))
             return "Invalid conversation ID.";
 
-        if (!SafetyValidator.IsSafeSql(sqlQuery))
+        var normalized = sqlQuery.Trim();
+        if (!normalized.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            return "SQL rejected: only read-only SELECT queries are allowed for diagnostics.";
+
+        if (!SafetyValidator.IsSafeSql(normalized))
         {
-            var reason = SafetyValidator.GetRejectionReason(sqlQuery);
+            var reason = SafetyValidator.GetRejectionReason(normalized);
             return $"SQL rejected for safety: {reason}";
         }
 
         var incident = await _db.Incidents
             .FirstOrDefaultAsync(i => i.ConversationId == convId && i.Status != IncidentStatus.Closed, cancellationToken);
 
-        // Log diagnostic step
+        TargetQueryResult result;
+        try
+        {
+            result = await _targetDbDiagnostic.ExecuteReadOnlyQueryAsync(tenantId, normalized, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            result = new TargetQueryResult(false, string.Empty, 0, ex.Message);
+        }
+
         if (incident is not null)
         {
+            var logResult = $"Query: {normalized}\nSuccess: {result.Success} | Rows: {result.RowCount}\n{TruncateForLog(result.Success ? result.RenderedResult : result.Error ?? "unknown error")}";
             _db.DiagnosticLogs.Add(new DiagnosticLog
             {
                 TenantId = tenantId,
                 IncidentId = incident.Id,
                 StepName = "db_diagnostic",
-                Result = $"Executing: {sqlQuery}",
-                IsSuccess = true
+                Result = logResult,
+                IsSuccess = result.Success
             });
             await _db.SaveChangesAsync(cancellationToken);
         }
 
-        // Execute via raw SQL — but we can't return arbitrary results easily from EF
-        // Return a note that the diagnostic was logged and queued
-        return $"Diagnostic query logged. In a production setup, this would execute: {sqlQuery}";
+        if (!result.Success)
+            return $"La consulta de diagnóstico falló: {result.Error}";
+
+        var rendered = string.IsNullOrWhiteSpace(result.RenderedResult)
+            ? "(sin filas)"
+            : result.RenderedResult;
+        if (rendered.Length > 1500)
+            rendered = rendered[..1500] + "\n... (truncado)";
+
+        return $"Resultado del diagnóstico ({result.RowCount} filas):\n{rendered}";
+    }
+
+    [KernelFunction("search_kb")]
+    [Description("Searches the tenant knowledge base for articles relevant to a functional or how-to question.")]
+    public async Task<string> SearchKbAsync(
+        Kernel kernel,
+        [Description("Search query.")] string query,
+        CancellationToken cancellationToken = default)
+    {
+        var tenantId = GetTenantId(kernel);
+
+        var keywords = query.ToLowerInvariant()
+            .Split([' ', ',', '.', ';', ':', '?', '¿', '!', '¡'], StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Length > 3)
+            .Take(6)
+            .ToList();
+
+        var articles = await _db.KbArticles
+            .AsNoTracking()
+            .Where(a => a.TenantId == tenantId && a.IsPublished)
+            .ToListAsync(cancellationToken);
+
+        if (articles.Count == 0)
+            return "No encontré artículos en la base de conocimiento.";
+
+        var keywordMatched = articles
+            .Where(a => keywords.Count == 0 || keywords.Any(k =>
+                a.Title.Contains(k, StringComparison.OrdinalIgnoreCase) ||
+                a.Content.Contains(k, StringComparison.OrdinalIgnoreCase) ||
+                a.Tags.Contains(k, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        var pool = (keywordMatched.Count > 0 ? keywordMatched : articles).Take(40).ToList();
+
+        // Minimum cosine similarity for a semantic match to be considered relevant.
+        const double MinCosineSimilarity = 0.25;
+
+        float[]? queryVector = null;
+        try
+        {
+            queryVector = await _embeddingService.GenerateEmbeddingAsync(query, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Embedding service unavailable: fall back to plain keyword ranking.
+        }
+
+        List<KbArticle> top = [];
+        if (queryVector is { Length: > 0 })
+        {
+            // Semantic ranking over articles with a stored embedding; weak matches are dropped.
+            top = pool
+                .Select(a => (Article: a, Score: a.EmbeddingVector is { Length: > 0 } blob
+                    ? EmbeddingMath.CosineSimilarity(queryVector, EmbeddingMath.FloatsFromLittleEndianBytes(blob))
+                    : double.NegativeInfinity))
+                .Where(x => x.Score >= MinCosineSimilarity)
+                .OrderByDescending(x => x.Score)
+                .Take(3)
+                .Select(x => x.Article)
+                .ToList();
+        }
+
+        if (top.Count == 0)
+        {
+            // No embedding available or nothing cleared the similarity threshold.
+            top = pool
+                .OrderByDescending(a => KeywordScore(a, keywords))
+                .Take(3)
+                .ToList();
+        }
+
+        if (top.Count == 0)
+            return "No encontré artículos relacionados en la base de conocimiento.";
+
+        var lines = top.Select(a =>
+        {
+            var body = !string.IsNullOrWhiteSpace(a.ResolutionSteps) ? a.ResolutionSteps : a.Content;
+            if (body.Length > 300)
+                body = body[..300] + "...";
+            return $"• {a.Title}\n{body}";
+        });
+
+        return "Esto encontré en la base de conocimiento:\n\n" + string.Join("\n\n", lines);
+    }
+
+    [KernelFunction("provide_incident_info")]
+    [Description("Appends user-provided follow-up details to an incident pending information and re-runs triage.")]
+    public async Task<string> ProvideIncidentInfoAsync(
+        Kernel kernel,
+        [Description("Conversation ID.")] string conversationId,
+        [Description("Additional details provided by the user.")] string info,
+        CancellationToken cancellationToken = default)
+    {
+        var tenantId = GetTenantId(kernel);
+        if (!Guid.TryParse(conversationId, out var convId))
+            return "Invalid conversation ID.";
+
+        var incident = await _db.Incidents
+            .FirstOrDefaultAsync(i => i.ConversationId == convId && i.Status != IncidentStatus.Closed, cancellationToken);
+
+        if (incident is null)
+            return "No hay un incidente activo para esta conversación.";
+
+        incident.Description += $"\n[User follow-up]: {info}";
+        incident.UpdatedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var analysis = await _analysisEngine.AnalyzeAsync(tenantId, incident.Description, incident.Id, cancellationToken);
+        IncidentTriageApplier.ApplyAnalysis(incident, analysis);
+
+        var ctx = await GetOrCreateStateAsync(tenantId, convId, cancellationToken);
+
+        if (analysis.MissingInfo.Count == 0 && !analysis.RequiresEscalation)
+        {
+            // Triage complete: hand off to the auto workflow (Open + bot).
+            incident.Status = IncidentStatus.Open;
+            incident.AssignedTo = "bot";
+            incident.UpdatedAt = DateTimeOffset.UtcNow;
+
+            ctx.State = ConversationState.InIncidentResolution;
+            ctx.FlowData["incidentId"] = incident.Id.ToString();
+            await _stateManager.SetStateAsync(tenantId, convId, ctx, cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+
+            return $"¡Gracias! Ya tengo toda la información necesaria. Tu incidente #{ShortId(incident.Id)} está siendo procesado y te aviso con las novedades.";
+        }
+
+        // Still missing info: keep the incident pending and ask the next question.
+        incident.UpdatedAt = DateTimeOffset.UtcNow;
+        ctx.State = ConversationState.InIncidentAnalysis;
+        ctx.FlowData["incidentId"] = incident.Id.ToString();
+        await _stateManager.SetStateAsync(tenantId, convId, ctx, cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return !string.IsNullOrWhiteSpace(incident.FinalUserResponse)
+            ? incident.FinalUserResponse
+            : "Gracias por el detalle. ¿Podrías contarme un poco más sobre el problema?";
+    }
+
+    [KernelFunction("get_incident_status")]
+    [Description("Lists the open or recent incidents of the conversation with status and latest progress.")]
+    public async Task<string> GetIncidentStatusAsync(
+        Kernel kernel,
+        [Description("Conversation ID.")] string conversationId,
+        CancellationToken cancellationToken = default)
+    {
+        var tenantId = GetTenantId(kernel);
+
+        var query = _db.Incidents.AsNoTracking().Where(i => i.TenantId == tenantId);
+        if (Guid.TryParse(conversationId, out var convId))
+            query = query.Where(i => i.ConversationId == convId);
+
+        var incidents = await query
+            .OrderByDescending(i => i.UpdatedAt)
+            .Take(5)
+            .ToListAsync(cancellationToken);
+
+        if (incidents.Count == 0)
+            return "No encontré tickets asociados a esta conversación. Si tenés un problema, contame qué está pasando y lo registro.";
+
+        var lines = incidents.Select(i =>
+        {
+            var progress = !string.IsNullOrWhiteSpace(i.ResolutionNotes)
+                ? TruncateForUser(i.ResolutionNotes, 120)
+                : !string.IsNullOrWhiteSpace(i.DeployStatus)
+                    ? $"Deploy: {TruncateForUser(i.DeployStatus, 80)}"
+                    : null;
+
+            return progress is null
+                ? $"• #{ShortId(i.Id)} — {MapStatusToSpanish(i.Status)} — {i.Title}"
+                : $"• #{ShortId(i.Id)} — {MapStatusToSpanish(i.Status)} — {i.Title} ({progress})";
+        });
+
+        return "Estado de tus tickets:\n" + string.Join("\n", lines);
+    }
+
+    [KernelFunction("reject_fix")]
+    [Description("Rejects the proposed fix and leaves the incident open for review.")]
+    public async Task<string> RejectFixAsync(
+        Kernel kernel,
+        [Description("Conversation ID.")] string conversationId,
+        [Description("Reason for rejection.")] string? reason = null,
+        CancellationToken cancellationToken = default)
+    {
+        var tenantId = GetTenantId(kernel);
+        if (!Guid.TryParse(conversationId, out var convId))
+            return "Invalid conversation ID.";
+
+        var incident = await _db.Incidents
+            .FirstOrDefaultAsync(i => i.ConversationId == convId && i.Status != IncidentStatus.Closed, cancellationToken);
+
+        var hasPendingScript = incident is not null && await _db.IncidentAttachments
+            .AnyAsync(a => a.IncidentId == incident.Id && a.Type == IncidentAttachmentType.SqlScript, cancellationToken);
+
+        if (incident is null || (string.IsNullOrWhiteSpace(incident.GitBranch) && !hasPendingScript))
+            return "No hay un fix pendiente de aprobación para este incidente.";
+
+        incident.Status = IncidentStatus.Open;
+        incident.AssignedTo = "engineer";
+        incident.RequiresHumanApproval = false;
+        incident.ResolutionNotes = string.IsNullOrWhiteSpace(incident.ResolutionNotes)
+            ? $"Fix rechazado por el usuario: {reason ?? "sin motivo"}"
+            : $"{incident.ResolutionNotes}\nFix rechazado por el usuario: {reason ?? "sin motivo"}";
+        incident.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var ctx = await GetOrCreateStateAsync(tenantId, convId, cancellationToken);
+        ctx.State = ConversationState.Idle;
+        await _stateManager.SetStateAsync(tenantId, convId, ctx, cancellationToken);
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return "Fix rechazado. El incidente quedó abierto para revisión.";
     }
 
     [KernelFunction("propose_code_fix")]
@@ -247,16 +520,51 @@ public sealed class SupportPlugin
             return "Invalid conversation ID.";
 
         var explicitApproval = approvalText.Contains("confirmo", StringComparison.OrdinalIgnoreCase)
+            || approvalText.Contains("apruebo", StringComparison.OrdinalIgnoreCase)
             || approvalText.Contains("approve", StringComparison.OrdinalIgnoreCase);
 
         if (!explicitApproval)
             return "Deployment requires explicit approval. Please reply 'confirmo' or 'approve' to proceed.";
 
         var incident = await _db.Incidents
+            .Include(i => i.Attachments)
             .FirstOrDefaultAsync(i => i.ConversationId == convId && i.Status != IncidentStatus.Closed, cancellationToken);
 
         if (incident is null)
             return "No active incident found.";
+
+        // Database fix pending approval: execute the stored script via the
+        // governed fixer (safety-validated, tenant-scoped connection).
+        var pendingScript = incident.Attachments
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstOrDefault(a => a.Type == IncidentAttachmentType.SqlScript);
+        if (pendingScript is not null && incident.Status == IncidentStatus.AwaitingApproval)
+        {
+            if (!SafetyValidator.IsSafeSql(pendingScript.Content))
+            {
+                var reason = SafetyValidator.GetRejectionReason(pendingScript.Content);
+                return $"El script pendiente no pasó la validación de seguridad: {reason}. Un ingeniero lo revisará.";
+            }
+
+            var fixResult = await _dataFixer.ExecuteSafeSqlAsync(
+                incident.TenantId, pendingScript.Content, incident.Id, cancellationToken);
+            if (!fixResult.Success)
+                return $"Falló la ejecución del fix de base de datos: {fixResult.Message}";
+
+            _db.IncidentAttachments.Remove(pendingScript);
+            incident.Status = IncidentStatus.Resolved;
+            incident.ResolvedAt = DateTimeOffset.UtcNow;
+            incident.RequiresHumanApproval = false;
+            incident.ResolutionNotes = $"Corrección de base de datos aprobada por el usuario y aplicada ({fixResult.RowsAffected} filas afectadas)";
+            incident.UpdatedAt = DateTimeOffset.UtcNow;
+
+            var resetCtx = await GetOrCreateStateAsync(tenantId, convId, cancellationToken);
+            resetCtx.State = ConversationState.InIncidentAnalysis;
+            await _stateManager.SetStateAsync(tenantId, convId, resetCtx, cancellationToken);
+
+            await _db.SaveChangesAsync(cancellationToken);
+            return $"Fix aplicado: {fixResult.RowsAffected} registro(s) actualizados. ¿Podés confirmar que el problema quedó resuelto?";
+        }
 
         if (string.IsNullOrWhiteSpace(incident.GitBranch) || string.IsNullOrWhiteSpace(incident.GitCommitHash))
             return "No code fix has been proposed for this incident.";
@@ -325,35 +633,37 @@ public sealed class SupportPlugin
         return IncidentCategory.Other;
     }
 
-    private static List<string> GetMissingInfo(string description, IncidentCategory category)
-    {
-        var missing = new List<string>();
-        var text = description.ToLowerInvariant();
-
-        if (category == IncidentCategory.Code)
-        {
-            if (!text.Contains("error") && !text.Contains("exception") && !text.Contains("stack trace"))
-                missing.Add("error message or stack trace");
-            if (!text.Contains("archivo") && !text.Contains("file") && !text.Contains("class") && !text.Contains("namespace"))
-                missing.Add("affected file or class name");
-        }
-        else if (category == IncidentCategory.Database)
-        {
-            if (!text.Contains("tabla") && !text.Contains("table"))
-                missing.Add("affected table name");
-            if (!text.Contains("consulta") && !text.Contains("query") && !text.Contains("sql"))
-                missing.Add("problematic query or symptom");
-        }
-
-        return missing;
-    }
-
     private async Task<ConversationStateContext> GetOrCreateStateAsync(
         Guid tenantId, Guid conversationId, CancellationToken ct)
     {
         return await _stateManager.GetStateAsync(tenantId, conversationId, ct)
             ?? new ConversationStateContext { TenantId = tenantId, ConversationId = conversationId };
     }
+
+    private static double KeywordScore(KbArticle article, IReadOnlyList<string> keywords)
+    {
+        var text = $"{article.Title}\n{article.Content}\n{article.Tags}".ToLowerInvariant();
+        return keywords.Count(k => text.Contains(k, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string ShortId(Guid id) => id.ToString()[..8];
+
+    private static string MapStatusToSpanish(IncidentStatus status) => status switch
+    {
+        IncidentStatus.Open => "Abierto (en cola de diagnóstico)",
+        IncidentStatus.InProgress => "En progreso",
+        IncidentStatus.PendingInfo => "Esperando más información tuya",
+        IncidentStatus.AwaitingApproval => "Esperando aprobación del fix",
+        IncidentStatus.Resolved => "Resuelto (esperando tu confirmación)",
+        IncidentStatus.Closed => "Cerrado",
+        _ => status.ToString()
+    };
+
+    private static string TruncateForLog(string? text, int max = 4000)
+        => string.IsNullOrEmpty(text) ? string.Empty : text.Length <= max ? text : text[..max] + "…";
+
+    private static string TruncateForUser(string? text, int max)
+        => string.IsNullOrEmpty(text) ? string.Empty : text.Length <= max ? text : text[..max] + "…";
 
     private static Guid GetTenantId(Kernel kernel)
     {

@@ -1,6 +1,8 @@
+using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using HiveOps.Application.Support;
 
 namespace HiveOps.Infrastructure;
 
@@ -29,7 +31,9 @@ public sealed class DatabaseBackupService
         string tableName,
         CancellationToken cancellationToken = default)
     {
-        var backupTableName = $"Backups_{tableName}_{DateTimeOffset.UtcNow:yyyyMMddHHmmss}";
+        ValidateTableIdentifier(tableName);
+
+        var backupTableName = BuildBackupTableName(tableName);
 
         _logger.LogInformation("Backing up table {TableName} to {BackupTableName}", tableName, backupTableName);
 
@@ -69,8 +73,158 @@ public sealed class DatabaseBackupService
         }
     }
 
+    // Simple identifier validation to avoid SQL injection through table names
+    // (table identifiers cannot be parameterized in T-SQL).
+    private static readonly Regex TableIdentifierPattern = new(
+        @"^(?:\[?\w+\]?\.)?\[?\w+\]?$",
+        RegexOptions.Compiled);
+
+    private static string BuildBackupTableName(string tableName)
+    {
+        var flatName = tableName.Replace("[", "").Replace("]", "").Replace('.', '_');
+        return $"Backups_{flatName}_{DateTimeOffset.UtcNow:yyyyMMddHHmmss}";
+    }
+
+    private static void ValidateTableIdentifier(string tableName)
+    {
+        if (string.IsNullOrWhiteSpace(tableName) || !TableIdentifierPattern.IsMatch(tableName))
+            throw new ArgumentException($"Invalid table identifier: '{tableName}'.", nameof(tableName));
+    }
+
     /// <summary>
-    /// Restores a table from backup.
+    /// Backs up ONLY the rows targeted by an UPDATE/DELETE fix, instead of the
+    /// whole table. The <paramref name="whereClause"/> must include the WHERE
+    /// keyword (see <see cref="SqlStatementParser.ExtractWhereClause"/>); when
+    /// null/empty it behaves like <see cref="BackupTableAsync"/>.
+    /// </summary>
+    public async Task<string> BackupAffectedRowsAsync(
+        string connectionString,
+        string tableName,
+        string? whereClause,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateTableIdentifier(tableName);
+
+        var backupTableName = BuildBackupTableName(tableName);
+
+        _logger.LogInformation(
+            "Backing up affected rows of {TableName} to {BackupTableName} (where: {WhereClause})",
+            tableName, backupTableName, whereClause ?? "<none>");
+
+        try
+        {
+            await using var connection = new SqlConnection(connectionString);
+            await connection.OpenAsync(cancellationToken);
+
+            // Validate table exists before attempting backup
+            using (var existsCmd = connection.CreateCommand())
+            {
+                existsCmd.CommandText = "SELECT CASE WHEN OBJECT_ID(@tn) IS NOT NULL THEN 1 ELSE 0 END";
+                existsCmd.Parameters.AddWithValue("@tn", tableName);
+                var existsObj = await existsCmd.ExecuteScalarAsync(cancellationToken);
+                var exists = existsObj is not null && Convert.ToInt32(existsObj) == 1;
+                if (!exists)
+                {
+                    _logger.LogError("Table {TableName} does not exist, skipping backup.", tableName);
+                    throw new InvalidOperationException($"Table '{tableName}' does not exist.");
+                }
+            }
+
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = string.IsNullOrWhiteSpace(whereClause)
+                ? $"SELECT * INTO {backupTableName} FROM {tableName}"
+                : $"SELECT * INTO {backupTableName} FROM {tableName} {whereClause}";
+
+            var backedUpRows = await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Selective backup completed: {BackupTableName} ({Rows} rows)", backupTableName, backedUpRows);
+            return backupTableName;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to backup affected rows of table {TableName}", tableName);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Restores the rows saved by <see cref="BackupAffectedRowsAsync"/>.
+    /// Pragmatic strategy for selective backups: rows currently matching the
+    /// WHERE clause are deleted and the backed-up rows are re-inserted, so only
+    /// the rowset touched by the fix is restored (the rest of the table is
+    /// never dropped). For full-table backups use <see cref="RestoreTableAsync"/>.
+    /// </summary>
+    public async Task RestoreAffectedRowsAsync(
+        string connectionString,
+        string originalTableName,
+        string backupTableName,
+        string? whereClause,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateTableIdentifier(originalTableName);
+        ValidateTableIdentifier(backupTableName);
+
+        _logger.LogInformation(
+            "Restoring affected rows of {OriginalTableName} from {BackupTableName} (where: {WhereClause})",
+            originalTableName, backupTableName, whereClause ?? "<none>");
+
+        try
+        {
+            await using var connection = new SqlConnection(connectionString);
+            await connection.OpenAsync(cancellationToken);
+            await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+            try
+            {
+                // Re-delete the rowset the fix touched (idempotent) ...
+                if (!string.IsNullOrWhiteSpace(whereClause))
+                {
+                    await using var deleteCmd = connection.CreateCommand();
+                    deleteCmd.Transaction = transaction;
+                    deleteCmd.CommandText = $"DELETE FROM {originalTableName} {whereClause}";
+                    await deleteCmd.ExecuteNonQueryAsync(cancellationToken);
+                }
+                else
+                {
+                    // Without a WHERE clause the backup covered the whole table.
+                    await using var truncateCmd = connection.CreateCommand();
+                    truncateCmd.Transaction = transaction;
+                    truncateCmd.CommandText = $"DELETE FROM {originalTableName}";
+                    await truncateCmd.ExecuteNonQueryAsync(cancellationToken);
+                }
+
+                // ... then re-insert the pre-fix rows captured by the selective backup.
+                await using var insertCmd = connection.CreateCommand();
+                insertCmd.Transaction = transaction;
+                insertCmd.CommandText = $"INSERT INTO {originalTableName} SELECT * FROM {backupTableName}";
+                var restored = await insertCmd.ExecuteNonQueryAsync(cancellationToken);
+
+                await transaction.CommitAsync(cancellationToken);
+
+                _logger.LogInformation(
+                    "Selective restore completed: {OriginalTableName} ({Rows} rows re-inserted)",
+                    originalTableName, restored);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(CancellationToken.None);
+                throw;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to restore affected rows of {OriginalTableName}", originalTableName);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Restores a table from a FULL-table backup created by
+    /// <see cref="BackupTableAsync"/>: drops the original table and renames the
+    /// backup into place. Do NOT use this for backups created by
+    /// <see cref="BackupAffectedRowsAsync"/> (those contain only a subset of
+    /// rows) — use <see cref="RestoreAffectedRowsAsync"/> instead.
     /// </summary>
     public async Task RestoreTableAsync(
         string connectionString,
@@ -139,41 +293,18 @@ public sealed class DatabaseBackupService
         // Simple heuristic: convert UPDATE/DELETE to COUNT
         var upper = sqlStatement.ToUpperInvariant();
 
-        if (upper.StartsWith("UPDATE"))
+        if (upper.StartsWith("UPDATE") || upper.StartsWith("DELETE"))
         {
-            var whereIndex = upper.IndexOf(" WHERE ");
-            if (whereIndex > 0)
+            var tableName = SqlStatementParser.ExtractTableName(sqlStatement);
+            var whereClause = SqlStatementParser.ExtractWhereClause(sqlStatement);
+            if (!string.IsNullOrEmpty(tableName) && !string.IsNullOrEmpty(whereClause))
             {
-                var tableName = ExtractTableName(sqlStatement);
-                var whereClause = sqlStatement.Substring(whereIndex);
-                return $"SELECT COUNT(*) FROM {tableName} {whereClause}";
-            }
-        }
-        else if (upper.StartsWith("DELETE"))
-        {
-            var whereIndex = upper.IndexOf(" WHERE ");
-            if (whereIndex > 0)
-            {
-                var tableName = ExtractTableName(sqlStatement);
-                var whereClause = sqlStatement.Substring(whereIndex);
                 return $"SELECT COUNT(*) FROM {tableName} {whereClause}";
             }
         }
 
         // Default: return 1 for unknown
         return "SELECT 1";
-    }
-
-    private string ExtractTableName(string sqlStatement)
-    {
-        var upper = sqlStatement.ToUpperInvariant();
-        var fromIndex = upper.IndexOf(" FROM ") + 6;
-        var spaceAfterTable = upper.IndexOf(' ', fromIndex);
-
-        if (spaceAfterTable > fromIndex)
-            return sqlStatement.Substring(fromIndex, spaceAfterTable - fromIndex);
-
-        return sqlStatement.Substring(fromIndex);
     }
 
     /// <summary>

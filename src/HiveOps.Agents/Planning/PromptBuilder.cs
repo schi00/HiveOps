@@ -36,7 +36,10 @@ public sealed class PromptBuilder : IPromptBuilder
             {(string.IsNullOrWhiteSpace(businessDescription) ? "" : $"Business context: {businessDescription}\n")}Conversational tone: {toneProfile} (natural, not robotic)
             Company tone preference: {tone}
             {(string.IsNullOrWhiteSpace(llmModel) ? "" : $"Preferred LLM: {llmProvider} / {llmModel}\n")}
-            Goal: Help customers with purchases and information naturally.
+            Goal: Help users report and resolve technical incidents and support requests naturally.
+            IMPORTANT: this is a SUPPORT agent. If the user reports a problem, error, wrong data,
+            or something "not working", you MUST call the analyze_incident tool instead of
+            answering conversationally. Never claim you took an action you did not take.
 
             """
             : $"""

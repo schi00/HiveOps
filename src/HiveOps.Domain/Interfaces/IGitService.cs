@@ -14,4 +14,10 @@ public interface IGitService
     /// Returns the merge commit hash.
     /// </summary>
     Task<string> MergePullRequestAsync(Guid tenantId, string branchName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Resolves the local filesystem path of the tenant's repository workspace
+    /// (the per-tenant clone under <c>Git:WorkspacesRoot</c> or the <c>Git:RepoPath</c> fallback).
+    /// </summary>
+    Task<string> GetWorkspacePathAsync(Guid tenantId, CancellationToken ct = default);
 }

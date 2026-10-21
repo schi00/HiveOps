@@ -112,6 +112,9 @@ public sealed class TenantGitService : IGitService
             return $"MERGED:{branchName}:{DateTimeOffset.UtcNow:O}";
         }, ct);
 
+    public Task<string> GetWorkspacePathAsync(Guid tenantId, CancellationToken ct = default) =>
+        ResolveRepositoryPathAsync(tenantId, ct);
+
     private async Task<string> GetDefaultBranchNameAsync(Guid tenantId, CancellationToken ct)
     {
         if (_deploymentOptions.Value.Mode != HiveOpsDeploymentMode.SelfHosted || tenantId == Guid.Empty)

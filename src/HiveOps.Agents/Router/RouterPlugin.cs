@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 using HiveOps.Domain.Enums;
 using HiveOps.Infrastructure.AI;
 
@@ -34,6 +35,8 @@ Clasifica el siguiente mensaje del usuario en EXACTAMENTE UNA de estas categorí
 - DeployRequest: El usuario solicita deployar una corrección.
 - HumanHandoff: El usuario pide hablar con una persona, asesor o ingeniero.
 - Unknown: La intención es ambigua o no relacionada con las categorías anteriores.
+  IMPORTANTE: las preguntas funcionales o de ""cómo usar"" el sistema (how-to)
+  también se clasifican como Unknown; el planner las responde con la herramienta search_kb.
 
 Ejemplos:
 - ""Hola"" -> Greeting
@@ -42,6 +45,8 @@ Ejemplos:
 - ""Apruebo el fix"" -> IncidentApprove
 - ""Deployea la correccion"" -> DeployRequest
 - ""Pasame con un humano"" -> HumanHandoff
+- ""¿Cómo reasigno un turno a otro operador?"" -> Unknown
+- ""¿Cómo configuro las notificaciones?"" -> Unknown
 
 Responde SOLO con el nombre de la categoría, sin explicación.
 
@@ -52,7 +57,18 @@ Categoría:", userMessage);
         string raw;
         try
         {
-            var result = await kernel.InvokePromptAsync(prompt, cancellationToken: cancellationToken);
+            var args = new KernelArguments
+            {
+                ExecutionSettings = new Dictionary<string, PromptExecutionSettings>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [PromptExecutionSettings.DefaultServiceId] = new OpenAIPromptExecutionSettings
+                    {
+                        Temperature = 0.1f,
+                        MaxTokens = 256
+                    }
+                }
+            };
+            var result = await kernel.InvokePromptAsync(prompt, args, cancellationToken: cancellationToken);
             raw = result.GetValue<string>()?.Trim() ?? "Unknown";
         }
         catch
@@ -80,8 +96,11 @@ Categoría:", userMessage);
         if (IsGreeting(text))
             return IntentType.Greeting;
 
-        // Pase a humano explícito
-        if (ContainsAny(text, "hablar con", "persona", "humano", "asesor", "vendedor", "agente", "operador"))
+        // Pase a humano explícito — contextual forms so functional mentions of
+        // system roles ("reasignar a otro operador") don't trigger a handoff.
+        if (ContainsAny(text, "hablar con", "persona", "humano", "asesor", "vendedor",
+            "un operador", "al operador", "con el operador", "operador humano",
+            "un agente", "con un agente", "agente humano", "persona real", "soporte humano"))
             return IntentType.HumanHandoff;
 
         // Despedidas
@@ -111,7 +130,10 @@ Categoría:", userMessage);
 
         // Incidentes de soporte generales
         if (ContainsAny(text, "bug", "error", "incidente", "falla", "fallo", "problema", "crash", "excepcion", "stack trace",
-            "base de datos", "bd", "database", "sql", "tabla", "columna", "corregir", "fix", "patch"))
+            "base de datos", "bd", "database", "sql", "tabla", "columna", "corregir", "fix", "patch",
+            "no funciona", "no anda", "fallando", "aparece mal", "apareciendo mal", "sigue mal",
+            "esta mal", "está mal", "incorrecto", "incorrecta", "roto", "rota", "se rompio", "se rompió",
+            "mal cargado", "mal cargada", "valor incorrecto"))
             return IntentType.IncidentReport;
 
         return null;

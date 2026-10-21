@@ -21,5 +21,8 @@ public sealed class KbArticle : ITenantScoped
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>Optional embedding vector (binary float32 little-endian) for semantic KB retrieval.</summary>
+    public byte[]? EmbeddingVector { get; set; }
+
     public Tenant Tenant { get; set; } = null!;
 }

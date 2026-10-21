@@ -36,4 +36,20 @@ public static class TenantLlmExecutionHelper
         var cfg = await tenantConfigService.GetConfigurationAsync(tenantId, cancellationToken);
         return CreatePromptExecutionSettings(cfg.Llm);
     }
+
+    /// <summary>Low-temperature settings for structured triage / classification JSON.</summary>
+    public static async Task<OpenAIPromptExecutionSettings> GetTriageChatExecutionSettingsAsync(
+        Guid tenantId,
+        ITenantConfigService tenantConfigService,
+        IOptions<HiveOpsDeploymentOptions> deploymentOptions,
+        CancellationToken cancellationToken = default)
+    {
+        var s = await GetChatExecutionSettingsAsync(tenantId, tenantConfigService, deploymentOptions, cancellationToken);
+        var cap = 0.12f;
+        if (s.Temperature > cap)
+            s.Temperature = cap;
+        if (s.MaxTokens > 1600)
+            s.MaxTokens = 1600;
+        return s;
+    }
 }

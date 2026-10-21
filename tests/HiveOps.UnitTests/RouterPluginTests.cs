@@ -24,6 +24,10 @@ public sealed class RouterPluginTests
     [InlineData("deploy now", IntentType.DeployRequest)]
     [InlineData("gracias", IntentType.ThankYou)]
     [InlineData("adios", IntentType.Farewell)]
+    // Functional/how-to questions fall through to the LLM router; without a chat
+    // service they safely degrade to Unknown so the planner can use search_kb.
+    [InlineData("¿Cómo reasigno un turno a otro operador?", IntentType.Unknown)]
+    [InlineData("¿Cómo configuro las notificaciones?", IntentType.Unknown)]
     public async Task ClassifyIntentAsync_Should_Classify_CommonIntents_WithHeuristics(string userMessage, IntentType expected)
     {
         var result = await _sut.ClassifyIntentAsync(_kernel, userMessage);

@@ -13,6 +13,8 @@ public sealed class ConversationMessage : ITenantScoped
     public string Content { get; set; } = string.Empty;
     public string? AgentName { get; set; }
     public string? ExternalMessageId { get; set; }
+    public string? MediaId { get; set; }
+    public string? MediaMimeType { get; set; }
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
 
     // Navigation

@@ -13,4 +13,13 @@ public sealed record IncidentAnalysisResult
     public double Confidence { get; init; }
     public bool RequiresEscalation { get; init; }
     public string? Reasoning { get; init; }
+
+    /// <summary>Short, non-technical guidance for the end user.</summary>
+    public string? UserFacingSummary { get; init; }
+
+    /// <summary>Technical note for IT (repro steps, hypothesis, evidence).</summary>
+    public string? TechnicalNote { get; init; }
+
+    /// <summary>JSON object with extracted entities (optional).</summary>
+    public string? ExtractedEntitiesJson { get; init; }
 }

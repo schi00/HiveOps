@@ -106,6 +106,38 @@ The compose file sets `HiveOps__Deployment__Mode=SelfHosted` and `Billing=None` 
 
 ---
 
+## Omnichannel support and auto-workflow (soporte omnicanal)
+
+Configuration for the HiveCrew support-agent scenario (see [`docs/plans/hivecrew-support-agent-plan.md`](plans/hivecrew-support-agent-plan.md)): WhatsApp and Ticketera as inbound/outbound channels, incident auto-workflow, media transcription, and deploy pipelines.
+
+| Setting | Description |
+|---------|-------------|
+| `Ticketing:BaseUrl` | Ticketera API base URL. Outbound adapter posts `POST {BaseUrl}/api/tickets/{ticketId}/comments`. When empty, ticketing sends are a logged no-op. |
+| `Ticketing:ApiKey` | Bearer token sent on outbound ticket comments. Provide via env var / secret store, never committed. |
+| `Ticketing:InboundSecret` | Shared secret for HMAC-SHA256 validation of inbound `POST /webhooks/tickets` (`X-HiveOps-Signature: sha256=<hex>`). Required in non-dev environments. |
+| `Ticketing:SkipWebhookSignatureValidation` | **Development only**: skips inbound ticket signature validation when the environment is Development. Never enable in production. |
+| `WhatsApp:AllowUnresolvedTenantFallback` | Default `false`. When `false`, an inbound WhatsApp message that cannot be matched to a tenant (by destination number / `phone_number_id`) is acknowledged with `200 { received: true, processed: false }` and **not** processed, preserving tenant isolation. Set `true` only for dev / single-tenant deployments where falling back to the first active tenant is acceptable. |
+| `Media:EnableAudioTranscription` | Default `false`. When `true`, inbound WhatsApp audio is transcribed before processing. |
+| `Media:TranscriptionEndpoint` | Transcription API endpoint (OpenAI-compatible `audio/transcriptions`). Required when transcription is enabled. |
+| `Media:TranscriptionModel` | Transcription model id (default `whisper-1`). |
+| `Media:TranscriptionApiKey` | API key for the transcription endpoint. Secret / env only. |
+| `WhatsApp:GraphApiBaseUrl` | Meta Graph API base (default `https://graph.facebook.com/v22.0`), used for media download and outbound sends. |
+| `DeployGit:Provider` | `github` \| `azdo` \| `none` (default `none` = stub, no pipeline dispatch). |
+| `DeployGit:ApiToken` | PAT / workflow token for the provider. Secret ref / env var only — never commit. For `github` also set `DeployGit:Owner`, `DeployGit:Repo`, `DeployGit:WorkflowId`; for `azdo` set `DeployGit:Organization`, `DeployGit:Project`, `DeployGit:DefinitionId`. |
+| `IncidentAutoWorkflow:Enabled` | Enables the incident auto-workflow hosted service (`HiveOps.Workers`, hosted by the API process). |
+| `IncidentAutoWorkflow:PollingIntervalSeconds` | Worker polling interval (default `30`). |
+| `IncidentAutoWorkflow:MaxConcurrentIncidents` | Max incidents processed in parallel (default `5`). |
+| `IncidentAutoWorkflow:CodeLineThreshold` / `IncidentAutoWorkflow:DbRecordThreshold` | Human-approval thresholds for code fixes and data fixes (default `3` each). |
+
+**Tenant resolution per webhook route:**
+
+- `POST /webhooks/whatsapp` — the path is exempt from `TenantResolutionMiddleware`; the tenant is resolved inside the controller from the WhatsApp **destination number** (`display_phone_number`) or `phone_number_id`. With `WhatsApp:AllowUnresolvedTenantFallback=false` an unresolved message is acknowledged but not processed.
+- `POST /webhooks/{channelType}` (generic channel) and `POST /webhooks/tickets` (Ticketera) — tenant is resolved by `TenantResolutionMiddleware` via the `X-Api-Key` header; unresolved requests get `401` before reaching the controller.
+
+**Ticket comment signals:** on an incident in `Resolved` status, an inbound `comment` event acts as the user confirmation (no buttons on ticketing): phrases like *confirmar / ya funciona / se solucionó* close the incident (`{ resolved: "closed" }`), phrases like *reabrir / sigue fallando / persiste* reopen it to `Open` (`{ resolved: "reopened" }`). Other comments append to the incident and re-open `PendingInfo` incidents.
+
+---
+
 ## Ephemeral CI (GitHub Actions)
 
 Workflow: [`.github/workflows/preview.yml`](../.github/workflows/preview.yml).

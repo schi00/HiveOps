@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace HiveOps.Application;
@@ -8,15 +9,7 @@ namespace HiveOps.Application;
 /// </summary>
 public static class SafetyValidator
 {
-    // Patterns that match anywhere in the SQL (not just at start) to catch multi-statement attacks
-    private static readonly Regex DeletePattern = new(
-        @"DELETE\s+FROM\s+\w+",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    private static readonly Regex UpdatePattern = new(
-        @"UPDATE\s+\w+\s+SET",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
+    // Dangerous DDL patterns checked against the comment-free script (any position)
     private static readonly Regex DangerousDropPattern = new(
         @"DROP\s+(TABLE|DATABASE|INDEX|SCHEMA|VIEW|PROCEDURE|FUNCTION|TRIGGER)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -29,24 +22,14 @@ public static class SafetyValidator
         @"TRUNCATE\s+(TABLE|DATABASE)?",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    // Multi-statement attack prevention
-    private static readonly Regex SemicolonPattern = new(
-        @";\s*\w+",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    // Comment patterns that could hide malicious code
-    private static readonly Regex CommentPattern = new(
-        @"(--|/\*|\*/)",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
     // UNION-based injection
     private static readonly Regex UnionPattern = new(
         @"UNION\s+(ALL\s+)?SELECT",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    // EXEC/EXECUTE statements
+    // EXEC/EXECUTE statements (EXEC proc, EXEC @var, EXEC(...), EXECUTE ...)
     private static readonly Regex ExecPattern = new(
-        @"EXEC(UTE)?\s*\(",
+        @"\bEXEC(UTE)?(\s*\(|\s+[@\w#])",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Stored procedure calls with dangerous procedures
@@ -54,116 +37,89 @@ public static class SafetyValidator
         @"(sp_configure|xp_cmdshell|sp_OACreate|sp_OAMethod|OPENROWSET|OPENQUERY|BULK\s+INSERT)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // Statement types allowed at the start of each individual statement
+    private static readonly Regex AllowedStatementStartPattern = new(
+        @"^(SELECT|INSERT|UPDATE|DELETE)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // WHERE keyword (evaluated on the top-level statement text, literals and subqueries removed)
+    private static readonly Regex WhereKeywordPattern = new(
+        @"\bWHERE\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Always-true expressions that make a WHERE clause useless:
+    //   1=1 (or any N=N), 'x'='x' (same literal on both sides), WHERE TRUE, OR TRUE
+    private static readonly Regex AlwaysTrueConditionPattern = new(
+        @"\b(\d+)\s*=\s*\1\b|'(?<lit>[^']*)'\s*=\s*'\k<lit>'|\bWHERE\s+TRUE\b|\bOR\s+TRUE\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Innermost parenthesized groups, removed iteratively to expose top-level keywords
+    private static readonly Regex NestedParenthesesPattern = new(
+        @"\([^()]*\)",
+        RegexOptions.Compiled);
+
     /// <summary>
-    /// Validates that a SQL command is safe to execute.
-    /// Rejects: DELETE without WHERE, UPDATE without WHERE, DROP, TRUNCATE, ALTER DROP,
-    /// multi-statement attacks, comments, UNION injection, and dangerous stored procedures.
+    /// Validates that a SQL command or script is safe to execute.
+    /// Comments (<c>--</c> and <c>/* */</c>) are allowed; they are stripped before validation.
+    /// Multi-statement scripts are allowed only when every individual statement is safe.
+    /// Rejects: DELETE/UPDATE without a specific WHERE, DROP, TRUNCATE, ALTER DROP,
+    /// UNION injection, EXEC/EXECUTE, and dangerous stored procedures.
     /// Only allows SELECT and INSERT statements, or UPDATE/DELETE with proper WHERE clauses.
     /// </summary>
     public static bool IsSafeSql(string sql)
     {
-        if (string.IsNullOrWhiteSpace(sql))
-            return false;
-
-        // Check for SQL comments which could be used to bypass validation
-        if (CommentPattern.IsMatch(sql))
-            return false;
-
-        // Check for multi-statement attacks (semicolon followed by another statement)
-        if (SemicolonPattern.IsMatch(sql))
-            return false;
-
-        // Check for UNION injection
-        if (UnionPattern.IsMatch(sql))
-            return false;
-
-        // Check for EXEC/EXECUTE statements
-        if (ExecPattern.IsMatch(sql))
-            return false;
-
-        // Check for dangerous stored procedures
-        if (DangerousProcedurePattern.IsMatch(sql))
-            return false;
-
-        // Normalize for further checks (remove leading/trailing whitespace only, not internal)
-        var normalized = sql.Trim();
-
-        // Check statement type - only allow specific safe statements
-        var upperSql = normalized.ToUpperInvariant();
-
-        // Reject dangerous DDL
-        if (DangerousDropPattern.IsMatch(normalized))
-            return false;
-
-        if (TruncatePattern.IsMatch(normalized))
-            return false;
-
-        if (DangerousAlterPattern.IsMatch(normalized))
-            return false;
-
-        // Allow INSERT statements (they're additive, not destructive)
-        // Pattern: INSERT INTO table ...
-        var isInsert = upperSql.StartsWith("INSERT INTO ") || upperSql.StartsWith("INSERT ");
-
-        // Allow SELECT statements
-        var isSelect = upperSql.StartsWith("SELECT ");
-
-        // For DELETE - must have WHERE with a specific condition (not just WHERE 1=1 or WHERE TRUE)
-        var hasDelete = DeletePattern.IsMatch(normalized);
-        if (hasDelete)
-        {
-            // Must contain WHERE
-            if (!upperSql.Contains(" WHERE "))
-                return false;
-
-            // Must have a specific condition (Id = value or similar)
-            if (!HasSpecificWhereCondition(normalized))
-                return false;
-        }
-
-        // For UPDATE - must have WHERE with a specific condition
-        var hasUpdate = UpdatePattern.IsMatch(normalized);
-        if (hasUpdate)
-        {
-            // Must contain WHERE
-            if (!upperSql.Contains(" WHERE "))
-                return false;
-
-            // Must have a specific condition (Id = value or similar)
-            if (!HasSpecificWhereCondition(normalized))
-                return false;
-        }
-
-        // Reject if it's not one of the allowed statement types
-        if (!isInsert && !isSelect && !hasDelete && !hasUpdate)
-            return false;
-
-        return true;
+        return GetRejectionReason(sql) is null;
     }
 
     /// <summary>
-    /// Checks if the WHERE clause has a specific condition (not just WHERE 1=1 or WHERE TRUE)
+    /// Checks if the WHERE clause has a specific condition (not just WHERE 1=1 or WHERE TRUE).
+    /// The statement is analyzed without string literals, so comparisons inside subqueries
+    /// (e.g. WHERE EXISTS (SELECT ... WHERE a = b)) count, but quoted text cannot fake one.
     /// </summary>
-    private static bool HasSpecificWhereCondition(string sql)
+    private static bool HasSpecificWhereCondition(string statement)
     {
-        var upperSql = sql.ToUpperInvariant();
-
-        // Look for patterns like: ColumnName = value, Id = 'guid', etc.
-        // Must have an equality or comparison operator with a literal value
-        var hasEquality = upperSql.Contains(" = ") || upperSql.Contains("=") ||
-                          upperSql.Contains(" IN (") || upperSql.Contains(" IN(") ||
-                          upperSql.Contains(" LIKE ") || upperSql.Contains(" BETWEEN ");
-
-        // Reject WHERE clauses that are always true
-        var hasAlwaysTruePattern = upperSql.Contains("1=1") ||
-                                    upperSql.Contains("1 = 1") ||
-                                    upperSql.Contains("TRUE") ||
-                                    upperSql.Contains("1=2") == false; // weird patterns
-
-        if (hasAlwaysTruePattern)
+        // Always-true expressions make the WHERE filter useless even if a WHERE exists.
+        if (AlwaysTrueConditionPattern.IsMatch(statement))
             return false;
 
-        return hasEquality;
+        // Must have an equality or comparison operator involving real columns.
+        var withoutLiterals = StripStringLiterals(statement).ToUpperInvariant() + " ";
+
+        return withoutLiterals.Contains('=') ||
+               withoutLiterals.Contains('<') ||
+               withoutLiterals.Contains('>') ||
+               withoutLiterals.Contains(" IN ") ||
+               withoutLiterals.Contains(" LIKE ") ||
+               withoutLiterals.Contains(" BETWEEN ") ||
+               withoutLiterals.Contains(" IS ");
+    }
+
+    /// <summary>
+    /// Validates a single statement. Returns null when the statement is safe,
+    /// otherwise a human-readable rejection reason.
+    /// </summary>
+    private static string? ValidateStatement(string statement)
+    {
+        var trimmed = statement.Trim();
+        var match = AllowedStatementStartPattern.Match(trimmed);
+        if (!match.Success)
+            return "Only SELECT, INSERT, UPDATE with WHERE, and DELETE with WHERE statements are allowed.";
+
+        var keyword = match.Groups[1].Value.ToUpperInvariant();
+        if (keyword is "UPDATE" or "DELETE")
+        {
+            // The WHERE must exist at the top level of the statement — a WHERE inside
+            // a string literal or a subquery does not limit the rows being modified.
+            var outerLevel = StripNestedParentheses(StripStringLiterals(trimmed));
+            if (!WhereKeywordPattern.IsMatch(outerLevel))
+                return $"{keyword} without WHERE is not allowed.";
+
+            // Must have a specific condition (Id = value or similar), not a tautology.
+            if (!HasSpecificWhereCondition(trimmed))
+                return $"{keyword} requires a specific WHERE condition with an equality or comparison operator (always-true expressions such as 1=1 are not allowed).";
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -175,7 +131,7 @@ public static class SafetyValidator
         if (string.IsNullOrWhiteSpace(sql))
             return false;
 
-        var normalized = sql.Trim().ToLowerInvariant();
+        var normalized = StripSqlComments(sql).Trim().ToLowerInvariant();
 
         if (!normalized.Contains("where"))
             return false;
@@ -186,65 +142,242 @@ public static class SafetyValidator
     }
 
     /// <summary>
-    /// Returns a human-readable reason why the SQL was rejected.
+    /// Returns a human-readable reason why the SQL was rejected, or null when it is safe.
     /// </summary>
     public static string? GetRejectionReason(string sql)
     {
         if (string.IsNullOrWhiteSpace(sql))
             return "SQL command is empty.";
 
-        // Check for comments first
-        if (CommentPattern.IsMatch(sql))
-            return "SQL comments are not allowed.";
+        // Strip comments first: comments are allowed in scripts but must not hide code.
+        var cleaned = StripSqlComments(sql);
+        if (string.IsNullOrWhiteSpace(cleaned))
+            return "SQL script contains no executable statements.";
 
-        // Check for multi-statement attacks
-        if (SemicolonPattern.IsMatch(sql))
-            return "Multiple SQL statements are not allowed.";
-
-        // Check for UNION injection
-        if (UnionPattern.IsMatch(sql))
+        // Checks that apply to the whole script regardless of statement boundaries.
+        if (UnionPattern.IsMatch(cleaned))
             return "UNION statements are not allowed.";
 
-        // Check for EXEC statements
-        if (ExecPattern.IsMatch(sql))
+        if (ExecPattern.IsMatch(cleaned))
             return "EXEC/EXECUTE statements are not allowed.";
 
-        // Check for dangerous stored procedures
-        if (DangerousProcedurePattern.IsMatch(sql))
+        if (DangerousProcedurePattern.IsMatch(cleaned))
             return "Dangerous stored procedures are not allowed.";
 
-        var normalized = sql.Trim();
-        var upperSql = normalized.ToUpperInvariant();
-
-        if (DangerousDropPattern.IsMatch(normalized))
+        if (DangerousDropPattern.IsMatch(cleaned))
             return "DROP statements are not allowed.";
 
-        if (TruncatePattern.IsMatch(normalized))
+        if (TruncatePattern.IsMatch(cleaned))
             return "TRUNCATE statements are not allowed.";
 
-        if (DangerousAlterPattern.IsMatch(normalized))
+        if (DangerousAlterPattern.IsMatch(cleaned))
             return "ALTER DROP statements are not allowed.";
 
-        // Check for DELETE/UPDATE without WHERE or with weak WHERE
-        var hasDelete = DeletePattern.IsMatch(normalized);
-        var hasUpdate = UpdatePattern.IsMatch(normalized);
-
-        if (hasDelete || hasUpdate)
+        // Multi-statement scripts are allowed only if every statement is individually safe.
+        var statements = SplitSqlStatements(cleaned);
+        for (var i = 0; i < statements.Count; i++)
         {
-            if (!upperSql.Contains(" WHERE "))
-                return "DELETE/UPDATE without WHERE is not allowed.";
-
-            if (!HasSpecificWhereCondition(normalized))
-                return "DELETE/UPDATE requires a specific WHERE condition with an equality or comparison operator.";
+            var reason = ValidateStatement(statements[i]);
+            if (reason is not null)
+                return statements.Count > 1 ? $"Statement {i + 1}: {reason}" : reason;
         }
 
-        // Check if it's an allowed statement type
-        var isInsert = upperSql.StartsWith("INSERT INTO ") || upperSql.StartsWith("INSERT ");
-        var isSelect = upperSql.StartsWith("SELECT ");
-
-        if (!isInsert && !isSelect && !hasDelete && !hasUpdate)
-            return "Only SELECT, INSERT, UPDATE with WHERE, and DELETE with WHERE statements are allowed.";
-
         return null;
+    }
+
+    /// <summary>
+    /// Removes T-SQL comments (<c>--</c> to end of line and <c>/* */</c> blocks) and replaces
+    /// each with a single space so comments cannot be used to concatenate keywords.
+    /// Content inside string literals is preserved.
+    /// </summary>
+    private static string StripSqlComments(string sql)
+    {
+        var sb = new StringBuilder(sql.Length);
+        var i = 0;
+        var inString = false;
+
+        while (i < sql.Length)
+        {
+            var c = sql[i];
+
+            if (inString)
+            {
+                sb.Append(c);
+                if (c == '\'')
+                {
+                    // '' is an escaped quote inside a literal, not the end of it
+                    if (i + 1 < sql.Length && sql[i + 1] == '\'')
+                    {
+                        sb.Append('\'');
+                        i += 2;
+                        continue;
+                    }
+                    inString = false;
+                }
+                i++;
+                continue;
+            }
+
+            if (c == '\'')
+            {
+                inString = true;
+                sb.Append(c);
+                i++;
+                continue;
+            }
+
+            if (c == '-' && i + 1 < sql.Length && sql[i + 1] == '-')
+            {
+                while (i < sql.Length && sql[i] != '\n')
+                    i++;
+                sb.Append(' ');
+                continue;
+            }
+
+            if (c == '/' && i + 1 < sql.Length && sql[i + 1] == '*')
+            {
+                i += 2;
+                while (i < sql.Length && !(sql[i] == '*' && i + 1 < sql.Length && sql[i + 1] == '/'))
+                    i++;
+                i = Math.Min(i + 2, sql.Length);
+                sb.Append(' ');
+                continue;
+            }
+
+            sb.Append(c);
+            i++;
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Splits a script into individual statements on <c>;</c> delimiters that appear
+    /// outside string literals and quoted identifiers. Whitespace-only
+    /// statements are skipped.
+    /// </summary>
+    private static List<string> SplitSqlStatements(string sql)
+    {
+        var statements = new List<string>();
+        var current = new StringBuilder(sql.Length);
+        var i = 0;
+
+        while (i < sql.Length)
+        {
+            var c = sql[i];
+
+            // 'literal', "quoted identifier" and [bracketed identifier] contents
+            // are copied verbatim so a ';' inside them does not split the script.
+            char close;
+            if (c == '\'') close = '\'';
+            else if (c == '"') close = '"';
+            else if (c == '[') close = ']';
+            else if (c == ';')
+            {
+                AddStatement(statements, current);
+                i++;
+                continue;
+            }
+            else
+            {
+                current.Append(c);
+                i++;
+                continue;
+            }
+
+            current.Append(c);
+            i++;
+            while (i < sql.Length)
+            {
+                current.Append(sql[i]);
+                if (sql[i] == close)
+                {
+                    // doubled closing char ('', "" or ]]) is an escape, not the end
+                    if (i + 1 < sql.Length && sql[i + 1] == close)
+                    {
+                        current.Append(sql[i + 1]);
+                        i += 2;
+                        continue;
+                    }
+                    i++;
+                    break;
+                }
+                i++;
+            }
+        }
+
+        AddStatement(statements, current);
+        return statements;
+
+        static void AddStatement(List<string> statements, StringBuilder current)
+        {
+            var text = current.ToString();
+            if (!string.IsNullOrWhiteSpace(text))
+                statements.Add(text);
+            current.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Replaces string literals (<c>'...'</c>), quoted identifiers (<c>"..."</c>) and
+    /// bracketed identifiers (<c>[...]</c>) with a single space, honoring
+    /// <c>''</c>, <c>""</c> and <c>]]</c> escapes.
+    /// </summary>
+    private static string StripStringLiterals(string sql)
+    {
+        var sb = new StringBuilder(sql.Length);
+        var i = 0;
+
+        while (i < sql.Length)
+        {
+            var c = sql[i];
+
+            char close;
+            if (c == '\'') close = '\'';
+            else if (c == '"') close = '"';
+            else if (c == '[') close = ']';
+            else
+            {
+                sb.Append(c);
+                i++;
+                continue;
+            }
+
+            i++;
+            while (i < sql.Length)
+            {
+                if (sql[i] == close)
+                {
+                    if (i + 1 < sql.Length && sql[i + 1] == close)
+                    {
+                        i += 2;
+                        continue;
+                    }
+                    i++;
+                    break;
+                }
+                i++;
+            }
+            sb.Append(' ');
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Removes innermost parenthesized groups iteratively so only top-level
+    /// keywords and operators remain visible.
+    /// </summary>
+    private static string StripNestedParentheses(string sql)
+    {
+        string previous;
+        do
+        {
+            previous = sql;
+            sql = NestedParenthesesPattern.Replace(sql, " ");
+        }
+        while (sql != previous);
+
+        return sql;
     }
 }

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,9 @@ using HiveOps.Infrastructure.AI;
 using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
 
+// Exposes internal members (e.g. planner tool dispatch, handoff heuristics) to unit tests.
+[assembly: InternalsVisibleTo("HiveOps.UnitTests")]
+
 namespace HiveOps.Agents.Orchestration;
 
 /// <summary>
@@ -30,7 +34,7 @@ namespace HiveOps.Agents.Orchestration;
 /// 6. Handle context switching (query during an active flow)
 /// 7. Dispatch to the appropriate plugin
 /// 8. Check supervision thresholds
-/// 9. Persist response and send via IMessagingChannel
+/// 9. Persist response and send via IChannelDispatcher
 /// </summary>
 public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageCommand, string>
 {
@@ -38,7 +42,7 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
     private readonly KernelFactory _kernelFactory;
     private readonly IConversationStateManager _stateManager;
     private readonly AgentRulesEngine _rulesEngine;
-    private readonly IMessagingChannel _channel;
+    private readonly IChannelDispatcher _channelDispatcher;
     private readonly TenantContext _tenantContext;
     private readonly RouterPlugin _routerPlugin;
     private readonly SupervisionPlugin _supervisionPlugin;
@@ -54,7 +58,7 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
         KernelFactory kernelFactory,
         IConversationStateManager stateManager,
         AgentRulesEngine rulesEngine,
-        IMessagingChannel channel,
+        IChannelDispatcher channelDispatcher,
         TenantContext tenantContext,
         RouterPlugin routerPlugin,
         SupervisionPlugin supervisionPlugin,
@@ -69,7 +73,7 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
         _kernelFactory = kernelFactory;
         _stateManager = stateManager;
         _rulesEngine = rulesEngine;
-        _channel = channel;
+        _channelDispatcher = channelDispatcher;
         _tenantContext = tenantContext;
         _routerPlugin = routerPlugin;
         _supervisionPlugin = supervisionPlugin;
@@ -102,7 +106,8 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
                 _logger.LogInformation(
                     "Webhook deduplication: mensaje {ExternalMessageId} ya procesado. Reenviando respuesta cacheada.",
                     msg.ExternalMessageId);
-                await _channel.SendMessageAsync(msg.ChannelUserId, existing.Content, cancellationToken);
+                await _channelDispatcher.SendTextAsync(
+                    tenantId, msg.Channel, msg.ChannelUserId, existing.Content, cancellationToken);
                 return existing.Content;
             }
         }
@@ -127,6 +132,14 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
             conversation.LastActivityAt = DateTimeOffset.UtcNow;
         }
 
+        // Outbound routing: respond on the conversation's channel, not always WhatsApp.
+        var outboundChannel = string.IsNullOrWhiteSpace(conversation.Channel)
+            ? msg.Channel
+            : conversation.Channel;
+        var outboundUserId = string.IsNullOrWhiteSpace(msg.ChannelUserId)
+            ? conversation.ChannelUserId
+            : msg.ChannelUserId;
+
         // ── 2. Persist incoming message ──────────────────────────────────────
         _db.ConversationMessages.Add(new ConversationMessage
         {
@@ -134,7 +147,9 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
             TenantId = tenantId,
             Role = MessageRole.User,
             Content = msg.Text,
-            ExternalMessageId = msg.ExternalMessageId
+            ExternalMessageId = msg.ExternalMessageId,
+            MediaId = msg.MediaId,
+            MediaMimeType = msg.MediaMimeType
         });
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -168,7 +183,8 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
                     await _stateManager.SetStateAsync(tenantId, conversation.Id, existingState, cancellationToken);
                 }
 
-                await _channel.SendMessageAsync(msg.ChannelUserId, fallbackResponse, cancellationToken);
+                await _channelDispatcher.SendTextAsync(
+                    tenantId, outboundChannel, outboundUserId, fallbackResponse, cancellationToken);
                 return fallbackResponse;
             }
 
@@ -184,7 +200,8 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
             });
             await _db.SaveChangesAsync(cancellationToken);
 
-            await _channel.SendMessageAsync(msg.ChannelUserId, handoffResponse, cancellationToken);
+            await _channelDispatcher.SendTextAsync(
+                tenantId, outboundChannel, outboundUserId, handoffResponse, cancellationToken);
             return handoffResponse;
         }
 
@@ -229,7 +246,7 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
 
             if (actionResult.Handled)
             {
-                botResponse = actionResult.Response;
+                botResponse = actionResult.Response ?? string.Empty;
                 outgoingButtons = actionResult.Buttons;
                 outgoingMenuSections = actionResult.MenuSections;
                 handledInteractiveAction = true;
@@ -248,6 +265,36 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
         if (handledInteractiveAction)
             goto PersistAndSend;
 
+        // ── 5b. PendingInfo loop: user is answering a clarification question ──
+        // If the active incident awaits user info, append this message to it and
+        // re-run triage instead of classifying a new intent.
+        if (state.State == ConversationState.InIncidentAnalysis
+            && !string.IsNullOrWhiteSpace(msg.Text)
+            && !IsHumanOrCancelRequest(msg.Text)
+            && state.FlowData.TryGetValue("incidentId", out var pendingIncidentRaw)
+            && Guid.TryParse(pendingIncidentRaw, out var pendingIncidentId))
+        {
+            var pendingIncident = await _db.Incidents
+                .FirstOrDefaultAsync(
+                    i => i.Id == pendingIncidentId && i.Status == IncidentStatus.PendingInfo,
+                    cancellationToken);
+
+            if (pendingIncident is not null)
+            {
+                botResponse = await kernel.InvokeAsync<string>(
+                    "SupportPlugin", "provide_incident_info",
+                    new KernelArguments
+                    {
+                        ["conversationId"] = conversation.Id.ToString(),
+                        ["info"] = msg.Text
+                    },
+                    cancellationToken) ?? string.Empty;
+
+                state.FailedClassificationCount = 0;
+                goto PersistAndSend;
+            }
+        }
+
         var deterministicRuleResult = await _rulesEngine.TryHandleAsync(
             kernel,
             state,
@@ -257,7 +304,7 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
 
         if (deterministicRuleResult.Handled)
         {
-            botResponse = deterministicRuleResult.Response;
+            botResponse = deterministicRuleResult.Response ?? string.Empty;
             outgoingButtons = deterministicRuleResult.Buttons;
             outgoingMenuSections = deterministicRuleResult.MenuSections;
             state.FailedClassificationCount = 0;
@@ -403,11 +450,15 @@ PersistAndSend:
 
         outgoingButtons = EnsureMenuShortcut(outgoingButtons, outgoingMenuSections);
 
+        var responseText = botResponse;
+
         if (outgoingMenuSections is not null && outgoingMenuSections.Count > 0)
         {
-            await _channel.SendListMessageAsync(
-                msg.ChannelUserId,
-                botResponse,
+            await _channelDispatcher.SendListAsync(
+                tenantId,
+                outboundChannel,
+                outboundUserId,
+                responseText,
                 outgoingMenuButtonText,
                 outgoingMenuSections,
                 "Elegí una opción",
@@ -415,22 +466,54 @@ PersistAndSend:
         }
         else if (outgoingButtons is not null && outgoingButtons.Count > 0)
         {
-            await _channel.SendButtonMessageAsync(
-                msg.ChannelUserId,
-                botResponse,
+            await _channelDispatcher.SendButtonsAsync(
+                tenantId,
+                outboundChannel,
+                outboundUserId,
+                responseText,
                 outgoingButtons,
                 "Opciones rápidas",
                 cancellationToken);
         }
         else
         {
-            await _channel.SendMessageAsync(msg.ChannelUserId, botResponse, cancellationToken);
+            await _channelDispatcher.SendTextAsync(
+                tenantId, outboundChannel, outboundUserId, responseText, cancellationToken);
         }
 
         return botResponse;
     }
 
-    private static bool ShouldResumeBotFromHandoff(string? userText)
+    private static bool IsHumanOrCancelRequest(string? userText)
+    {
+        if (string.IsNullOrWhiteSpace(userText))
+            return false;
+
+        var text = userText.Trim().ToLowerInvariant();
+
+        var wantsHuman = text.Contains("humano")
+            || text.Contains("asesor")
+            || text.Contains("persona")
+            || text.Contains("un operador")
+            || text.Contains("al operador")
+            || text.Contains("con el operador")
+            || text.Contains("operador humano")
+            || text.Contains("agente real")
+            || text.Contains("un agente");
+        if (wantsHuman)
+            return true;
+
+        var wantsCancel = text.Contains("cancelar")
+            || text.Contains("cancela")
+            || text.Contains("dejalo")
+            || text.Contains("déjalo")
+            || text.Contains("olvidalo")
+            || text.Contains("olvidate")
+            || text.Contains("no importa");
+        return wantsCancel;
+    }
+
+    internal static bool ShouldResumeBotFromHandoff(string? userText)
     {
         if (string.IsNullOrWhiteSpace(userText))
             return false;
@@ -459,7 +542,7 @@ PersistAndSend:
         return !isConfirmingHumanWait;
     }
 
-    private static List<InteractiveButtonOption> EnsureMenuShortcut(
+    internal static List<InteractiveButtonOption> EnsureMenuShortcut(
         List<InteractiveButtonOption>? buttons,
         List<InteractiveListSection>? menuSections)
     {
@@ -489,12 +572,14 @@ PersistAndSend:
             IntentType.IncidentReport => await kernel.InvokeAsync<string>("SupportPlugin", "analyze_incident",
                 new KernelArguments { ["conversationId"] = conversation.Id.ToString(), ["description"] = userMessage }, ct),
 
-            IntentType.IncidentQuery => "Consultá el estado de tus tickets desde el dashboard de soporte.",
+            IntentType.IncidentQuery => await kernel.InvokeAsync<string>("SupportPlugin", "get_incident_status",
+                new KernelArguments { ["conversationId"] = conversation.Id.ToString() }, ct),
 
             IntentType.IncidentApprove => await kernel.InvokeAsync<string>("SupportPlugin", "deploy_fix",
                 new KernelArguments { ["conversationId"] = conversation.Id.ToString(), ["approvalText"] = userMessage }, ct),
 
-            IntentType.IncidentReject => "Fix rechazado. El incidente quedó abierto para revisión.",
+            IntentType.IncidentReject => await kernel.InvokeAsync<string>("SupportPlugin", "reject_fix",
+                new KernelArguments { ["conversationId"] = conversation.Id.ToString(), ["reason"] = userMessage }, ct),
 
             IntentType.DeployRequest => await kernel.InvokeAsync<string>("SupportPlugin", "deploy_fix",
                 new KernelArguments { ["conversationId"] = conversation.Id.ToString(), ["approvalText"] = userMessage }, ct),
@@ -630,7 +715,7 @@ PersistAndSend:
             false);
     }
 
-    private async Task<PlannerToolExecutionResult> ExecutePlannerToolAsync(
+    internal static async Task<PlannerToolExecutionResult> ExecutePlannerToolAsync(
         Kernel kernel,
         string toolName,
         Dictionary<string, string> args,
@@ -638,36 +723,201 @@ PersistAndSend:
         Conversation conversation,
         CancellationToken ct)
     {
-        switch (toolName.ToLowerInvariant())
+        try
         {
-            case "escalate_to_human":
+            var conversationId = ResolveConversationIdArg(args, conversation);
+
+            switch (toolName.ToLowerInvariant())
             {
-                var reason = GetArgValue(args, "reason") ?? "Planner requested human handoff";
-                var output = await kernel.InvokeAsync<string>(
-                    "SupervisionPlugin",
-                    "request_human_handoff",
-                    new KernelArguments
+                case "escalate_to_human":
+                {
+                    var reason = GetArgValue(args, "reason") ?? "Planner requested human handoff";
+                    var output = await kernel.InvokeAsync<string>(
+                        "SupervisionPlugin",
+                        "request_human_handoff",
+                        new KernelArguments
+                        {
+                            ["conversationId"] = conversationId,
+                            ["reason"] = reason
+                        },
+                        ct);
+
+                    return new PlannerToolExecutionResult
                     {
-                        ["conversationId"] = conversation.Id.ToString(),
-                        ["reason"] = reason
-                    },
-                    ct);
+                        Success = true,
+                        Output = output ?? string.Empty,
+                        StateTransition = ConversationState.AwaitingHuman.ToString()
+                    };
+                }
 
-                return new PlannerToolExecutionResult
+                case "analyze_incident":
                 {
-                    Success = true,
-                    Output = output ?? string.Empty,
-                    StateTransition = ConversationState.AwaitingHuman.ToString()
-                };
+                    var output = await kernel.InvokeAsync<string>(
+                        "SupportPlugin",
+                        "analyze_incident",
+                        new KernelArguments
+                        {
+                            ["conversationId"] = conversationId,
+                            ["description"] = GetArgValue(args, "description") ?? msg.Text
+                        },
+                        ct);
+
+                    return new PlannerToolExecutionResult
+                    {
+                        Success = true,
+                        Output = output ?? string.Empty,
+                        StateTransition = ConversationState.InIncidentAnalysis.ToString()
+                    };
+                }
+
+                case "provide_incident_info":
+                {
+                    var output = await kernel.InvokeAsync<string>(
+                        "SupportPlugin",
+                        "provide_incident_info",
+                        new KernelArguments
+                        {
+                            ["conversationId"] = conversationId,
+                            ["info"] = GetArgValue(args, "info") ?? msg.Text
+                        },
+                        ct);
+
+                    return new PlannerToolExecutionResult
+                    {
+                        Success = true,
+                        Output = output ?? string.Empty,
+                        StateTransition = ConversationState.InIncidentAnalysis.ToString()
+                    };
+                }
+
+                case "get_incident_status":
+                {
+                    var output = await kernel.InvokeAsync<string>(
+                        "SupportPlugin",
+                        "get_incident_status",
+                        new KernelArguments { ["conversationId"] = conversationId },
+                        ct);
+
+                    return new PlannerToolExecutionResult
+                    {
+                        Success = true,
+                        Output = output ?? string.Empty
+                    };
+                }
+
+                case "run_db_diagnostic":
+                {
+                    var sqlQuery = GetArgValue(args, "sql_query", "sqlquery", "query");
+                    if (string.IsNullOrWhiteSpace(sqlQuery))
+                    {
+                        return new PlannerToolExecutionResult
+                        {
+                            Success = false,
+                            Output = "Missing required argument: sql_query"
+                        };
+                    }
+
+                    var output = await kernel.InvokeAsync<string>(
+                        "SupportPlugin",
+                        "query_database_diagnostic",
+                        new KernelArguments
+                        {
+                            ["conversationId"] = conversationId,
+                            ["sqlQuery"] = sqlQuery
+                        },
+                        ct);
+
+                    return new PlannerToolExecutionResult
+                    {
+                        Success = true,
+                        Output = output ?? string.Empty
+                    };
+                }
+
+                case "approve_fix":
+                {
+                    var output = await kernel.InvokeAsync<string>(
+                        "SupportPlugin",
+                        "deploy_fix",
+                        new KernelArguments
+                        {
+                            ["conversationId"] = conversationId,
+                            ["approvalText"] = GetArgValue(args, "approval_text", "approvaltext") ?? msg.Text
+                        },
+                        ct);
+
+                    return new PlannerToolExecutionResult
+                    {
+                        Success = true,
+                        Output = output ?? string.Empty,
+                        StateTransition = ConversationState.Completed.ToString()
+                    };
+                }
+
+                case "reject_fix":
+                {
+                    var output = await kernel.InvokeAsync<string>(
+                        "SupportPlugin",
+                        "reject_fix",
+                        new KernelArguments
+                        {
+                            ["conversationId"] = conversationId,
+                            ["reason"] = GetArgValue(args, "reason") ?? msg.Text
+                        },
+                        ct);
+
+                    return new PlannerToolExecutionResult
+                    {
+                        Success = true,
+                        Output = output ?? string.Empty,
+                        StateTransition = ConversationState.Idle.ToString()
+                    };
+                }
+
+                case "search_kb":
+                {
+                    var query = GetArgValue(args, "query") ?? msg.Text;
+                    var output = await kernel.InvokeAsync<string>(
+                        "SupportPlugin",
+                        "search_kb",
+                        new KernelArguments { ["query"] = query },
+                        ct);
+
+                    return new PlannerToolExecutionResult
+                    {
+                        Success = true,
+                        Output = output ?? string.Empty
+                    };
+                }
+
+                default:
+                    return new PlannerToolExecutionResult
+                    {
+                        Success = false,
+                        Output = "Unsupported planner tool."
+                    };
             }
-
-            default:
-                return new PlannerToolExecutionResult
-                {
-                    Success = false,
-                    Output = "Unsupported planner tool."
-                };
         }
+        catch (Exception ex)
+        {
+            return new PlannerToolExecutionResult
+            {
+                Success = false,
+                Output = $"Tool execution error: {ex.Message}"
+            };
+        }
+    }
+
+    private static string ResolveConversationIdArg(IReadOnlyDictionary<string, string> args, Conversation conversation)
+    {
+        var raw = GetArgValue(args, "conversation_id", "conversationid");
+        if (string.IsNullOrWhiteSpace(raw)
+            || string.Equals(raw, "current_conversation_id", StringComparison.OrdinalIgnoreCase))
+        {
+            return conversation.Id.ToString();
+        }
+
+        return raw;
     }
 
     private static int TryGetIntArg(Dictionary<string, string> args, int fallback, params string[] keys)

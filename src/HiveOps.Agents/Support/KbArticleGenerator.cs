@@ -2,12 +2,15 @@ using System.Collections.Generic;
 using HiveOps.Application.Configuration;
 using HiveOps.Application.Interfaces;
 using HiveOps.Application.Services;
+using HiveOps.Application.Support;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
+using HiveOps.Domain.Interfaces;
 using HiveOps.Infrastructure.AI;
 using HiveOps.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
 
@@ -21,15 +24,18 @@ public sealed class KbArticleGenerator
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IIncidentMessageHistoryService _messageHistory;
     private readonly KernelFactory _kernelFactory;
+    private readonly ILogger<KbArticleGenerator> _logger;
 
     public KbArticleGenerator(
         IServiceScopeFactory scopeFactory,
         IIncidentMessageHistoryService messageHistory,
-        KernelFactory kernelFactory)
+        KernelFactory kernelFactory,
+        ILogger<KbArticleGenerator> logger)
     {
         _scopeFactory = scopeFactory;
         _messageHistory = messageHistory;
         _kernelFactory = kernelFactory;
+        _logger = logger;
     }
 
     /// <summary>
@@ -42,14 +48,19 @@ public sealed class KbArticleGenerator
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+        // Internal post-resolution path: the scope has no tenant context, so the
+        // global query filter would hide the incident. IgnoreQueryFilters is safe
+        // here because the incident is addressed by primary key.
         var incident = await db.Incidents
+            .IgnoreQueryFilters()
             .Include(i => i.Messages)
             .FirstOrDefaultAsync(i => i.Id == incidentId, cancellationToken);
 
         if (incident is null)
             throw new InvalidOperationException($"Incident {incidentId} not found");
 
-        if (incident.Status != IncidentStatus.Closed)
+        // Eager generation runs at Resolved (before user confirmation); allow both.
+        if (incident.Status is not (IncidentStatus.Resolved or IncidentStatus.Closed))
             throw new InvalidOperationException($"Incident {incidentId} is not resolved");
 
         var history = await _messageHistory.GetFormattedHistoryAsync(incidentId, cancellationToken);
@@ -68,6 +79,32 @@ public sealed class KbArticleGenerator
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         };
+
+        // Best-effort embedding so KB search (IncidentAnalysisEngine / SupportPlugin.SearchKbAsync)
+        // can rank by cosine similarity. IEmbeddingService is scoped while this generator is
+        // registered as a singleton, so it is resolved from the per-call scope.
+        try
+        {
+            var embeddingService = scope.ServiceProvider.GetService<IEmbeddingService>();
+            if (embeddingService is not null)
+            {
+                var vector = await embeddingService.GenerateEmbeddingAsync(
+                    $"{article.Title}\n{article.Content}\n{article.ResolutionSteps}",
+                    cancellationToken);
+                if (vector is { Length: > 0 })
+                    article.EmbeddingVector = EmbeddingMath.FloatsToLittleEndianBytes(vector);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Embedding generation failed for KB article from incident {IncidentId}; saving without vector.",
+                incidentId);
+        }
 
         db.KbArticles.Add(article);
         await db.SaveChangesAsync(cancellationToken);

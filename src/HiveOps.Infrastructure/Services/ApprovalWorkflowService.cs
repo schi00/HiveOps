@@ -64,9 +64,7 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var incident = await db.Incidents.FindAsync(incidentId, cancellationToken);
-        if (incident is null)
-            throw new InvalidOperationException($"Incident {incidentId} not found");
+        var incident = await LoadIncidentWithTenantContextAsync(scope, db, incidentId, cancellationToken);
 
         // Update incident status to indicate approval is required
         incident.RequiresHumanApproval = true;
@@ -81,6 +79,22 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
+
+        // Sync the conversation state so the planner exposes approve_fix /
+        // reject_fix — without this, the worker's autonomous approval request
+        // leaves the user unable to approve via chat.
+        if (incident.ConversationId.HasValue)
+        {
+            var stateManager = scope.ServiceProvider.GetService<IConversationStateManager>();
+            if (stateManager is not null)
+            {
+                var convState = await stateManager.GetStateAsync(incident.TenantId, incident.ConversationId.Value, cancellationToken)
+                    ?? new Domain.Models.ConversationStateContext();
+                convState.State = ConversationState.AwaitingIncidentApproval;
+                convState.FlowData["incidentId"] = incident.Id.ToString();
+                await stateManager.SetStateAsync(incident.TenantId, incident.ConversationId.Value, convState, cancellationToken);
+            }
+        }
 
         // Send notification
         var notifier = scope.ServiceProvider.GetRequiredService<ISupervisionNotifier>();
@@ -106,12 +120,7 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var incident = await db.Incidents
-            .Include(i => i.Tenant)
-            .FirstOrDefaultAsync(i => i.Id == incidentId, cancellationToken);
-
-        if (incident is null)
-            throw new InvalidOperationException($"Incident {incidentId} not found");
+        var incident = await LoadIncidentWithTenantContextAsync(scope, db, incidentId, cancellationToken);
 
         await _messageHistory.AppendMessageToIncidentAsync(
             incidentId,
@@ -188,9 +197,7 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var incident = await db.Incidents.FindAsync(incidentId, cancellationToken);
-        if (incident is null)
-            throw new InvalidOperationException($"Incident {incidentId} not found");
+        var incident = await LoadIncidentWithTenantContextAsync(scope, db, incidentId, cancellationToken);
 
         await _messageHistory.AppendMessageToIncidentAsync(
             incidentId,
@@ -216,5 +223,31 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         incident.UpdatedAt = DateTimeOffset.UtcNow;
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Loads an incident by PK bypassing the tenant filter (the worker scope has
+    /// no tenant context), then resolves the scope tenant so subsequent filtered
+    /// queries stay tenant-correct. Internal path — addressed by primary key.
+    /// </summary>
+    private static async Task<Incident> LoadIncidentWithTenantContextAsync(
+        IServiceScope scope,
+        AppDbContext db,
+        Guid incidentId,
+        CancellationToken cancellationToken)
+    {
+        var incident = await db.Incidents
+            .IgnoreQueryFilters()
+            .Include(i => i.Tenant)
+            .FirstOrDefaultAsync(i => i.Id == incidentId, cancellationToken);
+
+        if (incident is null)
+            throw new InvalidOperationException($"Incident {incidentId} not found");
+
+        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+        if (tenantContext is Multitenancy.TenantContext tc && !tc.IsResolved)
+            tc.SetTenant(incident.TenantId);
+
+        return incident;
     }
 }

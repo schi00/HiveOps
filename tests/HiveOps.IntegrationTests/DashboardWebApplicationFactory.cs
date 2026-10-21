@@ -338,6 +338,8 @@ public sealed class FakeEmailService : IEmailService
 
 internal sealed class FakeGitService : IGitService
 {
+    public Task<string> GetWorkspacePathAsync(Guid tenantId, CancellationToken ct = default)
+        => Task.FromResult(Directory.GetCurrentDirectory());
     public Task<string> CreateBranchAsync(Guid _, string b, CancellationToken ct = default) => Task.FromResult(b);
     public Task<string> CommitAsync(Guid _, string m, IEnumerable<string> f, CancellationToken ct = default) => Task.FromResult("ok");
     public Task PushAsync(Guid _, string b, CancellationToken ct = default) => Task.CompletedTask;

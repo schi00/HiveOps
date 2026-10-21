@@ -27,6 +27,34 @@ public sealed class Incident : ITenantScoped
     public bool RequiresHumanApproval { get; set; }
     public string? BackupLocation { get; set; }
 
+    /// <summary>Last LLM triage self-reported confidence (0–1).</summary>
+    public double? TriageConfidence { get; set; }
+
+    /// <summary>Stable hash for deduplication of similar reports (tenant-scoped).</summary>
+    public string? Fingerprint { get; set; }
+
+    public int OccurrenceCount { get; set; } = 1;
+
+    /// <summary>Optional JSON blob from triage (exception, table, URLs, etc.).</summary>
+    public string? ExtractedEntitiesJson { get; set; }
+
+    /// <summary>End-user oriented resolution / next steps.</summary>
+    public string? FinalUserResponse { get; set; }
+
+    /// <summary>IT-oriented diagnostic and evidence.</summary>
+    public string? TechnicalDiagnosticNote { get; set; }
+
+    public IncidentResolutionMode ResolutionMode { get; set; } = IncidentResolutionMode.Unknown;
+
+    /// <summary>Included in AutoResolutionEffectiveness denominator when true.</summary>
+    public bool EligibleForEffectivenessKpi { get; set; }
+
+    /// <summary>External ticket identifier when the incident originated from a ticketing system (e.g. Ticketera).</summary>
+    public string? ExternalTicketId { get; set; }
+
+    /// <summary>Channel where the incident was reported (whatsapp, ticketing, api, ...).</summary>
+    public string? SourceChannel { get; set; }
+
     // Navigation
     public Tenant Tenant { get; set; } = null!;
     public Conversation Conversation { get; set; } = null!;
