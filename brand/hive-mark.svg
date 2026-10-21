@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- HIVE parent mark: isometric cube (hexagon + inner Y)
+       Edit stroke to recolor; stroke-width to adjust weight. -->
+  <path
+    d="M32 8 52.8 20v24L32 56 11.2 44V20Z"
+    stroke="#F5B323" stroke-width="3.5" stroke-linejoin="miter"/>
+  <path
+    d="M32 8v24M32 32 11.2 44M32 32l20.8 12"
+    stroke="#F5B323" stroke-width="3.5" stroke-linejoin="miter"/>
+</svg>

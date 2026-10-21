@@ -23,28 +23,22 @@ export function BrandLogo({ size = "md", showParentBadge = true }: BrandLogoProp
         aria-hidden="true"
         className="shrink-0"
       >
-        {/* HIVE mark: three interlocking bent bands forming a hexagonal ring */}
+        {/* HiveOps mark: isometric-cube hexagon + crossed tools (see /brand/hiveops-mark.svg) */}
         <path
-          d="M15.9 49.1 6 32 15.9 14.9"
+          d="M32 8 52.8 20v24L32 56 11.2 44V20Z"
           stroke="#00F0FF"
-          strokeWidth="8"
+          strokeWidth="4"
           strokeLinejoin="miter"
-          strokeMiterlimit="10"
         />
-        <path
-          d="M25.2 9.5 45 9.5 54.9 26.6"
-          stroke="#00F0FF"
-          strokeWidth="8"
-          strokeLinejoin="miter"
-          strokeMiterlimit="10"
-        />
-        <path
-          d="M54.9 37.4 45 54.5 25.2 54.5"
-          stroke="#00F0FF"
-          strokeWidth="8"
-          strokeLinejoin="miter"
-          strokeMiterlimit="10"
-        />
+        <g transform="translate(17 17) scale(1.25)">
+          <path
+            d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.415 8.416-.086-.102"
+            stroke="#00F0FF"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </g>
       </svg>
       <span className={`font-display font-bold tracking-tight text-white ${textClass}`}>
         Hive<span className="cyan-text">Ops</span>
