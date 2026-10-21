@@ -31,7 +31,9 @@ public sealed class TenantResolutionMiddleware
         "/webhooks/whatsapp",
         "/api/admin",
         "/dashboard",
-        "/api/support"
+        "/api/support",
+        // HiveArena validation callbacks authenticate with X-HiveArena-Key in the controller.
+        "/api/internal/hivearena"
     ];
 
     private readonly RequestDelegate _next;
