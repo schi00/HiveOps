@@ -4,7 +4,7 @@ type BrandLogoProps = {
 };
 
 export function BrandLogo({ size = "md", showParentBadge = true }: BrandLogoProps) {
-  const iconSize = size === "sm" ? 26 : size === "lg" ? 36 : 30;
+  const iconSize = size === "sm" ? 32 : size === "lg" ? 50 : 40;
   const textClass =
     size === "sm"
       ? "text-lg"
@@ -17,7 +17,7 @@ export function BrandLogo({ size = "md", showParentBadge = true }: BrandLogoProp
       <svg
         width={iconSize}
         height={iconSize}
-        viewBox="0 0 64 64"
+        viewBox="9 8 46 46"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         aria-hidden="true"
