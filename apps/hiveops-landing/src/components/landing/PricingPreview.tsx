@@ -76,7 +76,7 @@ export function PricingPreview() {
         <p className="mt-4 max-w-3xl text-xs leading-relaxed text-slate-400">
           La unidad de facturación variable es la resolución verificada: un incidente que HiveOps cerró y que
           quedó confirmado por verification query o suite de tests. Las derivaciones a tu equipo no se
-          computan. Cada plan incluye un cupo mensual de resoluciones; el excedente se factura por unidad.
+          computan. Pro y Enterprise incluyen un cupo mensual; el excedente se factura por unidad.
         </p>
       </div>
     </AnimatedSection>

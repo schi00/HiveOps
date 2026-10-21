@@ -18,8 +18,9 @@ export default function PricingPage() {
     { label: "Validación de codefixes", starter: "—", pro: "Verification query", enterprise: "HiveArena: build + tests → PR automático" },
     { label: "Audit trail", starter: "Registro de acciones", pro: "Ledger SHA-256 encadenado", enterprise: "Ledger + export a tu SIEM" },
     { label: "Aislamiento", starter: "Tenant en SaaS multi-tenant", pro: "Multi-tenant con aislamiento estricto", enterprise: "Dedicado o self-hosted (FailClosed)" },
-    { label: "Resoluciones incluidas", starter: "40/mes · extra USD 5,90", pro: "150/mes · extra USD 3,90", enterprise: "Paquetes a medida" },
-    { label: "Facturación", starter: "Base + outcome verificado", pro: "Base + outcome verificado", enterprise: "Licencia anual + outcome acordado" },
+    { label: "Workspaces aislados", starter: "Hasta 2", pro: "Hasta 5–10", enterprise: "Ilimitados" },
+    { label: "Resoluciones incluidas", starter: "Incluidas en el plan", pro: "Cupo mensual + extras por unidad", enterprise: "Paquetes a medida" },
+    { label: "Facturación", starter: "USD 200/mes fijo", pro: "USD 499–899/mes según volumen", enterprise: "USD 1.499–3.000+/mes o licencia self-hosted USD 10.000–50.000+/año" },
     { label: "Puesta en marcha", starter: "Onboarding guiado", pro: "Readiness check + playbooks", enterprise: "Despliegue asistido + SLA" },
   ];
 
@@ -103,9 +104,9 @@ export default function PricingPage() {
         </div>
 
         <p className="mt-4 max-w-3xl text-xs leading-relaxed text-slate-400">
-          Todos los planes son modelo híbrido: la base mensual cubre plataforma, canales y gobierno; las
-          resoluciones autónomas verificadas por encima del cupo se facturan por unidad. Enterprise admite
-          licencia anual self-hosted en tu propia infraestructura. Volúmenes altos pueden traer sus propias
+          La base mensual cubre plataforma, canales y gobierno por workspace; las resoluciones autónomas
+          verificadas por encima del cupo se facturan por unidad. Enterprise admite licencia self-hosted
+          anual (USD 10.000–50.000+) en tu propia infraestructura. Volúmenes altos pueden traer sus propias
           API keys de LLM.
         </p>
 

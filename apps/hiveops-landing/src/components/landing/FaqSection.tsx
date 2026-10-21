@@ -11,7 +11,7 @@ const faqItems = [
   },
   {
     q: "¿Cómo se cobra?",
-    a: "Modelo híbrido: una suscripción base mensual por tier (Starter desde USD 199, Pro desde USD 699, Enterprise desde USD 1.999) más un cobro por resolución autónoma verificada por encima del cupo incluido. Solo se computan los incidentes que HiveOps cerró y que quedaron confirmados por una verification query o una suite de tests. Las escalaciones a tu equipo no facturan.",
+    a: "Modelo híbrido: una suscripción base mensual por tier (Starter USD 200 fijo con hasta 2 workspaces, Pro USD 499–899 con 5–10 workspaces, Enterprise USD 1.499–3.000+ con workspaces ilimitados) más cobro por resolución autónoma verificada por encima del cupo incluido. Enterprise también admite licencia self-hosted anual (USD 10.000–50.000+). Solo se computan los incidentes que HiveOps cerró y que quedaron confirmados por una verification query o una suite de tests. Las escalaciones a tu equipo no facturan.",
   },
   {
     q: "¿Qué necesita para funcionar en mi tenant?",
