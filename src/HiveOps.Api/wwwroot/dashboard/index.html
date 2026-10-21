@@ -138,6 +138,17 @@ html.light .hex-pattern {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+/* Brand mark theme swap + title colors */
+.brand-mark-light { display: none; }
+html.light .brand-mark-light { display: block; }
+html.light .brand-mark-dark { display: none; }
+html.light .brand-title { color: #111827; }
+html.light .by-hive-badge {
+  color: #0e7490;
+  border-color: rgba(8, 145, 178, 0.45);
+  background: rgba(6, 182, 212, 0.12);
+}
+
 .glass-hover:hover {
   background: rgba(34, 211, 238, 0.05);
   border-color: rgba(34, 211, 238, 0.3);
@@ -546,16 +557,25 @@ html.light .hex-pattern {
 <!-- Login Screen -->
 <div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center">
   <div class="hero-glow"></div>
+  <div class="fixed inset-0 pointer-events-none overflow-hidden" style="z-index:0;">
+    <svg class="absolute float" style="top:10%;left:6%;width:140px;height:140px;opacity:0.36;" viewBox="0 0 100 100"><path fill="#22d3ee" fill-opacity="0.48" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float-delayed" style="top:35%;right:10%;width:180px;height:180px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#06b6d4" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float-delayed-2" style="bottom:15%;left:18%;width:110px;height:110px;opacity:0.36;" viewBox="0 0 100 100"><path fill="#0891b2" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float" style="top:55%;right:28%;width:90px;height:90px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#22d3ee" fill-opacity="0.4" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float-delayed" style="bottom:25%;right:5%;width:160px;height:160px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#155e75" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+    <svg class="absolute float-delayed-2" style="top:8%;right:40%;width:70px;height:70px;opacity:0.24;" viewBox="0 0 100 100"><path fill="#06b6d4" fill-opacity="0.48" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
+  </div>
   <div class="absolute top-6 right-6 z-20">
     <a href="/onboarding/index.html" class="btn-primary px-5 py-2 rounded-xl text-sm">Crear Organización</a>
   </div>
   <div class="hive-card w-full max-w-md p-8 relative z-10">
     <div class="flex flex-col items-center gap-6 mb-8">
       <div class="hive-logo">
-        <img src="hiveops-mark.svg" width="72" height="72" alt="HiveOps"/>
+        <img src="hiveops-mark.svg" width="72" height="72" alt="HiveOps" class="brand-mark-dark"/>
+        <img src="hiveops-mark-light.svg" width="72" height="72" alt="HiveOps" class="brand-mark-light"/>
       </div>
       <div class="text-center">
-        <h1 class="text-3xl font-display font-bold mb-1 text-white">Hive<span class="cyan-text">Ops</span></h1>
+        <h1 class="text-3xl font-display font-bold mb-1 text-white brand-title">Hive<span class="cyan-text">Ops</span></h1>
         <p class="text-sm" style="color: var(--text-secondary)">AI Support Engineer</p>
       </div>
     </div>
@@ -588,11 +608,12 @@ html.light .hex-pattern {
     <div class="flex items-center gap-6">
       <div class="flex items-center gap-3">
         <div class="hive-logo">
-          <img src="hiveops-mark.svg" width="42" height="42" alt="HiveOps"/>
+          <img src="hiveops-mark.svg" width="42" height="42" alt="HiveOps" class="brand-mark-dark"/>
+          <img src="hiveops-mark-light.svg" width="42" height="42" alt="HiveOps" class="brand-mark-light"/>
         </div>
         <div>
-          <span class="font-display font-bold text-lg text-white">Hive<span class="cyan-text">Ops</span></span>
-          <span class="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-widest text-cyan-300/90 ml-2">by HIVE</span>
+          <span class="font-display font-bold text-lg text-white brand-title">Hive<span class="cyan-text">Ops</span></span>
+          <span class="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-widest text-cyan-300/90 ml-2 by-hive-badge">by HIVE</span>
           <span class="text-xs block mt-0.5" style="color: var(--text-secondary)">AI Support Engineer</span>
         </div>
       </div>
@@ -670,14 +691,6 @@ html.light .hex-pattern {
   </nav>
 
   <!-- Main -->
-  <div class="fixed inset-0 pointer-events-none overflow-hidden" style="z-index:0;">
-    <svg class="absolute float" style="top:10%;left:6%;width:140px;height:140px;opacity:0.36;" viewBox="0 0 100 100"><path fill="#22d3ee" fill-opacity="0.48" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
-    <svg class="absolute float-delayed" style="top:35%;right:10%;width:180px;height:180px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#06b6d4" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
-    <svg class="absolute float-delayed-2" style="bottom:15%;left:18%;width:110px;height:110px;opacity:0.36;" viewBox="0 0 100 100"><path fill="#0891b2" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
-    <svg class="absolute float" style="top:55%;right:28%;width:90px;height:90px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#22d3ee" fill-opacity="0.4" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
-    <svg class="absolute float-delayed" style="bottom:25%;right:5%;width:160px;height:160px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#155e75" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
-    <svg class="absolute float-delayed-2" style="top:8%;right:40%;width:70px;height:70px;opacity:0.24;" viewBox="0 0 100 100"><path fill="#06b6d4" fill-opacity="0.48" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
-  </div>
   <main class="pt-24 pb-10 px-6 max-w-7xl mx-auto" style="position:relative; z-index:1;">
     
     <!-- Dashboard View -->
