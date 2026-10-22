@@ -30,6 +30,8 @@ public sealed class TenantConfiguration
 public sealed class AgentConfig
 {
     public bool Enabled { get; set; } = true;
+    /// <summary>Commercial operating mode: Shadow (read-only POC), Assisted (always require approval), or Autonomous (default).</summary>
+    public TenantOperatingMode OperatingMode { get; set; } = TenantOperatingMode.Autonomous;
     public bool EnableLlmPlanner { get; set; } = true;
     public string PlannerVersion { get; set; } = "v1";
     public int MaxSteps { get; set; } = 3;

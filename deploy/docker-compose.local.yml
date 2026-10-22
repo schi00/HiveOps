@@ -1,0 +1,68 @@
+# Local test stack: HiveOps API alongside the running HiveCrew environment.
+# Shares hivecrew-postgres (dedicated `hiveops` database) on `hivecrew_default`,
+# like the VPS topology. Redis is reached via the host (hivecrew-redis:6379).
+#
+# Usage: docker compose -f deploy/docker-compose.local.yml up -d
+#   (image hiveops-api:local must be built first, e.g.
+#    docker build -f deploy/Dockerfile -t hiveops-api:local .)
+# API: http://localhost:5198  |  Dashboard: http://localhost:5198/dashboard/
+
+services:
+  api:
+    image: hiveops-api:local
+    container_name: hiveops-api-local
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Development"
+      # Platform DB: dedicated `hiveops` database inside the shared hivecrew postgres.
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=hiveops;Username=postgres;Password=Your_strong_password1!"
+      Redis__ConnectionString: "host.docker.internal:6379"
+      Jwt__Key: "local-dev-jwt-key-0123456789abcdef0123456789abcdef"
+      Jwt__Issuer: "HiveOps"
+      Jwt__Audience: "HiveOpsUsers"
+      Admin__ApiKey: "local-admin-api-key-0123456789abcdef0123456789"
+      Git__RepoPath: "/tmp/hiveops-git-work"
+      Git__WorkspacesRoot: "/tmp/hiveops-git-workspaces"
+      HiveOps__DataProtectionKeysPath: "/app/data/dataprotection"
+      HiveOps__Deployment__Mode: "SelfHosted"
+      HiveOps__Deployment__Billing: "None"
+      Secrets__UseAws: "false"
+      SemanticKernel__ActiveProfile: "Testing"
+      SemanticKernel__OpenRouter__ApiKey: "${SK_OPENROUTER_API_KEY:-}"
+      # LLM provider failover chain (OpenAI-compatible endpoints, tried in order).
+      SemanticKernel__Providers__0__Enabled: "${SK_ENABLE_OPENROUTER:-true}"
+      SemanticKernel__Providers__0__Name: "openrouter"
+      SemanticKernel__Providers__0__Endpoint: "https://openrouter.ai/api/v1"
+      SemanticKernel__Providers__0__ModelId: "meta-llama/llama-3.3-70b-instruct:free"
+      SemanticKernel__Providers__0__ApiKey: "${SK_OPENROUTER_API_KEY:-}"
+      SemanticKernel__Providers__1__Enabled: "${SK_ENABLE_GROQ:-true}"
+      SemanticKernel__Providers__1__Name: "groq"
+      SemanticKernel__Providers__1__Endpoint: "https://api.groq.com/openai/v1"
+      SemanticKernel__Providers__1__ModelId: "openai/gpt-oss-120b"
+      SemanticKernel__Providers__1__ApiKey: "${SK_GROQ_API_KEY:-}"
+      SemanticKernel__Providers__2__Enabled: "${SK_ENABLE_GEMINI:-true}"
+      SemanticKernel__Providers__2__Name: "gemini"
+      SemanticKernel__Providers__2__Endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      SemanticKernel__Providers__2__ModelId: "gemini-2.5-flash"
+      SemanticKernel__Providers__2__ApiKey: "${SK_GEMINI_API_KEY:-}"
+      # Bootstrap a HiveCrew tenant automatically on first start.
+      ComandaTenant__Enabled: "true"
+      ComandaTenant__Name: "HiveCrew"
+      ComandaTenant__Industry: "logistica"
+      ComandaTenant__ApiKey: "key_hivecrew_local"
+      ComandaTenant__RepositoryUrl: "https://github.com/hivecrew/hivecrew"
+    volumes:
+      - hiveops_dataprotection_local:/app/data/dataprotection
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "5198:8080"
+    networks:
+      - hivecrew_default
+
+volumes:
+  hiveops_dataprotection_local:
+
+networks:
+  hivecrew_default:
+    external: true

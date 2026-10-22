@@ -18,8 +18,10 @@ using HiveOps.Application.Interfaces;
 using HiveOps.Application.Services;
 using HiveOps.Domain.Models;
 using HiveOps.Infrastructure;
+using HiveOps.Infrastructure.AI;
 using HiveOps.Infrastructure.ApiDrift;
 using HiveOps.Infrastructure.Services;
+using HiveOps.Infrastructure.Support;
 using HiveOps.Workers;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
@@ -239,6 +241,7 @@ builder.Services.AddSwaggerGen(c =>
 
 // -- SignalR -------------------------------------------------------------------
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<ChatOpsApprovalTokenService>();
 builder.Services.AddScoped<SupervisionNotificationService>();
 builder.Services.AddScoped<ISupervisionNotifier>(sp => sp.GetRequiredService<SupervisionNotificationService>());
 builder.Services.AddScoped<IndustrySettingsService>();
@@ -265,11 +268,16 @@ builder.Services.AddSingleton<IIncidentMessageHistoryService, IncidentMessageHis
 builder.Services.AddSingleton<IApprovalWorkflowService, ApprovalWorkflowService>();
 builder.Services.AddSingleton<IncidentEmailService>();
 builder.Services.AddSingleton<KbArticleGenerator>();
+// Scoped: TenantContextPackService consumes the scoped AppDbContext.
+builder.Services.AddScoped<ITenantContextPackService, TenantContextPackService>();
+builder.Services.AddScoped<ITenantImprovementService, TenantImprovementService>();
+builder.Services.AddScoped<ILlmTaskQueue, LlmTaskQueueService>();
 
 // -- Background Workers --------------------------------------------------------
 builder.Services.AddHostedService<AuthBootstrapHostedService>();
 builder.Services.AddHostedService<TenantCacheWarmerHostedService>();
 builder.Services.AddHostedService<IncidentAutoWorkflowService>();
+builder.Services.AddHostedService<LlmTaskRetryHostedService>();
 builder.Services.AddSingleton<IMessageQueueService, BackgroundMessageQueueService>();
 builder.Services.AddHostedService(sp => (BackgroundMessageQueueService)sp.GetRequiredService<IMessageQueueService>());
 

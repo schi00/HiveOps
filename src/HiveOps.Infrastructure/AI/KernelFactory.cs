@@ -1,8 +1,10 @@
 #pragma warning disable SKEXP0010
 using System.Net.Http.Headers;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
 using HiveOps.Application.Configuration;
 using HiveOps.Application.Interfaces;
 using HiveOps.Domain.Interfaces;
@@ -67,11 +69,34 @@ public sealed class KernelFactory
         }
         catch { /* fallback to options */ }
 
-        builder.AddOpenAIChatCompletion(
-            modelId: chatModelId,
-            apiKey: chatApiKey,
-            endpoint: new Uri(_options.OpenRouter.Endpoint),
-            httpClient: CreateOpenRouterHttpClient());
+        var configuredProviders = _options.Providers
+            .Where(p => p.Enabled && !string.IsNullOrWhiteSpace(p.ApiKey) && !string.IsNullOrWhiteSpace(p.Endpoint))
+            .ToList();
+
+        if (configuredProviders.Count > 0)
+        {
+            // A single tenant model override is only meaningful when there is
+            // exactly one provider endpoint — on a heterogeneous failover chain
+            // each provider must use its own ModelId (e.g. "gpt-4" does not
+            // exist on Groq/Gemini and would break every provider at once).
+            var modelOverride = useTenantChatModel && configuredProviders.Count == 1
+                ? chatModelId
+                : null;
+            var loggerFactory = _provider.GetRequiredService<ILoggerFactory>();
+            builder.Services.AddSingleton<IChatCompletionService>(
+                FailoverChatCompletionService.Create(
+                    configuredProviders,
+                    modelOverride,
+                    loggerFactory.CreateLogger<FailoverChatCompletionService>()));
+        }
+        else
+        {
+            builder.AddOpenAIChatCompletion(
+                modelId: chatModelId,
+                apiKey: chatApiKey,
+                endpoint: new Uri(_options.OpenRouter.Endpoint),
+                httpClient: CreateOpenRouterHttpClient());
+        }
 
         var embeddingApiKey = _options.Embeddings.ApiKey;
         try

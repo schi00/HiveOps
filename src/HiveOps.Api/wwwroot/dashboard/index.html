@@ -550,6 +550,10 @@ html.light .by-hive-badge {
   color: #111827;
   border: 1px solid rgba(17, 24, 39, 0.08);
 }
+
+:focus-visible{outline:2px solid #22d3ee;outline-offset:2px;border-radius:6px}
+[data-tip]{position:relative}
+[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;background:var(--bg-card);border:1px solid var(--border-color);color:var(--text-secondary);font-size:11px;padding:4px 10px;border-radius:8px;z-index:70;pointer-events:none}
 </style>
 </head>
 <body class="hex-pattern min-h-screen antialiased">
@@ -557,7 +561,7 @@ html.light .by-hive-badge {
 <!-- Login Screen -->
 <div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center">
   <div class="hero-glow"></div>
-  <div class="fixed inset-0 pointer-events-none overflow-hidden" style="z-index:0;">
+  <div class="fixed inset-0 pointer-events-none overflow-hidden" style="z-index:0;" aria-hidden="true">
     <svg class="absolute float" style="top:10%;left:6%;width:140px;height:140px;opacity:0.36;" viewBox="0 0 100 100"><path fill="#22d3ee" fill-opacity="0.48" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
     <svg class="absolute float-delayed" style="top:35%;right:10%;width:180px;height:180px;opacity:0.3;" viewBox="0 0 100 100"><path fill="#06b6d4" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
     <svg class="absolute float-delayed-2" style="bottom:15%;left:18%;width:110px;height:110px;opacity:0.36;" viewBox="0 0 100 100"><path fill="#0891b2" fill-opacity="0.44" d="M50 5l43.3 25v50L50 105 6.7 80V30z"/></svg>
@@ -581,10 +585,10 @@ html.light .by-hive-badge {
     </div>
     <form id="login-form" class="space-y-5">
       <div>
-        <input id="lu" type="text" class="input-field w-full px-4 py-3 rounded-xl text-sm" placeholder="Usuario" value="admin00"/>
+        <input id="lu" type="text" class="input-field w-full px-4 py-3 rounded-xl text-sm" placeholder="Usuario"/>
       </div>
       <div>
-        <input id="lp" type="password" class="input-field w-full px-4 py-3 rounded-xl text-sm" placeholder="Contraseña" value="123456"/>
+        <input id="lp" type="password" class="input-field w-full px-4 py-3 rounded-xl text-sm" placeholder="Contraseña"/>
       </div>
       <button type="submit" class="btn-primary w-full py-3 rounded-xl text-sm">
         Ingresar
@@ -619,9 +623,10 @@ html.light .by-hive-badge {
       </div>
       <div class="hidden md:flex items-center gap-1 ml-6 border-l pl-6" style="border-color: var(--border-color)">
         <button onclick="n('dashboard')" id="n-dash" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Resumen</button>
-        <button onclick="n('incidents')" id="n-inc" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Conversaciones</button>
+        <button onclick="n('incidents')" id="n-inc" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Incidentes</button>
         <button onclick="n('kb')" id="n-kb" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Knowledge Base</button>
         <button onclick="n('playbooks')" id="n-pb" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Playbooks</button>
+        <button onclick="n('ctx')" id="n-ctx" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Contexto</button>
         <button onclick="window.location.href='/dashboard/api-inventory.html'" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">API Inventory</button>
         <button onclick="n('config')" id="n-cfg" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Configuración</button>
         <span class="border-l pl-2 ml-2 flex items-center" style="border-color: var(--border-color)">
@@ -643,30 +648,30 @@ html.light .by-hive-badge {
       </select>
       
       <!-- Theme Toggle -->
-      <div class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema">
-        <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #22d3ee">
+      <div class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema" role="button" tabindex="0" aria-label="Cambiar tema" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleTheme();}">
+        <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #22d3ee" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
         </svg>
-        <svg id="moon-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #22d3ee">
+        <svg id="moon-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #22d3ee" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
         </svg>
       </div>
       
       <!-- Search -->
       <div class="relative hidden md:block">
-        <input type="text" id="global-search" placeholder="Buscar incidentes..." class="input-field w-64 px-4 py-2 rounded-xl text-sm pl-10" onkeyup="if(event.key==='Enter')searchIncidents()"/>
-        <svg onclick="searchIncidents()" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-tertiary)">
+        <input type="text" id="global-search" placeholder="Buscar incidentes..." class="input-field w-64 px-4 py-2 rounded-xl text-sm pl-10" onkeyup="if(event.key==='Enter')searchIncidents()" aria-label="Buscar incidentes"/>
+        <svg onclick="searchIncidents()" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-tertiary)" role="button" tabindex="0" aria-label="Buscar" onkeydown="if(event.key==='Enter')searchIncidents()">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
         </svg>
       </div>
       
       <!-- Notifications -->
       <div class="relative">
-        <button onclick="toggleNotifications()" class="theme-toggle relative" style="width: 40px; height: 40px;">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-secondary)">
+        <button onclick="toggleNotifications()" class="theme-toggle relative" style="width: 40px; height: 40px;" aria-label="Notificaciones" aria-haspopup="true" aria-expanded="false">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-secondary)" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
           </svg>
-          <span id="notif-badge" class="absolute top-1 right-1 w-2 h-2 rounded-full bg-cyan-500 status-pulse"></span>
+          <span id="notif-badge" class="absolute top-1 right-1 w-2 h-2 rounded-full bg-cyan-500 status-pulse" aria-hidden="true"></span>
         </button>
         <div id="notif-dropdown" class="hidden absolute right-0 mt-2 w-80 hive-card rounded-xl shadow-2xl border border-[var(--border-color)] z-50 overflow-hidden" style="background: var(--bg-card); backdrop-filter: blur(12px);">
           <div class="px-4 py-3 border-b flex justify-between items-center" style="border-color: var(--border-color)">
@@ -681,33 +686,103 @@ html.light .by-hive-badge {
       
       <!-- User -->
       <div class="flex items-center gap-3 ml-2 relative" id="user-menu-container">
-        <div onclick="toggleUserDropdown()" class="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-white font-bold text-sm cursor-pointer hover:shadow-lg hover:shadow-cyan-500/30 transition-all select-none" id="user-avatar-btn">
+        <div onclick="toggleUserDropdown()" class="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center text-white font-bold text-sm cursor-pointer hover:shadow-lg hover:shadow-cyan-500/30 transition-all select-none" id="user-avatar-btn" role="button" tabindex="0" aria-label="Menú de usuario" aria-haspopup="menu" aria-expanded="false" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleUserDropdown();}">
           A
         </div>
-        <div id="user-dropdown" class="user-dropdown">
+        <div id="user-dropdown" class="user-dropdown" role="menu">
           <div class="px-4 py-3" style="border-bottom: 1px solid var(--border-color)">
             <div id="ud-name" class="text-sm font-semibold truncate" style="color: var(--text-primary)">Usuario</div>
             <div id="ud-role" class="text-[10px] uppercase tracking-widest mt-0.5" style="color: var(--text-tertiary)">—</div>
           </div>
-          <div class="user-dropdown-item" onclick="openChangePasswordModal()">
-            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+          <div class="user-dropdown-item" role="menuitem" tabindex="0" onclick="openChangePasswordModal()">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
             Cambiar contraseña
           </div>
           <div class="user-dropdown-divider"></div>
-          <div class="user-dropdown-item" onclick="logout()">
-            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-            Cerrar sesion
+          <div class="user-dropdown-item" role="menuitem" tabindex="0" onclick="logout()">
+            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+            Cerrar sesión
           </div>
         </div>
       </div>
+
+      <!-- Mobile nav hamburger -->
+      <button type="button" id="btn-mobile-nav" class="theme-toggle md:hidden" aria-label="Abrir menú" aria-expanded="false" aria-controls="mobile-menu" onclick="toggleMobileMenu()">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-secondary)" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
     </div>
   </nav>
+
+  <!-- Mobile Menu -->
+  <div id="mobile-menu" class="hidden fixed inset-0 z-50">
+    <div class="absolute inset-0" style="background: rgba(0,0,0,0.6); backdrop-filter: blur(6px);" onclick="closeMobileMenu()"></div>
+    <div class="glass-strong absolute top-0 right-0 bottom-0 w-80 max-w-[85vw] p-6 overflow-y-auto flex flex-col gap-5" role="dialog" aria-modal="true" aria-label="Menú de navegación">
+      <div class="flex items-center justify-between">
+        <span class="font-display font-bold text-lg brand-title" style="color: var(--text-primary)">Hive<span class="cyan-text">Ops</span></span>
+        <button type="button" onclick="closeMobileMenu()" aria-label="Cerrar menú" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <nav class="flex flex-col gap-1" aria-label="Navegación principal">
+        <button type="button" onclick="mobileNav('dashboard')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Resumen</button>
+        <button type="button" onclick="mobileNav('incidents')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Incidentes</button>
+        <button type="button" onclick="mobileNav('kb')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Knowledge Base</button>
+        <button type="button" onclick="mobileNav('playbooks')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Playbooks</button>
+        <button type="button" onclick="mobileNav('ctx')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Contexto</button>
+        <button type="button" onclick="mobileNav('config')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Configuración</button>
+        <button type="button" onclick="mobileNav('admin')" id="n-adm-mobile" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-semibold hidden" style="color: #fbbf24">Plataforma</button>
+      </nav>
+
+      <div class="flex flex-col gap-3 pt-4 border-t" style="border-color: var(--border-color)">
+        <label class="text-xs font-medium uppercase tracking-widest" for="tenant-select-mobile" style="color: var(--text-tertiary)">Tenant</label>
+        <select id="tenant-select-mobile" onchange="changeTenantMobile()" class="input-field w-full px-4 py-2 rounded-xl text-sm">
+          <option value="">Seleccionar Tenant...</option>
+        </select>
+
+        <div class="relative">
+          <input type="text" id="global-search-mobile" placeholder="Buscar incidentes..." class="input-field w-full px-4 py-2 rounded-xl text-sm pl-10" onkeyup="if(event.key==='Enter')searchIncidents()" aria-label="Buscar incidentes"/>
+          <svg onclick="searchIncidents()" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-tertiary)" role="button" tabindex="0" aria-label="Buscar" onkeydown="if(event.key==='Enter')searchIncidents()">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+        </div>
+      </div>
+
+      <button type="button" onclick="toggleTheme()" class="btn-secondary w-full px-4 py-2.5 rounded-xl text-sm flex items-center justify-between">
+        <span>Cambiar tema</span>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
 
   <!-- Main -->
   <main class="pt-24 pb-10 px-6 max-w-7xl mx-auto" style="position:relative; z-index:1;">
     
     <!-- Dashboard View -->
     <div id="v-dash" class="view-section space-y-8">
+      <!-- First-run Setup Wizard -->
+      <div id="wizard-card" class="hive-card p-6 hidden">
+        <div class="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h3 class="font-semibold text-lg" style="color: var(--text-primary)">Configuración inicial del AI Support Engineer</h3>
+            <p class="text-sm mt-1" style="color: var(--text-secondary)">Completá estos pasos para activar la remediación autónoma</p>
+          </div>
+          <button type="button" id="wizard-dismiss" aria-label="Ocultar asistente" onclick="dismissSetupWizard()" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div id="wizard-progress" class="mb-4"></div>
+        <div id="wizard-steps" class="space-y-3"></div>
+      </div>
+
       <!-- Hero Stats -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         <div onclick="filterIncidents('Open')" class="hive-card p-6 relative overflow-hidden group cursor-pointer">
@@ -723,11 +798,11 @@ html.light .by-hive-badge {
         <div onclick="filterIncidents('Critical')" class="hive-card p-6 relative overflow-hidden group cursor-pointer">
           <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-red-500/10 to-transparent rounded-bl-full"></div>
           <div class="flex justify-between items-start mb-4">
-            <span class="text-sm font-medium" style="color: var(--text-secondary)">Criticos</span>
+            <span class="text-sm font-medium" style="color: var(--text-secondary)">Críticos</span>
             <div class="status-dot bg-red-500 status-pulse"></div>
           </div>
           <div class="text-4xl font-bold text-red-500" id="c-crit">0</div>
-          <div class="mt-2 text-xs" style="color: var(--text-tertiary)">Requieren atencion</div>
+          <div class="mt-2 text-xs" style="color: var(--text-tertiary)">Requieren atención</div>
         </div>
 
         <div onclick="filterIncidents('Resolved')" class="hive-card p-6 relative overflow-hidden group cursor-pointer">
@@ -743,8 +818,8 @@ html.light .by-hive-badge {
         <div class="hive-card p-6 relative overflow-hidden group">
           <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-cyan-500/10 to-transparent rounded-bl-full"></div>
           <div class="flex justify-between items-start mb-4">
-            <span class="text-sm font-medium" style="color: var(--text-secondary)">Tiempo medio</span>
-            <svg class="w-4 h-4 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span class="text-sm font-medium" style="color: var(--text-secondary)">Tiempo medio de resolución</span>
+            <svg class="w-4 h-4 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
           </div>
@@ -820,13 +895,13 @@ html.light .by-hive-badge {
       <!-- Actions -->
       <div class="flex flex-wrap gap-3">
         <button onclick="om('mc')" class="btn-primary px-6 py-3 rounded-xl text-sm flex items-center gap-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
           </svg>
           Nuevo Incidente
         </button>
         <button onclick="ld()" class="btn-secondary px-6 py-3 rounded-xl text-sm flex items-center gap-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
           </svg>
           Actualizar
@@ -839,7 +914,7 @@ html.light .by-hive-badge {
           <h2 class="font-semibold text-lg">Recientes</h2>
           <button onclick="n('incidents')" class="text-sm flex items-center gap-1 hover:gap-2 transition-all" style="color: #22d3ee">
             Ver todos
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
             </svg>
           </button>
@@ -853,21 +928,21 @@ html.light .by-hive-badge {
     <!-- Incidents View -->
     <div id="v-inc" class="view-section space-y-6">
       <div class="flex flex-wrap justify-between items-center gap-4">
-        <h2 class="text-2xl font-bold">Conversaciones</h2>
+        <h2 class="text-2xl font-bold">Incidentes</h2>
         <div class="flex gap-3">
-          <select id="fs" onchange="li()" class="input-field px-4 py-2.5 rounded-xl text-sm">
+          <select id="fs" onchange="li()" class="input-field px-4 py-2.5 rounded-xl text-sm" aria-label="Filtrar por estado">
             <option value="">Todos los estados</option>
             <option value="Open">Abierto</option>
             <option value="InProgress">En progreso</option>
             <option value="Resolved">Resuelto</option>
             <option value="Closed">Cerrado</option>
           </select>
-          <select id="fv" onchange="li()" class="input-field px-4 py-2.5 rounded-xl text-sm">
-            <option value="">Todas las prioridades</option>
+          <select id="fv" onchange="li()" class="input-field px-4 py-2.5 rounded-xl text-sm" aria-label="Filtrar por severidad">
+            <option value="">Todas las severidades</option>
             <option value="Low">Baja</option>
             <option value="Medium">Media</option>
             <option value="High">Alta</option>
-            <option value="Critical">Critica</option>
+            <option value="Critical">Crítica</option>
           </select>
           <button onclick="om('mc')" class="btn-primary px-5 py-2.5 rounded-xl text-sm">
             + Nuevo
@@ -887,7 +962,7 @@ html.light .by-hive-badge {
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 class="text-2xl font-bold">Administración de Plataforma</h2>
-            <p class="text-sm mt-1" style="color: var(--text-secondary)">Solo super usuario / admin de plataforma — estas acciones afectan a todos los tenants. Para operar dentro de un tenant, seleccionalo arriba o desde "Actuar como".</p>
+            <p class="text-sm mt-1" style="color: var(--text-secondary)">Solo super usuario / admin de plataforma — estas acciones afectan a todos los tenants. Para operar dentro de un tenant, selecciónalo arriba o desde "Actuar como".</p>
           </div>
           <span class="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest border border-amber-500/40 bg-amber-500/15 text-amber-300">Super User</span>
         </div>
@@ -935,13 +1010,13 @@ html.light .by-hive-badge {
         <h2 class="text-2xl font-bold">Knowledge Base</h2>
         <div class="flex gap-3">
           <div class="relative">
-            <input type="text" id="kq" placeholder="Buscar articulos..." class="input-field w-64 px-4 py-2.5 rounded-xl text-sm pl-10" onkeyup="if(event.key==='Enter')sk()"/>
-            <svg onclick="sk()" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-tertiary)">
+            <input type="text" id="kq" placeholder="Buscar artículos..." class="input-field w-64 px-4 py-2.5 rounded-xl text-sm pl-10" onkeyup="if(event.key==='Enter')sk()" aria-label="Buscar artículos"/>
+            <svg onclick="sk()" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-tertiary)" role="button" tabindex="0" aria-label="Buscar" onkeydown="if(event.key==='Enter')sk()">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
           </div>
           <button onclick="om('mk')" class="btn-primary px-5 py-2.5 rounded-xl text-sm">
-            + Nuevo Articulo
+            + Nuevo Artículo
           </button>
         </div>
       </div>
@@ -965,59 +1040,65 @@ html.light .by-hive-badge {
 
       <!-- Collapsible New Playbook Form -->
       <div id="pb-form-card" class="hive-card p-6 hidden">
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="font-semibold text-lg">Crear Playbook L1/L2</h3>
-          <button type="button" onclick="togglePlaybookForm(false)" class="text-xs px-2.5 py-1 rounded-lg btn-secondary">Cerrar</button>
+        <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+          <div>
+            <h3 class="font-semibold text-lg">Crear Playbook L1/L2</h3>
+            <p class="text-xs mt-0.5" style="color: var(--text-tertiary)">Escribí <code class="text-cyan-400">@Parametro</code> en tu consulta SQL y los parámetros se detectarán automáticamente.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="fillPlaybookPreset('unlock_order')" class="text-xs px-3 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 transition-all">Cargar ejemplo: Destrabar orden</button>
+            <button type="button" onclick="togglePlaybookForm(false)" class="text-xs px-2.5 py-1.5 rounded-lg btn-secondary">Cerrar</button>
+          </div>
         </div>
         <form id="f-pb" class="space-y-4">
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Código (ej. PB-UNLOCK-ORDER)</label>
-              <input id="pb-code" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm font-mono" placeholder="PB-001" required/>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Código único (ej. PB-UNLOCK-ORDER)</label>
+              <input id="pb-code" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm font-mono" placeholder="PB-UNLOCK-ORDER" required/>
             </div>
             <div>
-              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Nombre</label>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Nombre descriptivo</label>
               <input id="pb-name" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="Desbloquear orden retenida" required/>
             </div>
             <div>
               <label class="text-xs block mb-1" style="color: var(--text-secondary)">Tipo de Acción</label>
               <select id="pb-type" class="input-field w-full px-3 py-2 rounded-xl text-sm">
-                <option value="SqlTemplate">SqlTemplate</option>
-                <option value="HttpWebhook">HttpWebhook</option>
+                <option value="SqlTemplate">SqlTemplate (SQL parametrizado)</option>
+                <option value="HttpWebhook">HttpWebhook (POST externo)</option>
                 <option value="StoredProcedure">StoredProcedure</option>
               </select>
             </div>
           </div>
 
           <div>
-            <label class="text-xs block mb-1" style="color: var(--text-secondary)">Síntomas disparadores (Trigger Symptoms)</label>
+            <label class="text-xs block mb-1" style="color: var(--text-secondary)">Síntomas disparadores (palabras clave separadas por coma)</label>
             <input id="pb-symptoms" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="orden bloqueada, pago aprobado sin despacho, estado stuck..." required/>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="text-xs block mb-1" style="color: var(--text-secondary)">Action Payload Template (SQL / Webhook / SP)</label>
-              <textarea id="pb-payload" rows="3" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder="UPDATE Orders SET Status = 'Ready' WHERE Id = @OrderId AND Status = 'Locked';" required></textarea>
+              <textarea id="pb-payload" rows="3" oninput="autoDetectPlaybookParams()" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder='UPDATE "Orders" SET "Status" = &apos;Ready&apos; WHERE "Id" = @OrderId AND "Status" = &apos;Locked&apos;;' required></textarea>
             </div>
             <div>
-              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Verification SQL Query (0 filas = verificado)</label>
-              <textarea id="pb-verify" rows="3" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder="SELECT Id FROM Orders WHERE Id = @OrderId AND Status = 'Locked';"></textarea>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Verification SQL Query (0 filas anómalas = verificado)</label>
+              <textarea id="pb-verify" rows="3" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder='SELECT "Id" FROM "Orders" WHERE "Id" = @OrderId AND "Status" = &apos;Locked&apos;;'></textarea>
             </div>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
             <div>
-              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Parámetros requeridos (JSON)</label>
-              <input id="pb-params" type="text" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" value='["OrderId"]'/>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Parámetros requeridos (separados por coma o JSON)</label>
+              <input id="pb-params" type="text" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder="OrderId" value='["OrderId"]'/>
             </div>
             <div>
               <label class="text-xs block mb-1" style="color: var(--text-secondary)">Máx. filas afectadas (Guardrail)</label>
-              <input id="pb-maxrows" type="number" min="1" max="1000" value="10" class="input-field w-full px-3 py-2 rounded-xl text-sm"/>
+              <input id="pb-maxrows" type="number" min="1" max="1000" value="5" class="input-field w-full px-3 py-2 rounded-xl text-sm"/>
             </div>
             <div class="pt-4">
               <label class="flex items-center gap-2 text-sm cursor-pointer">
                 <input id="pb-approval" type="checkbox" class="accent-cyan-500" checked/>
-                <span>Requiere aprobación humana</span>
+                <span>Requiere aprobación humana antes de aplicar</span>
               </label>
             </div>
           </div>
@@ -1029,12 +1110,169 @@ html.light .by-hive-badge {
         </form>
       </div>
 
+      <!-- Dry-Run Interactive Panel -->
+      <div id="pb-dryrun-card" class="hive-card p-6 hidden border border-cyan-500/40">
+        <div class="flex justify-between items-center mb-3">
+          <div>
+            <h3 class="font-semibold text-base text-cyan-400" id="pb-dryrun-title">Probar Playbook (Dry-Run en transacción revertida)</h3>
+            <p class="text-xs" style="color: var(--text-tertiary)">Ejecuta la validación de seguridad y el SQL dentro de un ROLLBACK automático sin modificar datos reales.</p>
+          </div>
+          <button type="button" onclick="closePlaybookDryRun()" class="text-xs px-2.5 py-1 rounded-lg btn-secondary">Cerrar</button>
+        </div>
+        <div id="pb-dryrun-fields" class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4"></div>
+        <div class="flex items-center justify-between gap-3">
+          <div id="pb-dryrun-result" class="text-xs font-mono"></div>
+          <button type="button" id="pb-dryrun-exec-btn" class="btn-primary px-5 py-2 rounded-xl text-xs">Ejecutar Simulación Dry-Run</button>
+        </div>
+      </div>
+
       <!-- Playbooks List -->
       <div id="l-pb" class="grid grid-cols-1 md:grid-cols-2 gap-5">
         <div class="hive-card p-8 text-center col-span-full" style="color: var(--text-secondary)">Cargando playbooks...</div>
       </div>
     </div>
-    
+
+    <!-- Contexto (Tenant Context Pack) View -->
+    <div id="v-ctx" class="view-section space-y-6">
+      <div class="flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <h2 class="text-2xl font-bold">Contexto del Tenant</h2>
+          <p class="text-sm mt-1" style="color: var(--text-secondary)">Context Pack: lo que el agente conoce de tu negocio, base de datos, repositorios e historial de resoluciones.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="ctx-version" class="text-xs px-3 py-1 rounded-full hive-card border font-mono" style="color:var(--text-tertiary);border-color:var(--border-color)">—</span>
+          <button type="button" onclick="lctx()" class="btn-secondary px-4 py-2.5 rounded-xl text-sm">Actualizar</button>
+        </div>
+      </div>
+
+      <!-- Empty state (pack no inicializado / 404) -->
+      <div id="ctx-empty" class="hive-card p-10 text-center hidden"></div>
+
+      <div id="ctx-grid" class="space-y-6">
+        <!-- Card 1: Glosario de dominio -->
+        <div id="ctx-glossary" class="hive-card p-6">
+          <h3 class="font-semibold text-lg mb-2">Glosario de dominio</h3>
+          <p class="text-xs mb-4" style="color: var(--text-secondary)">Términos de negocio que el agente usa para interpretar incidentes (ej: <code class="text-cyan-400 font-mono">remito</code> → tabla <code class="text-cyan-400 font-mono">Remitos</code>, <code class="text-cyan-400 font-mono">articulo</code> → <code class="text-cyan-400 font-mono">Articulos</code> + stock en <code class="text-cyan-400 font-mono">StockDepositos</code>).</p>
+          <div class="overflow-x-auto mb-5">
+            <table id="ctx-glossary-table" class="w-full text-sm">
+              <tbody><tr><td class="py-6 text-center text-sm" style="color:var(--text-secondary)">Cargando glosario…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="pt-4 border-t" style="border-color: var(--border-color)">
+            <div class="text-xs font-semibold uppercase tracking-wider mb-3" style="color: var(--text-tertiary)">Agregar término</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div>
+                <label class="text-xs block mb-1" for="ctx-term" style="color: var(--text-secondary)">Término</label>
+                <input id="ctx-term" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="remito"/>
+              </div>
+              <div>
+                <label class="text-xs block mb-1" for="ctx-meaning" style="color: var(--text-secondary)">Significado</label>
+                <input id="ctx-meaning" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="Comprobante de entrega de mercadería"/>
+              </div>
+              <div>
+                <label class="text-xs block mb-1" for="ctx-tables" style="color: var(--text-secondary)">Tablas (sep. por coma)</label>
+                <input id="ctx-tables" type="text" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder="Remitos, RemitoItems"/>
+              </div>
+              <div>
+                <label class="text-xs block mb-1" for="ctx-columns" style="color: var(--text-secondary)">Columnas (sep. por coma)</label>
+                <input id="ctx-columns" type="text" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder="Numero, Fecha, Estado"/>
+              </div>
+            </div>
+            <div class="flex justify-end mt-3">
+              <button type="button" onclick="ctxAddTerm()" class="btn-primary px-5 py-2.5 rounded-xl text-sm">Agregar término</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Documentos del proyecto -->
+        <div id="ctx-docs" class="hive-card p-6">
+          <h3 class="font-semibold text-lg mb-2">Documentos del proyecto</h3>
+          <p class="text-xs mb-4" style="color: var(--text-secondary)">Subí documentación (<code class="text-cyan-400 font-mono">md, txt, sql, json, csv, yaml, ddl</code> — máx 512KB) para que el agente aprenda tu modelo de datos.</p>
+          <div class="flex flex-wrap items-center gap-3 mb-5">
+            <input type="file" id="ctx-doc-file" accept=".md,.txt,.sql,.json,.csv,.yaml,.yml,.ddl" class="input-field px-3 py-2 rounded-xl text-xs" style="max-width:300px"/>
+            <button type="button" id="ctx-doc-upload-btn" onclick="ctxUploadDoc()" class="btn-primary px-5 py-2.5 rounded-xl text-sm">Subir y destilar</button>
+            <span id="ctx-doc-upload-status" class="text-xs" style="color: var(--text-tertiary)"></span>
+          </div>
+          <div id="ctx-doc-list" class="space-y-2">
+            <div class="text-xs py-4 text-center" style="color: var(--text-secondary)">Cargando documentos…</div>
+          </div>
+        </div>
+
+        <!-- Card 3: Perfil de datos y repositorios -->
+        <div id="ctx-profiles" class="hive-card p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 class="font-semibold text-lg">Perfil de datos y repositorios</h3>
+              <p class="text-xs mt-0.5" style="color: var(--text-tertiary)">Esquema introspectado y mapa de módulos del código del tenant.</p>
+            </div>
+            <button type="button" id="ctx-refreshdb-btn" onclick="ctxRefreshDb()" class="btn-secondary px-4 py-2 rounded-xl text-sm">Re-escanear base de datos</button>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <h4 class="text-xs font-semibold uppercase tracking-wider mb-3 text-cyan-400">Perfil de base de datos</h4>
+              <div id="ctx-db-profile"></div>
+            </div>
+            <div>
+              <h4 class="text-xs font-semibold uppercase tracking-wider mb-3 text-cyan-400">Repositorios</h4>
+              <div id="ctx-repo-profiles"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4: Memoria de resoluciones -->
+        <div id="ctx-memory" class="hive-card p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+            <h3 class="font-semibold text-lg">Memoria de resoluciones</h3>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" id="ctx-rebuild-btn" onclick="ctxRebuildMemory()" class="btn-secondary px-4 py-2 rounded-xl text-sm">Reconstruir desde historial</button>
+              <button type="button" id="ctx-export-btn" onclick="ctxExport()" class="btn-secondary px-4 py-2 rounded-xl text-sm">Exportar contexto (.md)</button>
+            </div>
+          </div>
+          <p class="text-xs mb-4" style="color: var(--text-secondary)">El agente recuerda qué fixes funcionaron y cuáles fallaron.</p>
+          <div id="ctx-memory-list" class="space-y-2"></div>
+          <details class="mt-5 rounded-xl border p-4" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+            <summary class="cursor-pointer text-sm font-semibold" style="color:var(--text-primary)">Lo que el agente ve (PromptDigest)</summary>
+            <p class="text-[11px] mt-1.5 mb-1" style="color:var(--text-tertiary)">Este es el bloque de contexto exacto que se inyecta en el prompt del agente.</p>
+            <pre id="ctx-digest" class="mt-3 text-xs font-mono whitespace-pre-wrap overflow-x-auto max-h-96 overflow-y-auto p-3 rounded-lg" style="background:rgba(0,0,0,0.35);color:var(--text-secondary);border:1px solid var(--border-color)">—</pre>
+          </details>
+        </div>
+
+        <!-- Card 5: Auto-mejora del agente -->
+        <div id="ctx-improve" class="hive-card p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+            <div class="flex items-center gap-2.5">
+              <h3 class="font-semibold text-lg">Auto-mejora del agente</h3>
+              <span id="ctx-improve-count" class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 font-semibold hidden">0</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <select id="ctx-improve-filter" onchange="ctxImproveFilterChange()" class="input-field px-3 py-2 rounded-xl text-xs" aria-label="Filtrar sugerencias">
+                <option value="">En curso</option>
+                <option value="Suggested">Sugeridas</option>
+                <option value="Dismissed">Descartadas</option>
+                <option value="Converted">Convertidas</option>
+              </select>
+              <button type="button" id="ctx-improve-scan-btn" onclick="ctxImproveScan()" class="btn-secondary px-4 py-2 rounded-xl text-sm">Escanear fallos</button>
+            </div>
+          </div>
+          <p class="text-xs mb-4" style="color: var(--text-secondary)">Cada fallo del agente genera automáticamente un ticket de mejora — convertilos en playbooks y el sistema deja de repetir el error.</p>
+          <div id="ctx-improve-list" class="space-y-2"></div>
+        </div>
+
+        <!-- Card 6: Tareas IA pendientes (pool de reintentos) -->
+        <div id="ctx-llmtasks" class="hive-card p-6">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+            <div class="flex items-center gap-2.5">
+              <h3 class="font-semibold text-lg">Tareas IA pendientes</h3>
+              <span id="ctx-llmtasks-count" class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 font-semibold hidden">0</span>
+            </div>
+            <button type="button" onclick="llt()" class="btn-secondary px-4 py-2 rounded-xl text-sm">Actualizar</button>
+          </div>
+          <p class="text-xs mb-4" style="color: var(--text-secondary)">Trabajo de IA que no pudo terminar (caída de providers) — el sistema lo reintenta solo cuando el servicio vuelve. Nada se pierde en silencio.</p>
+          <div id="ctx-llmtasks-list" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Config View -->
     <div id="v-config" class="view-section space-y-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
@@ -1066,20 +1304,85 @@ html.light .by-hive-badge {
       </div>
 
       <!-- Agent runtime -->
-      <div class="hive-card p-6">
+      <div id="cfg-runtime-card" class="hive-card p-6">
         <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
-          <h3 class="font-semibold text-lg">Runtime del agente (planner)</h3>
+          <div>
+            <h3 class="font-semibold text-lg">Runtime del agente &amp; Modo de Autonomía</h3>
+            <p class="text-xs mt-0.5" style="color:var(--text-tertiary)">Controlá si el AI Support Engineer opera en modo piloto sin escritura (Shadow), asistido por humano o autónomo.</p>
+          </div>
           <button type="button" onclick="saveAgentRuntime()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar runtime</button>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-agent-enabled" type="checkbox" class="accent-cyan-500"/> Agente habilitado</label>
           <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-planner" type="checkbox" class="accent-cyan-500"/> Planner LLM</label>
+          <div class="md:col-span-2">
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Modo Operativo (AI Support Engineer)</label>
+            <select id="cfg-operating-mode" class="input-field w-full px-3 py-2.5 rounded-xl text-sm">
+              <option value="Shadow">Shadow (POC 14 días — Solo lectura: investiga y calcula ROI sin tocar datos ni abrir PRs)</option>
+              <option value="Assisted">Assisted (Copiloto — Propone fixes de DB/código y pide siempre aprobación humana 1-Click)</option>
+              <option value="Autonomous">Autonomous (Autónomo — Ejecuta playbooks y fixes seguros dentro de los umbrales)</option>
+            </select>
+          </div>
           <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Planner version</label>
             <input id="cfg-planner-version" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" value="v1"/></div>
           <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Tono conversacional</label>
             <input id="cfg-tone" type="text" placeholder="sales, soporte..." class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
           <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Pasos máx. planner</label>
             <input id="cfg-max-steps" type="number" min="1" max="8" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
+        </div>
+      </div>
+
+      <!-- ChatOps & Outbound Webhooks (Slack / Teams / HTTP) -->
+      <div id="cfg-chatops-card" class="hive-card p-6 border border-cyan-500/20">
+        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="font-semibold text-lg">Aprobaciones ChatOps 1-Click (Slack · Microsoft Teams · Webhook)</h3>
+              <span id="cfg-wh-provider-badge" class="text-[11px] px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-mono">Auto-detect</span>
+            </div>
+            <p class="text-xs mt-1" style="color:var(--text-secondary)">Pegá la URL de tu Incoming Webhook de Slack o Microsoft Teams. HiveOps detecta el formato automáticamente y envía tarjetas con botones <strong>[Aprobar Fix]</strong> y <strong>[Rechazar]</strong> en 1 clic.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="testChatOpsWebhook()" class="btn-secondary px-3.5 py-2 rounded-xl text-xs">Enviar tarjeta de prueba</button>
+            <button type="button" onclick="saveChatOpsWebhook()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar ChatOps</button>
+          </div>
+        </div>
+        <div class="space-y-4">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input id="cfg-wh-enabled" type="checkbox" class="accent-cyan-500"/>
+            <span>Habilitar notificaciones y aprobaciones salientes por Webhook / ChatOps</span>
+          </label>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="md:col-span-2">
+              <label class="text-xs block mb-1" style="color:var(--text-secondary)">Webhook URL (Slack <code class="text-cyan-400">hooks.slack.com/...</code>, Teams <code class="text-cyan-400">webhook.office.com/...</code> o endpoint HTTP propio)</label>
+              <input id="cfg-wh-url" type="url" oninput="updateWebhookProviderBadge()" class="input-field w-full px-3 py-2 rounded-xl text-sm font-mono" placeholder="https://hooks.slack.com/services/T000/B000/XXXX"/>
+            </div>
+            <div>
+              <label class="text-xs block mb-1" style="color:var(--text-secondary)">Secret HMAC-SHA256 (opcional)</label>
+              <input id="cfg-wh-secret" type="password" autocomplete="off" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="Firma X-HiveOps-Signature"/>
+            </div>
+          </div>
+          <div>
+            <label class="text-xs block mb-2" style="color:var(--text-secondary)">Eventos a notificar</label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              <label class="flex items-center gap-2 p-2 rounded-lg border cursor-pointer" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+                <input type="checkbox" class="accent-cyan-500 cfg-wh-evt" value="approval.required" checked/>
+                <span>Aprobaciones 1-Click (<code class="text-cyan-400">approval.required</code>)</span>
+              </label>
+              <label class="flex items-center gap-2 p-2 rounded-lg border cursor-pointer" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+                <input type="checkbox" class="accent-cyan-500 cfg-wh-evt" value="incident.created" checked/>
+                <span>Nuevos incidentes (<code class="text-cyan-400">incident.created</code>)</span>
+              </label>
+              <label class="flex items-center gap-2 p-2 rounded-lg border cursor-pointer" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+                <input type="checkbox" class="accent-cyan-500 cfg-wh-evt" value="handoff.requested" checked/>
+                <span>Escalación a humano (<code class="text-cyan-400">handoff.requested</code>)</span>
+              </label>
+              <label class="flex items-center gap-2 p-2 rounded-lg border cursor-pointer" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+                <input type="checkbox" class="accent-cyan-500 cfg-wh-evt" value="frustration.detected"/>
+                <span>Frustración (<code class="text-cyan-400">frustration.detected</code>)</span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1174,31 +1477,31 @@ html.light .by-hive-badge {
 </div>
 
 <!-- Create Incident Modal -->
-<div id="mc" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(8px)">
+<div id="mc" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(8px)" role="dialog" aria-modal="true" aria-label="Nuevo incidente">
   <div class="modal-content hive-card w-full max-w-lg p-6">
     <div class="flex justify-between items-center mb-6">
       <h3 class="text-xl font-bold">Nuevo Incidente</h3>
-      <button onclick="cm('mc')" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <button onclick="cm('mc')" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)" aria-label="Cerrar">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
         </svg>
       </button>
     </div>
     <form id="fc" class="space-y-4">
-      <input id="ct" type="text" placeholder="Titulo del incidente" class="input-field w-full px-4 py-3 rounded-xl text-sm" required/>
-      <textarea id="cd" rows="4" placeholder="Descripcion detallada..." class="input-field w-full px-4 py-3 rounded-xl text-sm resize-none" required></textarea>
+      <input id="ct" type="text" placeholder="Título del incidente" class="input-field w-full px-4 py-3 rounded-xl text-sm" required/>
+      <textarea id="cd" rows="4" placeholder="Descripción detallada..." class="input-field w-full px-4 py-3 rounded-xl text-sm resize-none" required></textarea>
       <div class="grid grid-cols-2 gap-4">
-        <select id="cv" class="input-field w-full px-4 py-3 rounded-xl text-sm">
-          <option value="Low">Prioridad: Baja</option>
-          <option value="Medium" selected>Prioridad: Media</option>
-          <option value="High">Prioridad: Alta</option>
-          <option value="Critical">Prioridad: Critica</option>
+        <select id="cv" class="input-field w-full px-4 py-3 rounded-xl text-sm" aria-label="Severidad">
+          <option value="Low">Severidad: Baja</option>
+          <option value="Medium" selected>Severidad: Media</option>
+          <option value="High">Severidad: Alta</option>
+          <option value="Critical">Severidad: Crítica</option>
         </select>
-        <select id="cc" class="input-field w-full px-4 py-3 rounded-xl text-sm">
-          <option value="Other">Categoria: Otro</option>
-          <option value="CodeBug">Bug de Codigo</option>
+        <select id="cc" class="input-field w-full px-4 py-3 rounded-xl text-sm" aria-label="Categoría">
+          <option value="Other">Categoría: Otro</option>
+          <option value="CodeBug">Bug de Código</option>
           <option value="DbCorruption">Base de Datos</option>
-          <option value="ConfigError">Configuracion</option>
+          <option value="ConfigError">Configuración</option>
           <option value="Performance">Performance</option>
           <option value="Security">Seguridad</option>
         </select>
@@ -1212,43 +1515,43 @@ html.light .by-hive-badge {
 </div>
 
 <!-- Create KB Modal -->
-<div id="mk" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(8px)">
+<div id="mk" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(8px)" role="dialog" aria-modal="true" aria-label="Nuevo artículo KB">
   <div class="modal-content hive-card w-full max-w-2xl p-6">
     <div class="flex justify-between items-center mb-6">
-      <h3 class="text-xl font-bold">Nuevo Articulo KB</h3>
-      <button onclick="cm('mk')" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <h3 class="text-xl font-bold">Nuevo Artículo KB</h3>
+      <button onclick="cm('mk')" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)" aria-label="Cerrar">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
         </svg>
       </button>
     </div>
     <form id="fk" class="space-y-4">
-      <input id="kt" type="text" placeholder="Titulo del articulo" class="input-field w-full px-4 py-3 rounded-xl text-sm" required/>
+      <input id="kt" type="text" placeholder="Título del artículo" class="input-field w-full px-4 py-3 rounded-xl text-sm" required/>
       <div class="grid grid-cols-2 gap-4">
-        <input id="kc" type="text" placeholder="Categoria" class="input-field w-full px-4 py-3 rounded-xl text-sm"/>
+        <input id="kc" type="text" placeholder="Categoría" class="input-field w-full px-4 py-3 rounded-xl text-sm"/>
         <input id="ktg" type="text" placeholder="Tags (separados por coma)" class="input-field w-full px-4 py-3 rounded-xl text-sm"/>
       </div>
-      <textarea id="kb" rows="4" placeholder="Contenido del articulo..." class="input-field w-full px-4 py-3 rounded-xl text-sm resize-none" required></textarea>
-      <textarea id="ks" rows="3" placeholder="Pasos de resolucion..." class="input-field w-full px-4 py-3 rounded-xl text-sm resize-none"></textarea>
+      <textarea id="kb" rows="4" placeholder="Contenido del artículo..." class="input-field w-full px-4 py-3 rounded-xl text-sm resize-none" required></textarea>
+      <textarea id="ks" rows="3" placeholder="Pasos de resolución..." class="input-field w-full px-4 py-3 rounded-xl text-sm resize-none"></textarea>
       <div class="flex items-center gap-2">
         <input id="kp" type="checkbox" class="w-4 h-4 rounded border-cyan-500/50 accent-cyan-500"/>
-        <label class="text-sm" style="color: var(--text-secondary)">Publicar articulo</label>
+        <label class="text-sm" style="color: var(--text-secondary)">Publicar artículo</label>
       </div>
       <div class="flex justify-end gap-3 pt-2">
         <button type="button" onclick="cm('mk')" class="btn-secondary px-5 py-2.5 rounded-xl text-sm">Cancelar</button>
-        <button type="submit" class="btn-primary px-6 py-2.5 rounded-xl text-sm">Guardar Articulo</button>
+        <button type="submit" class="btn-primary px-6 py-2.5 rounded-xl text-sm">Guardar Artículo</button>
       </div>
     </form>
   </div>
 </div>
 
 <!-- Detail Drawer -->
-<div id="dr" class="fixed top-0 right-0 bottom-0 w-full max-w-2xl glass-strong z-50 drawer overflow-y-auto">
+<div id="dr" class="fixed top-0 right-0 bottom-0 w-full max-w-2xl glass-strong z-50 drawer overflow-y-auto" role="dialog" aria-modal="true" aria-label="Detalle del incidente">
   <div class="p-6">
     <div class="flex justify-between items-center mb-6">
       <h3 class="text-xl font-bold">Detalle del Incidente</h3>
-      <button onclick="cd()" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <button onclick="cd()" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)" aria-label="Cerrar panel">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
         </svg>
       </button>
@@ -1260,12 +1563,12 @@ html.light .by-hive-badge {
 </div>
 
 <!-- Change Password Modal -->
-<div id="m-pwd" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(8px)">
+<div id="m-pwd" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(8px)" role="dialog" aria-modal="true" aria-label="Cambiar contraseña">
   <div class="modal-content hive-card w-full max-w-sm p-6">
     <div class="flex justify-between items-center mb-6">
       <h3 class="text-xl font-bold">Cambiar contraseña</h3>
-      <button onclick="cm('m-pwd')" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      <button onclick="cm('m-pwd')" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)" aria-label="Cerrar">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
     </div>
     <form id="f-pwd" class="space-y-4" onsubmit="event.preventDefault(); changePassword();">
@@ -1428,7 +1731,7 @@ initTheme();
           rollbackBtn = `<div class="mt-3 space-y-1">
             <button class="px-3 py-1.5 text-xs rounded-lg bg-stone-700/60 text-stone-300 cursor-not-allowed flex items-center gap-1" disabled title="Disponible en Plan Pro">
               <span>Rollback</span>
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V6a5 5 0 00-5-5zm-3 8V6a3 3 0 016 0v3H9z"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 1a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V6a5 5 0 00-5-5zm-3 8V6a3 3 0 016 0v3H9z"/></svg>
             </button>
             <div class="text-[11px]" style="color:var(--text-tertiary)">Tu plan actual (Starter) no incluye reversión automática. <span class="text-cyan-500">Mejora tu plan</span> para activar esta función.</div>
           </div>`;
@@ -1442,7 +1745,7 @@ initTheme();
         ${rollbackBtn}`;
       const container = document.getElementById('db');
       if(!container) return;
-      // Insert before the first content card (Descripcion)
+      // Insert before the first content card (Descripción)
       const firstCard = container.querySelector('.hive-card');
       if(firstCard) container.insertBefore(card, firstCard);
       else container.appendChild(card);
@@ -1451,7 +1754,7 @@ initTheme();
       if (isAdmin) {
         const btn = document.getElementById(`rb-${escapeAttr(d.id)}`);
         if (btn) btn.addEventListener('click', async () => {
-          if (!confirm('Esta acción revertirá los cambios al último estado estable conocido. ¿Proceder?')) return;
+          if (!(await askConfirm({title:'Revertir cambios', detail:'Se restaurarán las filas al estado previo conocido.', confirmLabel:'Revertir', danger:true}))) return;
           try {
             const token2 = localStorage.getItem('token')||'';
             const tid2 = localStorage.getItem('tenantId');
@@ -1719,5 +2022,19 @@ initTheme();
   window.addEventListener('storage', (e)=>{ if(e.key==='tenantId') loadPlan(); });
 })();
 </script>
+
+<!-- Confirm Modal (destructive actions) -->
+<div id="m-confirm" class="hidden fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="m-confirm-title">
+  <div class="absolute inset-0" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);" onclick="resolveConfirm(false)"></div>
+  <div class="hive-card w-full max-w-md p-6 relative z-10">
+    <h3 id="m-confirm-title" class="text-lg font-bold mb-2">Confirmar acción</h3>
+    <p id="m-confirm-detail" class="text-sm mb-4" style="color: var(--text-secondary)"></p>
+    <pre id="m-confirm-preview" class="hidden mb-4 p-3 rounded-lg text-xs max-h-40 overflow-x-auto" style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-secondary)"></pre>
+    <div class="flex justify-end gap-3">
+      <button type="button" id="m-confirm-cancel" onclick="resolveConfirm(false)" class="btn-secondary px-5 py-2.5 rounded-xl text-sm">Cancelar</button>
+      <button type="button" id="m-confirm-btn" onclick="resolveConfirm(true)" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-red-600 hover:bg-red-500 text-white transition-all">Confirmar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

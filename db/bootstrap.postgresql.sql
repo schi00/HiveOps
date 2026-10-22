@@ -2,6 +2,7 @@
 -- HiveOps Support Bot - PostgreSQL bootstrap (consolidated)
 -- Covers: create_hive_support_bot.sql + additive patches + V1.0 ApiDrift
 --         + V1.1 Effectiveness/Embeddings + V1.2 AI Support Engineer
+--         + V1.3 Tenant Context Pack + V1.4 Tenant Improvement Suggestions
 -- Target: PostgreSQL 14+  |  psql bootstrap.postgresql.sql
 -- =====================================================================
 -- Idempotent: every DDL is guarded with IF [NOT] EXISTS / ADD COLUMN IF
@@ -325,6 +326,135 @@ CREATE INDEX IF NOT EXISTS "IX_IAE_Incident"
     ON "IncidentAuditEntries"("TenantId", "IncidentId", "SequenceNumber");
 
 -- =====================================================================
+-- V1.3: TENANT CONTEXT PACK
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS "TenantContextPacks" (
+    "Id"                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    "TenantId"              uuid         NOT NULL,
+    "Version"               integer      NOT NULL DEFAULT 1,
+    "DomainGlossaryJson"    text         NOT NULL DEFAULT '{}',
+    "DatabaseProfileJson"   text         NOT NULL DEFAULT '{}',
+    "RepoProfilesJson"      text         NOT NULL DEFAULT '{}',
+    "ResolutionMemoryJson"  text         NOT NULL DEFAULT '[]',
+    "PromptDigest"          text         NOT NULL DEFAULT '',
+    "CreatedAtUtc"          timestamptz  NOT NULL DEFAULT now(),
+    "UpdatedAtUtc"          timestamptz  NOT NULL DEFAULT now(),
+    "UpdatedBy"             varchar(200) NULL,
+    CONSTRAINT "FK_TCP_Tenants" FOREIGN KEY ("TenantId")
+        REFERENCES "Tenants"("Id")
+);
+
+-- One pack per tenant.
+CREATE UNIQUE INDEX IF NOT EXISTS "UX_TCP_Tenant"
+    ON "TenantContextPacks"("TenantId");
+
+CREATE TABLE IF NOT EXISTS "TenantDocuments" (
+    "Id"               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    "TenantId"         uuid         NOT NULL,
+    "FileName"         text         NOT NULL,
+    "ContentType"      text         NOT NULL,
+    "SizeBytes"        bigint       NOT NULL DEFAULT 0,
+    "Status"           text         NOT NULL DEFAULT 'Pending', -- Pending | Distilled | Failed
+    "DistilledSummary" text         NULL,
+    "UploadedBy"       varchar(200) NULL,
+    "UploadedAtUtc"    timestamptz  NOT NULL DEFAULT now(),
+    "ProcessedAtUtc"   timestamptz  NULL,
+    "ChunkCount"       integer      NOT NULL DEFAULT 0,
+    CONSTRAINT "FK_TD_Tenants" FOREIGN KEY ("TenantId")
+        REFERENCES "Tenants"("Id")
+);
+
+CREATE INDEX IF NOT EXISTS "IX_TD_TenantId"
+    ON "TenantDocuments"("TenantId");
+
+CREATE TABLE IF NOT EXISTS "TenantDocumentChunks" (
+    "Id"           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    "TenantId"     uuid        NOT NULL,
+    "DocumentId"   uuid        NOT NULL,
+    "ChunkIndex"   integer     NOT NULL,
+    "SectionTitle" text        NULL,
+    "Content"      text        NOT NULL,
+    "CreatedAtUtc" timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT "FK_TDC_Tenants" FOREIGN KEY ("TenantId")
+        REFERENCES "Tenants"("Id"),
+    CONSTRAINT "FK_TDC_Documents" FOREIGN KEY ("DocumentId")
+        REFERENCES "TenantDocuments"("Id") ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS "IX_TDC_TenantId"
+    ON "TenantDocumentChunks"("TenantId");
+CREATE INDEX IF NOT EXISTS "IX_TDC_Document"
+    ON "TenantDocumentChunks"("TenantId", "DocumentId", "ChunkIndex");
+
+-- =====================================================================
+-- V1.4: TENANT IMPROVEMENT SUGGESTIONS
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS "TenantImprovementSuggestions" (
+    "Id"                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    "TenantId"              uuid         NOT NULL,
+    "IncidentId"            uuid         NULL, -- source incident; NULL = manually generated
+    "Kind"                  text         NOT NULL DEFAULT 'NewPlaybook', -- NewPlaybook | KbGap | DataQualityRule | PlannerGap
+    "Title"                 text         NOT NULL DEFAULT '',
+    "Description"           text         NOT NULL DEFAULT '',
+    "EvidenceJson"          text         NOT NULL DEFAULT '{}', -- { "symptoms","failedAttempts":[],"escalationNotes","relatedTerms":[] }
+    "DraftPayloadJson"      text         NOT NULL DEFAULT '{}', -- proposed artifact (playbook/kb article/dq rule)
+    "Status"                text         NOT NULL DEFAULT 'Suggested', -- Suggested | Dismissed | Converted
+    "OccurrenceCount"       integer      NOT NULL DEFAULT 1,
+    "ConvertedPlaybookId"   uuid         NULL, -- TenantPlaybooks.Id created on conversion
+    "CreatedBy"             varchar(200) NULL,
+    "DecidedBy"             varchar(200) NULL,
+    "CreatedAtUtc"          timestamptz  NOT NULL DEFAULT now(),
+    "UpdatedAtUtc"          timestamptz  NOT NULL DEFAULT now(),
+    "DecidedAtUtc"          timestamptz  NULL,
+    CONSTRAINT "FK_TIS_Tenants" FOREIGN KEY ("TenantId")
+        REFERENCES "Tenants"("Id"),
+    CONSTRAINT "FK_TIS_Incidents" FOREIGN KEY ("IncidentId")
+        REFERENCES "Incidents"("Id"),
+    CONSTRAINT "FK_TIS_Playbooks" FOREIGN KEY ("ConvertedPlaybookId")
+        REFERENCES "TenantPlaybooks"("Id")
+);
+
+CREATE INDEX IF NOT EXISTS "IX_TIS_TenantId"
+    ON "TenantImprovementSuggestions"("TenantId");
+CREATE INDEX IF NOT EXISTS "IX_TIS_Incident"
+    ON "TenantImprovementSuggestions"("TenantId", "IncidentId");
+CREATE INDEX IF NOT EXISTS "IX_TIS_Status"
+    ON "TenantImprovementSuggestions"("TenantId", "Status");
+
+-- =====================================================================
+-- V1.5: LLM PENDING TASKS (retry pool for interrupted AI work)
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS "LlmPendingTasks" (
+    "Id"                uuid         NOT NULL DEFAULT gen_random_uuid(),
+    "TenantId"          uuid         NOT NULL,
+    "TaskType"          varchar(40)  NOT NULL,
+    "PayloadJson"       text         NOT NULL DEFAULT '{}',
+    "DedupeKey"         varchar(300) NOT NULL,
+    "Status"            varchar(20)  NOT NULL DEFAULT 'Pending',
+    "Attempts"          integer      NOT NULL DEFAULT 0,
+    "MaxAttempts"       integer      NOT NULL DEFAULT 12,
+    "NextAttemptAtUtc"  timestamptz  NOT NULL DEFAULT now(),
+    "LastError"         varchar(2000) NULL,
+    "CreatedAtUtc"      timestamptz  NOT NULL DEFAULT now(),
+    "UpdatedAtUtc"      timestamptz  NOT NULL DEFAULT now(),
+    "CompletedAtUtc"    timestamptz  NULL,
+    CONSTRAINT "PK_LlmPendingTasks" PRIMARY KEY ("Id"),
+    CONSTRAINT "FK_LPT_Tenants" FOREIGN KEY ("TenantId")
+        REFERENCES "Tenants"("Id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "UX_LPT_Tenant_Dedupe_Pending"
+    ON "LlmPendingTasks"("TenantId", "DedupeKey")
+    WHERE "Status" = 'Pending';
+CREATE INDEX IF NOT EXISTS "IX_LPT_Due"
+    ON "LlmPendingTasks"("Status", "NextAttemptAtUtc");
+CREATE INDEX IF NOT EXISTS "IX_LPT_Tenant_Status"
+    ON "LlmPendingTasks"("TenantId", "Status");
+
+-- =====================================================================
 -- ROW-LEVEL SECURITY (tenant isolation safety net)
 -- =====================================================================
 -- The app sets the session GUC  app.tenant_id  on every pooled connection
@@ -346,7 +476,9 @@ DECLARE
         'Conversations', 'ConversationMessages', 'BusinessConfigs',
         'Incidents', 'IncidentAttachments', 'DiagnosticLogs',
         'KbArticles', 'ApiDependencies',
-        'IncidentRemediationSnapshots', 'TenantPlaybooks', 'IncidentAuditEntries'
+        'IncidentRemediationSnapshots', 'TenantPlaybooks', 'IncidentAuditEntries',
+        'TenantContextPacks', 'TenantDocuments', 'TenantDocumentChunks',
+        'TenantImprovementSuggestions', 'LlmPendingTasks'
     ];
 BEGIN
     FOREACH t IN ARRAY tenant_tables LOOP

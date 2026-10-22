@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using HiveOps.Api.Authentication;
+using HiveOps.Api.Services;
+using HiveOps.Api.Utilities;
 using HiveOps.Application.Configuration;
 using HiveOps.Application.Interfaces;
 using HiveOps.Application.Models;
@@ -146,6 +148,81 @@ public sealed class TenantsController : ControllerBase
         var errors = TenantConfigurationValidator.Validate(cfg);
         if (errors.Count > 0) return BadRequest(new { errors });
         return Ok(await _configService.PatchEscalationConfigAsync(id, body, Audit(nameof(EscalationConfig)), ct));
+    }
+
+    [HttpGet("{id:guid}/config/outbound-webhook")]
+    public async Task<ActionResult<OutboundWebhookSettings>> GetOutboundWebhook(Guid id, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var tenant = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (tenant is null) return NotFound();
+        var settings = TenantSettingsJson.Parse(tenant.ConfigJson).OutboundWebhook;
+        return Ok(settings);
+    }
+
+    [HttpPut("{id:guid}/config/outbound-webhook")]
+    public async Task<ActionResult<OutboundWebhookSettings>> PutOutboundWebhook(
+        Guid id,
+        [FromBody] OutboundWebhookSettings body,
+        CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (tenant is null) return NotFound();
+
+        var root = TenantSettingsJson.Parse(tenant.ConfigJson);
+        root.OutboundWebhook = new OutboundWebhookSettings
+        {
+            Enabled = body.Enabled,
+            Url = string.IsNullOrWhiteSpace(body.Url) ? null : body.Url.Trim(),
+            Secret = string.IsNullOrWhiteSpace(body.Secret) ? null : body.Secret.Trim(),
+            Events = (body.Events is { Count: > 0 }
+                ? body.Events.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e => e.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                : ["approval.required", "incident.created", "handoff.requested", "conversation.resolved"])
+        };
+
+        tenant.ConfigJson = TenantSettingsJson.Stringify(root);
+        await _db.SaveChangesAsync(ct);
+        return Ok(root.OutboundWebhook);
+    }
+
+    [HttpPost("{id:guid}/config/outbound-webhook/test")]
+    public async Task<IActionResult> TestOutboundWebhook(
+        Guid id,
+        [FromServices] IOutboundWebhookService webhookService,
+        [FromServices] ChatOpsApprovalTokenService tokenService,
+        CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var tenant = await _db.Tenants.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (tenant is null) return NotFound();
+
+        var settings = TenantSettingsJson.Parse(tenant.ConfigJson).OutboundWebhook;
+        if (!settings.Enabled || string.IsNullOrWhiteSpace(settings.Url))
+            return BadRequest(new { message = "Habilitá el webhook y guardá una URL válida antes de enviar la prueba." });
+
+        var sampleIncidentId = Guid.NewGuid();
+        var approveToken = tokenService.CreateToken(id, sampleIncidentId, "approve");
+        var rejectToken = tokenService.CreateToken(id, sampleIncidentId, "reject");
+        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+        var approveUrl = $"{baseUrl}/api/support/chatops/incidents/{sampleIncidentId}/decision?tenantId={id}&action=approve&token={approveToken}";
+        var rejectUrl = $"{baseUrl}/api/support/chatops/incidents/{sampleIncidentId}/decision?tenantId={id}&action=reject&token={rejectToken}";
+
+        var payload = new
+        {
+            incidentId = sampleIncidentId,
+            branchName = "Prueba de conectividad ChatOps 1-Click (HiveOps)",
+            approvePath = approveUrl,
+            rejectPath = rejectUrl,
+            slackBlocks = SupervisionNotificationService.BuildSlackApprovalBlocks(
+                id, sampleIncidentId, "Prueba de conectividad ChatOps 1-Click", approveUrl, rejectUrl, approveToken, rejectToken),
+            teamsCard = SupervisionNotificationService.BuildTeamsApprovalCard(
+                id, sampleIncidentId, "Prueba de conectividad ChatOps 1-Click", approveUrl, rejectUrl),
+            at = DateTimeOffset.UtcNow
+        };
+
+        await webhookService.SendEventAsync(id, "approval.required", payload, ct);
+        return Ok(new { ok = true, message = "Evento de prueba enviado al webhook configurado." });
     }
 
     private TenantConfigAuditInfo Audit(string section) =>

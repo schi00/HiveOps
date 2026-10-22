@@ -39,6 +39,7 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
     private const int MaxEvidenceCharsForPrompt = 4000;
     private const int MaxGitPathCandidates = 20;
     private const int MaxRenderedLogChars = 4000;
+    private const int MaxContextDigestChars = 3500;
     private static readonly TimeSpan DefaultLogLookback = TimeSpan.FromHours(24);
 
     private static readonly Regex SelectStartPattern = new(
@@ -74,6 +75,7 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
     private readonly IGitService _gitService;
     private readonly ILogger<RootCauseHypothesisService> _logger;
     private readonly Func<Guid, string, string, CancellationToken, Task<string>> _chatCompletion;
+    private readonly ITenantContextPackService? _contextPacks;
 
     public RootCauseHypothesisService(
         KernelFactory kernelFactory,
@@ -83,9 +85,11 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
         ITargetDatabaseDiagnosticService targetDb,
         ITargetLogCollector logCollector,
         IGitService gitService,
-        ILogger<RootCauseHypothesisService> logger)
+        ILogger<RootCauseHypothesisService> logger,
+        ITenantContextPackService? contextPacks = null)
         : this(kernelFactory, db, tenantConfigService, deploymentOptions,
-            targetDb, logCollector, gitService, logger, chatCompletion: null)
+            targetDb, logCollector, gitService, logger, chatCompletion: null,
+            contextPacks: contextPacks)
     {
     }
 
@@ -102,7 +106,8 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
         ITargetLogCollector logCollector,
         IGitService gitService,
         ILogger<RootCauseHypothesisService> logger,
-        Func<Guid, string, string, CancellationToken, Task<string>>? chatCompletion)
+        Func<Guid, string, string, CancellationToken, Task<string>>? chatCompletion,
+        ITenantContextPackService? contextPacks = null)
     {
         _kernelFactory = kernelFactory;
         _db = db;
@@ -113,6 +118,7 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
         _gitService = gitService;
         _logger = logger;
         _chatCompletion = chatCompletion ?? CompleteChatAsync;
+        _contextPacks = contextPacks;
     }
 
     /// <inheritdoc />
@@ -134,6 +140,9 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
                 "Schema discovery failed for tenant {TenantId}; continuing without DDL.", tenantId);
         }
 
+        // (a.2) Persistent tenant context-pack digest — best effort, never throws.
+        var contextDigest = await GetDigestSafeAsync(tenantId, ct);
+
         // (b) Recent commits touching suspect files — best effort.
         var commits = await TryGetRecentCommitsAsync(incident, incidentText, ct);
 
@@ -145,7 +154,7 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
 
         // (e) Structured hypothesis from all gathered evidence.
         var hypothesis = await DeriveHypothesisAsync(
-            incident, schemaDdl, databaseEvidence, logs, commits, ct);
+            incident, schemaDdl, databaseEvidence, logs, commits, contextDigest, ct);
 
         return new RootCauseBundle(
             incident.Id,
@@ -181,6 +190,29 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
     }
 
     // ─── Evidence gathering ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Fetches the tenant context-pack digest for prompt injection. Never throws:
+    /// a missing service, missing pack or retrieval failure all degrade to ""
+    /// so the investigation proceeds without durable tenant context.
+    /// </summary>
+    private async Task<string> GetDigestSafeAsync(Guid tenantId, CancellationToken ct)
+    {
+        if (_contextPacks is null)
+            return string.Empty;
+
+        try
+        {
+            return Truncate(await _contextPacks.GetPromptDigestAsync(tenantId, ct), MaxContextDigestChars);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Context-pack digest retrieval failed for tenant {TenantId}; continuing without durable tenant context.",
+                tenantId);
+            return string.Empty;
+        }
+    }
 
     private async Task<IReadOnlyList<GitCommitEvidence>> TryGetRecentCommitsAsync(
         Incident incident, string incidentText, CancellationToken ct)
@@ -309,6 +341,7 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
         IReadOnlyList<DiagnosticQueryEvidence> databaseEvidence,
         IReadOnlyList<AppLogEvidence> logs,
         IReadOnlyList<GitCommitEvidence> commits,
+        string contextDigest,
         CancellationToken ct)
     {
         var evidenceText = RenderDiagnosticEvidence(databaseEvidence);
@@ -318,10 +351,16 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
             ? "(schema unavailable)"
             : Truncate(schemaDdl, MaxSchemaCharsForPrompt);
 
+        // Durable per-tenant context (glossary, past fixes, conventions) is only
+        // injected here — the diagnostic-query planner prompt stays tight.
+        var contextBlock = string.IsNullOrWhiteSpace(contextDigest)
+            ? string.Empty
+            : $"CONTEXTO PERSISTENTE DEL CLIENTE (glosario, memoria de fixes, convenciones):\n{contextDigest}\n\n";
+
         var systemPrompt = $$"""
             You are the HiveOps Root-Cause Hypothesis Engine. You receive real evidence collected from the tenant's systems and must produce ONE structured hypothesis about the incident's root cause.
 
-            EVIDENCE — DATABASE DIAGNOSTIC RESULTS:
+            {{contextBlock}}EVIDENCE — DATABASE DIAGNOSTIC RESULTS:
             {{evidenceText}}
 
             EVIDENCE — APPLICATION LOG ENTRIES:

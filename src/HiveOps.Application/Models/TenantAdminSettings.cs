@@ -69,8 +69,8 @@ public sealed class OutboundWebhookSettings
     public string? Url { get; set; }
     /// <summary>Shared secret used for HMAC-SHA256 request signing.</summary>
     public string? Secret { get; set; }
-    /// <summary>Event names to deliver. Supported: handoff.requested, conversation.resolved, frustration.detected, sla.breached</summary>
-    public List<string> Events { get; set; } = ["handoff.requested", "conversation.resolved"];
+    /// <summary>Event names to deliver. Supported: approval.required, incident.created, handoff.requested, conversation.resolved, frustration.detected, sla.breached</summary>
+    public List<string> Events { get; set; } = ["approval.required", "incident.created", "handoff.requested", "conversation.resolved"];
 }
 
 public sealed class CatalogSyncSettings

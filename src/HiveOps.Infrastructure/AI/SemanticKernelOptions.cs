@@ -7,6 +7,13 @@ public sealed class SemanticKernelOptions
     public string ActiveProfile { get; set; } = "Testing";
     public OpenRouterOptions OpenRouter { get; set; } = new();
     public EmbeddingOptions Embeddings { get; set; } = new();
+
+    /// <summary>
+    /// Ordered OpenAI-compatible chat providers for failover (e.g. OpenRouter, Groq, Gemini).
+    /// When non-empty, takes precedence over the single OpenRouter configuration and the
+    /// active profile's ModelId (each provider carries its own model).
+    /// </summary>
+    public List<LlmProviderOptions> Providers { get; set; } = [];
     public Dictionary<string, ChatProfileOptions> Profiles { get; set; } = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Testing"] = new()
@@ -54,4 +61,14 @@ public sealed class ChatProfileOptions
     public bool Enabled { get; set; }
     public string ModelId { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+}
+
+/// <summary>One OpenAI-compatible chat provider in the failover chain.</summary>
+public sealed class LlmProviderOptions
+{
+    public bool Enabled { get; set; } = true;
+    public string Name { get; set; } = string.Empty;
+    public string ApiKey { get; set; } = string.Empty;
+    public string Endpoint { get; set; } = string.Empty;
+    public string ModelId { get; set; } = string.Empty;
 }

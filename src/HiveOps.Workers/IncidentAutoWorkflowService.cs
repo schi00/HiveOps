@@ -241,6 +241,21 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
         }
         else
         {
+            TenantOperatingMode fallbackMode;
+            using (var modeScope = _scopeFactory.CreateScope())
+            {
+                fallbackMode = await GetTenantOperatingModeAsync(modeScope, incident.TenantId, cancellationToken);
+            }
+
+            if (fallbackMode == TenantOperatingMode.Shadow)
+            {
+                var summary = bundle?.SummaryHypothesis ?? $"Diagnóstico completado para categoría {incident.Category}: {incident.Title}";
+                incident.ResolutionNotes = summary;
+                await RecordShadowProposalAndParkAsync(
+                    incident, db, bundle?.RecommendedTrack ?? incident.Category.ToString(), summary, cancellationToken);
+                return;
+            }
+
             _logger.LogInformation(
                 "Incident {IncidentId} category {Category} not supported for auto-fix; escalating to engineer",
                 incident.Id, incident.Category);
@@ -390,6 +405,21 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
                     "Incident {IncidentId}: hypothesis suggested playbook {Code} but none matched; falling back to the standard flow.",
                     incident.Id, bundle.MatchedPlaybookCode);
                 return false;
+            }
+
+            var operatingMode = await GetTenantOperatingModeAsync(scope, incident.TenantId, cancellationToken);
+            if (operatingMode == TenantOperatingMode.Shadow)
+            {
+                var shadowSummary = $"Playbook {playbook.Code} ({playbook.Name}): {bundle.SummaryHypothesis}";
+                incident.ResolutionNotes = shadowSummary;
+                await RecordShadowProposalAndParkAsync(
+                    incident, db, $"Playbook:{playbook.Code}", shadowSummary, cancellationToken);
+                return true;
+            }
+
+            if (operatingMode == TenantOperatingMode.Assisted)
+            {
+                playbook.RequiresApproval = true;
             }
 
             var extractedArgs = ExtractPlaybookArgs(incident);
@@ -570,6 +600,82 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
     }
 
     /// <summary>
+    /// Resolves the tenant commercial operating mode (<see cref="TenantOperatingMode"/>)
+    /// from <see cref="ITenantConfigService"/>. Defaults to <see cref="TenantOperatingMode.Autonomous"/>
+    /// when the service is not registered or configuration loading fails.
+    /// </summary>
+    private async Task<TenantOperatingMode> GetTenantOperatingModeAsync(
+        IServiceScope scope, Guid tenantId, CancellationToken ct)
+    {
+        try
+        {
+            var configService = scope.ServiceProvider.GetService<ITenantConfigService>();
+            if (configService is null)
+                return TenantOperatingMode.Autonomous;
+
+            var config = await configService.GetConfigurationAsync(tenantId, ct);
+            return config?.Agent?.OperatingMode ?? TenantOperatingMode.Autonomous;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Could not resolve TenantOperatingMode for tenant {TenantId}; defaulting to Autonomous.",
+                tenantId);
+            return TenantOperatingMode.Autonomous;
+        }
+    }
+
+    /// <summary>
+    /// Records a Shadow / POC proposed resolution in outcome metering and the
+    /// audit ledger, appends the review message to the incident history, and
+    /// transitions the incident to AwaitingApproval so the polling loop does
+    /// not re-process it.
+    /// </summary>
+    private async Task RecordShadowProposalAndParkAsync(
+        Incident incident,
+        AppDbContext db,
+        string track,
+        string summary,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var outcomeMetering = scope.ServiceProvider.GetService<IOutcomeMeteringService>();
+            if (outcomeMetering is not null)
+            {
+                await outcomeMetering.RecordShadowProposedResolutionAsync(incident, track, summary, ct);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Shadow proposal outcome metering failed for incident {IncidentId}.",
+                incident.Id);
+        }
+
+        await AppendAuditAsync(incident, "ShadowProposal", new
+        {
+            track,
+            summary,
+            operatingMode = TenantOperatingMode.Shadow.ToString()
+        }, ct);
+
+        await _messageHistory.AppendMessageToIncidentAsync(
+            incident.Id,
+            MessageRole.Assistant,
+            "[Modo Shadow / POC] Hipótesis y plan de remediación generados sin modificar datos ni código. Listo para revisión.",
+            "IncidentAutoWorkflow",
+            ct);
+
+        incident.Status = IncidentStatus.AwaitingApproval;
+        incident.RequiresHumanApproval = true;
+        incident.AssignedTo = "engineer";
+        incident.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
     /// Resolves the tenant target-database connection string through
     /// <see cref="IDynamicConnectionStringResolver"/> (warm cache + resolve).
     /// Returns null when resolution fails; on <see cref="SecurityException"/>
@@ -632,6 +738,26 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             "Generando propuesta de corrección de código...",
             "IncidentAutoWorkflow",
             cancellationToken);
+
+        TenantOperatingMode operatingMode;
+        using (var modeScope = _scopeFactory.CreateScope())
+        {
+            operatingMode = await GetTenantOperatingModeAsync(modeScope, incident.TenantId, cancellationToken);
+        }
+
+        if (operatingMode == TenantOperatingMode.Shadow)
+        {
+            var shadowProposal = await GenerateCodeFixProposalAsync(incident, feedbackError: null, cancellationToken);
+            incident.ResolutionNotes = shadowProposal;
+            await RecordShadowProposalAndParkAsync(
+                incident, db, "CodeFix", shadowProposal, cancellationToken);
+            return;
+        }
+
+        if (operatingMode == TenantOperatingMode.Assisted)
+        {
+            incident.RequiresHumanApproval = true;
+        }
 
         if (incident.RequiresHumanApproval)
         {
@@ -1664,6 +1790,39 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             "Generando propuesta de corrección de base de datos...",
             "IncidentAutoWorkflow",
             cancellationToken);
+
+        TenantOperatingMode operatingMode;
+        using (var modeScope = _scopeFactory.CreateScope())
+        {
+            operatingMode = await GetTenantOperatingModeAsync(modeScope, incident.TenantId, cancellationToken);
+        }
+
+        if (operatingMode == TenantOperatingMode.Shadow)
+        {
+            string shadowSqlProposal;
+            try
+            {
+                shadowSqlProposal = await GenerateDatabaseFixProposalAsync(incident, feedbackError: null, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex,
+                    "Shadow mode SQL proposal generation fell back to hypothesis summary for incident {IncidentId}",
+                    incident.Id);
+                shadowSqlProposal = TryDeserializeRootCauseBundle(incident)?.SummaryHypothesis
+                    ?? $"Shadow mode database remediation plan for incident {incident.Id}: {incident.Title}";
+            }
+
+            incident.ResolutionNotes = shadowSqlProposal;
+            await RecordShadowProposalAndParkAsync(
+                incident, db, "DatabaseFix", shadowSqlProposal, cancellationToken);
+            return;
+        }
+
+        if (operatingMode == TenantOperatingMode.Assisted)
+        {
+            incident.RequiresHumanApproval = true;
+        }
 
         // Resolve the tenant connection string securely (no hardcoded values).
         var connectionString = await TryResolveTenantConnectionStringAsync(incident, db, cancellationToken);

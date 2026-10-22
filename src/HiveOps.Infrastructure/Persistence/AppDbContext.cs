@@ -64,6 +64,11 @@ public sealed class AppDbContext : DbContext
     public DbSet<IncidentRemediationSnapshot> IncidentRemediationSnapshots { get; set; } = null!;
     public DbSet<TenantPlaybook> TenantPlaybooks { get; set; } = null!;
     public DbSet<IncidentAuditEntry> IncidentAuditEntries { get; set; } = null!;
+    public DbSet<TenantContextPack> TenantContextPacks { get; set; } = null!;
+    public DbSet<TenantDocument> TenantDocuments { get; set; } = null!;
+    public DbSet<TenantDocumentChunk> TenantDocumentChunks { get; set; } = null!;
+    public DbSet<LlmPendingTask> LlmPendingTasks { get; set; } = null!;
+    public DbSet<TenantImprovementSuggestion> TenantImprovementSuggestions { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -83,5 +88,20 @@ public sealed class AppDbContext : DbContext
         modelBuilder.Entity<IncidentRemediationSnapshot>().HasQueryFilter(s => s.TenantId == CurrentTenantId);
         modelBuilder.Entity<TenantPlaybook>().HasQueryFilter(p => p.TenantId == CurrentTenantId);
         modelBuilder.Entity<IncidentAuditEntry>().HasQueryFilter(a => a.TenantId == CurrentTenantId);
+        modelBuilder.Entity<TenantContextPack>().HasQueryFilter(p => p.TenantId == CurrentTenantId);
+        modelBuilder.Entity<TenantDocument>().HasQueryFilter(d => d.TenantId == CurrentTenantId);
+        modelBuilder.Entity<TenantDocumentChunk>().HasQueryFilter(c => c.TenantId == CurrentTenantId);
+        modelBuilder.Entity<TenantDocumentChunk>()
+            .HasOne<TenantDocument>()
+            .WithMany()
+            .HasForeignKey(c => c.DocumentId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<TenantImprovementSuggestion>().HasQueryFilter(s => s.TenantId == CurrentTenantId);
+        modelBuilder.Entity<LlmPendingTask>().HasQueryFilter(t => t.TenantId == CurrentTenantId);
+        modelBuilder.Entity<TenantImprovementSuggestion>()
+            .HasOne<TenantPlaybook>()
+            .WithMany()
+            .HasForeignKey(s => s.ConvertedPlaybookId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

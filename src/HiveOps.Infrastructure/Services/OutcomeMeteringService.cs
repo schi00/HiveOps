@@ -24,6 +24,9 @@ public sealed class OutcomeMeteringService : IOutcomeMeteringService
     /// <summary>DiagnosticLog step name written when a deploy rollback is requested.</summary>
     public const string RollbackRequestedStepName = "rollback.requested";
 
+    /// <summary>DiagnosticLog step name written when a shadow/POC proposal is recorded without mutating data or code.</summary>
+    public const string ShadowProposedResolutionStepName = "shadow.proposed_resolution";
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OutcomeMeteringService> _logger;
 
@@ -79,6 +82,48 @@ public sealed class OutcomeMeteringService : IOutcomeMeteringService
     }
 
     /// <inheritdoc />
+    public async Task RecordShadowProposedResolutionAsync(
+        Incident incident, string proposedTrack, string summary, CancellationToken ct = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        ResolveTenantContext(scope, incident.TenantId);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var alreadyRecorded = await db.DiagnosticLogs.AnyAsync(
+            l => l.IncidentId == incident.Id && l.StepName == ShadowProposedResolutionStepName,
+            ct);
+        if (alreadyRecorded)
+        {
+            _logger.LogDebug(
+                "Shadow proposed resolution already recorded for incident {IncidentId}; skipping duplicate event.",
+                incident.Id);
+            return;
+        }
+
+        db.DiagnosticLogs.Add(new DiagnosticLog
+        {
+            TenantId = incident.TenantId,
+            IncidentId = incident.Id,
+            StepName = ShadowProposedResolutionStepName,
+            IsSuccess = true,
+            Result = JsonSerializer.Serialize(new
+            {
+                proposedTrack,
+                summary,
+                category = incident.Category.ToString(),
+                triageConfidence = incident.TriageConfidence,
+                sourceChannel = incident.SourceChannel,
+                at = DateTimeOffset.UtcNow
+            })
+        });
+        await db.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "Recorded shadow proposed resolution for incident {IncidentId} (tenant {TenantId}, track {ProposedTrack}).",
+            incident.Id, incident.TenantId, proposedTrack);
+    }
+
+    /// <inheritdoc />
     public async Task<TenantOutcomeSummary> GetSummaryAsync(
         Guid tenantId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default)
     {
@@ -105,6 +150,13 @@ public sealed class OutcomeMeteringService : IOutcomeMeteringService
                  && (i.ResolutionMode == IncidentResolutionMode.Assisted || i.AssignedTo == "engineer"),
             ct);
 
+        var shadowProposedResolutions = await db.DiagnosticLogs
+            .Where(l => l.StepName == ShadowProposedResolutionStepName
+                        && l.CreatedAt >= from && l.CreatedAt <= to)
+            .Select(l => l.IncidentId)
+            .Distinct()
+            .CountAsync(ct);
+
         // Rollbacks are counted once per incident: union of explicit
         // "rollback.requested" diagnostic entries and reverted remediation
         // snapshots within the window.
@@ -127,6 +179,14 @@ public sealed class OutcomeMeteringService : IOutcomeMeteringService
             .Union(revertedSnapshotIncidentIds)
             .Count();
 
+        var estimatedHoursSaved = Math.Round(
+            (verifiedAutonomousResolutions * 0.75)
+            + (assistedResolutions * 0.35)
+            + (shadowProposedResolutions * 0.50), 2);
+
+        var estimatedCostSavingsUsd = Math.Round(
+            (decimal)((verifiedAutonomousResolutions * 0.75) + (assistedResolutions * 0.35)) * 65m, 2);
+
         return new TenantOutcomeSummary(
             tenantId,
             from,
@@ -134,7 +194,10 @@ public sealed class OutcomeMeteringService : IOutcomeMeteringService
             totalIncidents,
             verifiedAutonomousResolutions,
             assistedResolutions,
-            rollbacksCount);
+            rollbacksCount,
+            shadowProposedResolutions,
+            estimatedHoursSaved,
+            estimatedCostSavingsUsd);
     }
 
     /// <summary>

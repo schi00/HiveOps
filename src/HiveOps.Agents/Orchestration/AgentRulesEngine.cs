@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
+using HiveOps.Application.Interfaces;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
 using HiveOps.Domain.Interfaces;
@@ -16,19 +17,22 @@ public sealed class AgentRulesEngine
     private readonly IOutcomeMeteringService _outcomeMetering;
     private readonly IIncidentAuditLedger _auditLedger;
     private readonly ILogger<AgentRulesEngine> _logger;
+    private readonly ITenantContextPackService? _contextPacks;
 
     public AgentRulesEngine(
         IConversationStateManager stateManager,
         AppDbContext db,
         IOutcomeMeteringService outcomeMetering,
         IIncidentAuditLedger auditLedger,
-        ILogger<AgentRulesEngine> logger)
+        ILogger<AgentRulesEngine> logger,
+        ITenantContextPackService? contextPacks = null)
     {
         _stateManager = stateManager;
         _db = db;
         _outcomeMetering = outcomeMetering;
         _auditLedger = auditLedger;
         _logger = logger;
+        _contextPacks = contextPacks;
     }
 
     // Free-text resolution confirmation keywords (channels without buttons:
@@ -154,6 +158,12 @@ public sealed class AgentRulesEngine
         {
             state.State = ConversationState.AwaitingHuman;
             await _stateManager.SetStateAsync(conversation.TenantId, conversation.Id, state, ct);
+
+            // Best effort: an unresolved incident handed to a human is recorded
+            // as a failed resolution in the tenant context pack memory.
+            await AppendEscalationMemorySafelyAsync(
+                state, conversation.TenantId, "user requested human handoff", ct);
+
             return RuleEngineResult.CreateHandled("Te conecto con una persona del equipo.");
         }
 
@@ -192,7 +202,7 @@ public sealed class AgentRulesEngine
 
             // A user-confirmed resolution is a billable "verified autonomous
             // resolution" (WP-6) and seals the incident's audit chain (WP-5).
-            // Best effort: metering/audit failures never break confirmation.
+            // Best effort: metering/audit/context-pack failures never break confirmation.
             try
             {
                 await _outcomeMetering.RecordVerifiedResolutionAsync(incident, ct);
@@ -207,6 +217,12 @@ public sealed class AgentRulesEngine
                         confirmedVia = "btn_confirm_resolved"
                     },
                     ct);
+
+                if (_contextPacks is not null)
+                {
+                    await _contextPacks.AppendResolutionMemoryAsync(
+                        incident.TenantId, incident, succeeded: true, notes: null, ct);
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -285,10 +301,43 @@ public sealed class AgentRulesEngine
             case "btn_human_handoff":
                 state.State = ConversationState.AwaitingHuman;
                 await _stateManager.SetStateAsync(conversation.TenantId, conversation.Id, state, ct);
+
+                await AppendEscalationMemorySafelyAsync(
+                    state, conversation.TenantId, "user requested human handoff", ct);
+
                 return RuleEngineResult.CreateHandled("Te conecto con una persona del equipo.");
 
             default:
                 return RuleEngineResult.NotHandled();
+        }
+    }
+
+    /// <summary>
+    /// Best-effort resolution-memory append for escalation/handoff paths.
+    /// Resolves the active incident from conversation FlowData; failures are
+    /// logged but never break the handoff flow.
+    /// </summary>
+    private async Task AppendEscalationMemorySafelyAsync(
+        ConversationStateContext state, Guid tenantId, string reason, CancellationToken ct)
+    {
+        if (_contextPacks is null) return;
+        try
+        {
+            if (!state.FlowData.TryGetValue("incidentId", out var rawIncidentId)
+                || !Guid.TryParse(rawIncidentId, out var incidentId))
+                return;
+
+            var incident = await _db.Incidents.FirstOrDefaultAsync(
+                i => i.Id == incidentId && i.TenantId == tenantId, ct);
+            if (incident is null) return;
+
+            await _contextPacks.AppendResolutionMemoryAsync(
+                tenantId, incident, succeeded: false, notes: $"escalated: {reason}", ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Context-pack escalation memory append failed for tenant {TenantId}.", tenantId);
         }
     }
 }

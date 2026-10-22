@@ -189,6 +189,69 @@ public sealed class OutcomeMeteringServiceTests
         summary.VerifiedAutonomousResolutions.Should().Be(1);
         summary.AssistedResolutions.Should().Be(2);
         summary.RollbacksCount.Should().Be(2);
+        summary.ShadowProposedResolutions.Should().Be(0);
+        // (1 * 0.75) + (2 * 0.35) + (0 * 0.50) = 1.45 hours
+        summary.EstimatedHoursSaved.Should().Be(1.45);
+        // ((1 * 0.75) + (2 * 0.35)) * 65 = 1.45 * 65 = 94.25 USD
+        summary.EstimatedCostSavingsUsd.Should().Be(94.25m);
+    }
+
+    [Fact]
+    public async Task RecordShadowProposedResolutionAsync_CalledTwice_RecordsSingleShadowLog()
+    {
+        using var fx = new Fixture();
+        var incident = NewIncident(fx.TenantId, DateTimeOffset.UtcNow);
+        incident.Category = IncidentCategory.Database;
+        incident.SourceChannel = "ticketing";
+        fx.Seed(fx.TenantId, db => db.Incidents.Add(incident));
+
+        await fx.Service.RecordShadowProposedResolutionAsync(incident, "Playbook:RESET_ORDER", "Playbook plan ready");
+        await fx.Service.RecordShadowProposedResolutionAsync(incident, "Playbook:RESET_ORDER", "Duplicate call");
+
+        var logs = fx.Query(fx.TenantId, db => db.DiagnosticLogs
+            .Where(l => l.IncidentId == incident.Id
+                        && l.StepName == OutcomeMeteringService.ShadowProposedResolutionStepName)
+            .ToList());
+
+        logs.Should().ContainSingle();
+        logs[0].IsSuccess.Should().BeTrue();
+        logs[0].Result.Should().Contain("Playbook:RESET_ORDER").And.Contain("ticketing");
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_ComputesShadowProposalsHoursAndCostSavings()
+    {
+        using var fx = new Fixture();
+        var now = DateTimeOffset.UtcNow;
+        var from = now.AddDays(-14);
+        var to = now.AddMinutes(5);
+
+        var verifiedInc = NewIncident(fx.TenantId, now.AddDays(-3));
+        var assistedInc = NewIncident(fx.TenantId, now.AddDays(-2));
+        assistedInc.ResolutionMode = IncidentResolutionMode.Assisted;
+        assistedInc.ResolvedAt = now.AddDays(-1);
+        var shadowInc1 = NewIncident(fx.TenantId, now.AddDays(-2));
+        var shadowInc2 = NewIncident(fx.TenantId, now.AddDays(-1));
+
+        fx.Seed(fx.TenantId, db =>
+        {
+            db.Incidents.AddRange(verifiedInc, assistedInc, shadowInc1, shadowInc2);
+        });
+
+        await fx.Service.RecordVerifiedResolutionAsync(verifiedInc);
+        await fx.Service.RecordShadowProposedResolutionAsync(shadowInc1, "DatabaseFix", "UPDATE orders SET status = 'ok'");
+        await fx.Service.RecordShadowProposedResolutionAsync(shadowInc2, "CodeFix", "Fix NullReferenceException");
+
+        var summary = await fx.Service.GetSummaryAsync(fx.TenantId, from, to);
+
+        summary.TotalIncidents.Should().Be(4);
+        summary.VerifiedAutonomousResolutions.Should().Be(1);
+        summary.AssistedResolutions.Should().Be(1);
+        summary.ShadowProposedResolutions.Should().Be(2);
+        // (1 * 0.75) + (1 * 0.35) + (2 * 0.50) = 2.10 hours
+        summary.EstimatedHoursSaved.Should().Be(2.10);
+        // ((1 * 0.75) + (1 * 0.35)) * 65 = 1.10 * 65 = 71.50 USD
+        summary.EstimatedCostSavingsUsd.Should().Be(71.50m);
     }
 
     [Fact]

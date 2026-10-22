@@ -347,7 +347,12 @@ public sealed class SupportDashboardController : ControllerBase
             incident.Fingerprint,
             incident.OccurrenceCount,
             incident.ResolutionMode.ToString(),
-            incident.EligibleForEffectivenessKpi));
+            incident.EligibleForEffectivenessKpi,
+            incident.RootCauseJson,
+            incident.VerificationQuery,
+            incident.VerificationPassed,
+            incident.PullRequestUrl,
+            incident.ArenaValidationStatus));
     }
 
     [HttpGet("incidents/{id:guid}/messages")]
@@ -969,7 +974,12 @@ public sealed class SupportDashboardController : ControllerBase
             i.Fingerprint,
             i.OccurrenceCount,
             i.ResolutionMode.ToString(),
-            i.EligibleForEffectivenessKpi);
+            i.EligibleForEffectivenessKpi,
+            i.RootCauseJson,
+            i.VerificationQuery,
+            i.VerificationPassed,
+            i.PullRequestUrl,
+            i.ArenaValidationStatus);
     }
 
     /// <summary>
@@ -1196,7 +1206,12 @@ public sealed record IncidentDetailDto(
     string? Fingerprint = null,
     int OccurrenceCount = 1,
     string? ResolutionMode = null,
-    bool EligibleForEffectivenessKpi = false);
+    bool EligibleForEffectivenessKpi = false,
+    string? RootCauseJson = null,
+    string? VerificationQuery = null,
+    bool? VerificationPassed = null,
+    string? PullRequestUrl = null,
+    string? ArenaValidationStatus = null);
 
 public sealed record MergeRequestDto(Guid IncidentId, string Title, string Branch, string CommitHash, Guid TenantId, DateTimeOffset CreatedAt);
 public sealed record IncidentSnapshotDto(Guid Id, string TargetTable, int AffectedRowCount, bool IsReverted, string BeforeRowsJson, string AfterRowsJson, string InverseSqlScript, DateTimeOffset CreatedAt, DateTimeOffset? RevertedAt, string? RevertedBy);

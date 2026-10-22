@@ -10,7 +10,10 @@ public sealed record TenantOutcomeSummary(
     int TotalIncidents,
     int VerifiedAutonomousResolutions,
     int AssistedResolutions,
-    int RollbacksCount);
+    int RollbacksCount,
+    int ShadowProposedResolutions = 0,
+    double EstimatedHoursSaved = 0,
+    decimal EstimatedCostSavingsUsd = 0m);
 
 /// <summary>
 /// Records billable "verified autonomous resolutions" (user-confirmed or
@@ -21,6 +24,9 @@ public interface IOutcomeMeteringService
 {
     /// <summary>Idempotent: at most one billable resolution recorded per incident.</summary>
     Task RecordVerifiedResolutionAsync(Incident incident, CancellationToken ct = default);
+
+    /// <summary>Idempotent: records a proposed resolution generated in Shadow / POC mode without executing mutations.</summary>
+    Task RecordShadowProposedResolutionAsync(Incident incident, string proposedTrack, string summary, CancellationToken ct = default);
 
     Task<TenantOutcomeSummary> GetSummaryAsync(
         Guid tenantId, DateTimeOffset from, DateTimeOffset to, CancellationToken ct = default);

@@ -5,7 +5,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using HiveOps.Api.Authentication;
+using HiveOps.Application.Configuration;
+using HiveOps.Application.Interfaces;
+using HiveOps.Application.Models;
 using HiveOps.Domain.Entities;
+using HiveOps.Domain.Enums;
 using HiveOps.Domain.Interfaces;
 using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
@@ -171,6 +175,24 @@ public sealed class TenantReadinessController : ControllerBase
             }
         }
 
+        var operatingMode = TenantOperatingMode.Autonomous.ToString();
+        var tenantConfigService = HttpContext.RequestServices.GetService<ITenantConfigService>();
+        if (tenantConfigService is not null)
+        {
+            try
+            {
+                var config = await tenantConfigService.GetConfigurationAsync(tenantId, ct);
+                if (config?.Agent is not null)
+                {
+                    operatingMode = config.Agent.OperatingMode.ToString();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not resolve operating mode for tenant {TenantId}; defaulting to Autonomous.", tenantId);
+            }
+        }
+
         return Ok(new OutcomeSummaryResponse(
             summary.TenantId,
             summary.From,
@@ -179,7 +201,56 @@ public sealed class TenantReadinessController : ControllerBase
             summary.VerifiedAutonomousResolutions,
             summary.AssistedResolutions,
             summary.RollbacksCount,
-            auditChainIntact));
+            auditChainIntact,
+            summary.ShadowProposedResolutions,
+            summary.EstimatedHoursSaved,
+            summary.EstimatedCostSavingsUsd,
+            operatingMode));
+    }
+
+    /// <summary>
+    /// Updates the commercial operating mode (Shadow, Assisted, or Autonomous)
+    /// for the effective tenant.
+    /// </summary>
+    [HttpPut("operating-mode")]
+    public async Task<IActionResult> UpdateOperatingMode(
+        [FromBody] UpdateOperatingModeRequest? request,
+        CancellationToken ct)
+    {
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue)
+        {
+            return IsPrivileged
+                ? BadRequest(new { message = "Tenant could not be resolved. Supply the X-Tenant-Id header." })
+                : Unauthorized();
+        }
+        var tenantId = effectiveTenantId.Value;
+
+        if (request is null
+            || string.IsNullOrWhiteSpace(request.OperatingMode)
+            || !Enum.TryParse<TenantOperatingMode>(request.OperatingMode.Trim(), ignoreCase: true, out var parsedMode)
+            || !Enum.IsDefined(typeof(TenantOperatingMode), parsedMode))
+        {
+            return BadRequest(new
+            {
+                message = "Invalid operatingMode. Allowed values: Shadow, Assisted, Autonomous."
+            });
+        }
+
+        var tenantConfigService = HttpContext.RequestServices.GetService<ITenantConfigService>();
+        if (tenantConfigService is not null)
+        {
+            var config = await tenantConfigService.GetConfigurationAsync(tenantId, ct);
+            config.Agent.OperatingMode = parsedMode;
+            var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name;
+            await tenantConfigService.UpsertConfigurationAsync(
+                tenantId,
+                config,
+                new TenantConfigAuditInfo(actor, nameof(AgentConfig)),
+                ct);
+        }
+
+        return Ok(new { tenantId, operatingMode = parsedMode.ToString() });
     }
 
     /// <summary>
@@ -289,11 +360,13 @@ public sealed class TenantReadinessController : ControllerBase
 
             var whatsappConfigured = !string.IsNullOrWhiteSpace(tenant.WhatsAppNumber);
             var ticketingConfigured = await IsTicketingConfiguredAsync(tenant, ct);
+            var webhookSettings = HiveOps.Api.Utilities.TenantSettingsJson.Parse(tenant.ConfigJson).OutboundWebhook;
+            var chatOpsWebhookConfigured = webhookSettings.Enabled && !string.IsNullOrWhiteSpace(webhookSettings.Url);
 
-            var ok = whatsappConfigured || ticketingConfigured;
+            var ok = whatsappConfigured || ticketingConfigured || chatOpsWebhookConfigured;
             var detail = ok
-                ? $"whatsappConfigured={whatsappConfigured}; ticketingConfigured={ticketingConfigured}."
-                : "No inbound channel configured: set Tenant.WhatsAppNumber or enable the ticketing feature flag / integration.";
+                ? $"WhatsApp={(whatsappConfigured ? "OK" : "—")} · Ticketing={(ticketingConfigured ? "OK" : "—")} · ChatOps/Webhook={(chatOpsWebhookConfigured ? "OK" : "—")}"
+                : "Sin canales activos: configurá WhatsApp, Ticketing o el Webhook de Slack/Teams en Configuración.";
             return new ReadinessCheckResult("channels", ok, detail);
         }
         catch (Exception ex)
@@ -346,9 +419,15 @@ public sealed class TenantReadinessController : ControllerBase
         Guid TenantId,
         DateTimeOffset CheckedAt,
         IReadOnlyList<ReadinessCheckResult> Checks,
-        bool ReadyForAutonomousSupport);
+        bool ReadyForAutonomousSupport)
+    {
+        public bool Ready => ReadyForAutonomousSupport;
+    }
 
-    /// <summary>Tenant outcome summary plus audit-chain integrity state.</summary>
+    /// <summary>Request payload for updating the tenant operating mode.</summary>
+    public sealed record UpdateOperatingModeRequest(string? OperatingMode);
+
+    /// <summary>Tenant outcome summary plus audit-chain integrity state and ROI metrics.</summary>
     private sealed record OutcomeSummaryResponse(
         Guid TenantId,
         DateTimeOffset From,
@@ -357,5 +436,9 @@ public sealed class TenantReadinessController : ControllerBase
         int VerifiedAutonomousResolutions,
         int AssistedResolutions,
         int RollbacksCount,
-        bool? AuditChainIntact);
+        bool? AuditChainIntact,
+        int ShadowProposedResolutions = 0,
+        double EstimatedHoursSaved = 0,
+        decimal EstimatedCostSavingsUsd = 0m,
+        string OperatingMode = "Autonomous");
 }

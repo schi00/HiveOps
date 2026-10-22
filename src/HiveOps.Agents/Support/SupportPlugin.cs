@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using HiveOps.Application;
 using HiveOps.Application.Interfaces;
@@ -30,6 +31,8 @@ public sealed class SupportPlugin
     private readonly HiveOps.Domain.Interfaces.IEmbeddingService _embeddingService;
     private readonly ITargetDatabaseDiagnosticService _targetDbDiagnostic;
     private readonly ITenantDataFixerService _dataFixer;
+    private readonly ILogger<SupportPlugin>? _logger;
+    private readonly ITenantContextPackService? _contextPacks;
 
     public SupportPlugin(
         AppDbContext db,
@@ -41,7 +44,9 @@ public sealed class SupportPlugin
         IncidentAnalysisEngine analysisEngine,
         HiveOps.Domain.Interfaces.IEmbeddingService embeddingService,
         ITargetDatabaseDiagnosticService targetDbDiagnostic,
-        ITenantDataFixerService dataFixer)
+        ITenantDataFixerService dataFixer,
+        ILogger<SupportPlugin>? logger = null,
+        ITenantContextPackService? contextPacks = null)
     {
         _db = db;
         _stateManager = stateManager;
@@ -53,6 +58,8 @@ public sealed class SupportPlugin
         _embeddingService = embeddingService;
         _targetDbDiagnostic = targetDbDiagnostic;
         _dataFixer = dataFixer;
+        _logger = logger;
+        _contextPacks = contextPacks;
     }
 
     [KernelFunction("analyze_incident")]
@@ -563,6 +570,10 @@ public sealed class SupportPlugin
             await _stateManager.SetStateAsync(tenantId, convId, resetCtx, cancellationToken);
 
             await _db.SaveChangesAsync(cancellationToken);
+
+            // Best effort: record the successful fix in the tenant context pack.
+            await AppendResolutionMemorySafelyAsync(tenantId, incident, succeeded: true, notes: null, cancellationToken);
+
             return $"Fix aplicado: {fixResult.RowsAffected} registro(s) actualizados. ¿Podés confirmar que el problema quedó resuelto?";
         }
 
@@ -588,6 +599,9 @@ public sealed class SupportPlugin
         await _stateManager.SetStateAsync(tenantId, convId, ctx, cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
+
+        // Best effort: record the successful fix in the tenant context pack.
+        await AppendResolutionMemorySafelyAsync(tenantId, incident, succeeded: true, notes: null, cancellationToken);
 
         return $"Deployment triggered: {deployId}. Incident {incident.Id} marked as resolved.";
     }
@@ -620,6 +634,26 @@ public sealed class SupportPlugin
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Best-effort resolution-memory append into the tenant context pack.
+    /// Failures are logged but never break the resolve/escalate flow.
+    /// </summary>
+    private async Task AppendResolutionMemorySafelyAsync(
+        Guid tenantId, Incident incident, bool succeeded, string? notes, CancellationToken ct)
+    {
+        if (_contextPacks is null) return;
+        try
+        {
+            await _contextPacks.AppendResolutionMemoryAsync(tenantId, incident, succeeded, notes, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.LogWarning(ex,
+                "Context-pack resolution memory append failed for incident {IncidentId} (tenant {TenantId}).",
+                incident.Id, tenantId);
+        }
+    }
 
     private static IncidentCategory ClassifyIncident(string description)
     {
