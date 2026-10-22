@@ -60,7 +60,7 @@ services:
     build:
       context: ../apps/hiveops-landing
       args:
-        NEXT_PUBLIC_DASHBOARD_URL: "${NEXT_PUBLIC_DASHBOARD_URL:-https://api-hiveops.13.140.227.225.sslip.io/dashboard/}"
+        NEXT_PUBLIC_DASHBOARD_URL: "${NEXT_PUBLIC_DASHBOARD_URL:-https://api.ops.hivecorp.com.ar/dashboard/}"
     image: hiveops-landing:latest
     container_name: hiveops-landing
     restart: unless-stopped

@@ -3,10 +3,10 @@ export const siteConfig = {
   name: "HiveOps",
   description:
     "HiveOps es el AI Support Engineer del ecosistema HIVE: un agente autónomo de soporte L1/L2/L3 que recibe incidentes por WhatsApp, ticketing o API, investiga la causa raíz en tu base de datos, logs y código, y remedia con aprobaciones humanas, dry-run y rollback garantizado.",
-  url: "https://hiveops.ai",
+  url: "https://ops.hivecorp.com.ar",
   appUrl:
-    process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:5198/dashboard/",
-  supportEmail: "ventas@hiveops.ai",
+    process.env.NEXT_PUBLIC_DASHBOARD_URL || "https://api.ops.hivecorp.com.ar/dashboard/",
+  supportEmail: "ventas@hivecorp.com.ar",
   keywords: [
     "ai support engineer",
     "agente de soporte ia autonomo",
