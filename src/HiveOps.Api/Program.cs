@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using FluentValidation;
@@ -17,8 +18,10 @@ using HiveOps.Application.Interfaces;
 using HiveOps.Application.Services;
 using HiveOps.Domain.Models;
 using HiveOps.Infrastructure;
+using HiveOps.Infrastructure.AI;
 using HiveOps.Infrastructure.ApiDrift;
 using HiveOps.Infrastructure.Services;
+using HiveOps.Infrastructure.Support;
 using HiveOps.Workers;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
@@ -104,6 +107,15 @@ else
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "HiveOps";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "HiveOpsUsers";
 
+// HIVE shared identity: the suite authority (hivecrew-api / accounts.hivecorp.com.ar)
+// issues tokens with org_id + product claims. Accept them alongside HiveOps-issued
+// tokens; the org claim is mapped to tenant_id and the organization is
+// auto-provisioned on first use (see OnTokenValidated below).
+var hiveIdentityKey = builder.Configuration["HiveIdentity:Key"];
+var hiveIdentityIssuer = builder.Configuration["HiveIdentity:Issuer"] ?? "https://accounts.hivecorp.com.ar";
+var hiveIdentityAudience = builder.Configuration["HiveIdentity:Audience"] ?? "hive-products";
+var hiveIdentityEnabled = !string.IsNullOrWhiteSpace(hiveIdentityKey);
+
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -124,16 +136,92 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     })
     .AddJwtBearer(options =>
     {
+        var issuers = new List<string> { jwtIssuer };
+        var audiences = new List<string> { jwtAudience };
+        var signingKeys = new List<SecurityKey> { new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)) };
+        if (hiveIdentityEnabled)
+        {
+            issuers.Add(hiveIdentityIssuer);
+            audiences.Add(hiveIdentityAudience);
+            signingKeys.Add(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(hiveIdentityKey)));
+        }
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtIssuer,
-            ValidAudience = jwtAudience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+            ValidIssuers = issuers,
+            ValidAudiences = audiences,
+            IssuerSigningKeys = signingKeys
         };
+
+        if (hiveIdentityEnabled)
+        {
+            options.Events = new JwtBearerEvents
+            {
+                OnTokenValidated = async context =>
+                {
+                    if (context.Principal?.Identity is not System.Security.Claims.ClaimsIdentity identity
+                        || !identity.IsAuthenticated)
+                        return;
+
+                    // Only HIVE-account tokens need mapping: they carry "org_id"
+                    // instead of the HiveOps-native "tenant_id".
+                    if (identity.HasClaim(c => c.Type == HiveOps.Api.Authentication.AppClaimTypes.TenantId))
+                        return;
+
+                    var orgIdClaim = identity.FindFirst("org_id")?.Value;
+                    if (!Guid.TryParse(orgIdClaim, out var orgId))
+                    {
+                        context.Fail("HIVE token is missing a valid org_id claim.");
+                        return;
+                    }
+
+                    // Product gate: tokens only entitle the products listed in
+                    // their "product" claims — require "ops" to enter HiveOps.
+                    var products = identity.FindAll("product").Select(c => c.Value).ToList();
+                    if (products.Count > 0 && !products.Contains("ops", StringComparer.OrdinalIgnoreCase))
+                    {
+                        context.Fail("HIVE token does not include a HiveOps entitlement.");
+                        return;
+                    }
+
+                    var orgName = identity.FindFirst("org_name")?.Value;
+                    var db = context.HttpContext.RequestServices
+                        .GetRequiredService<HiveOps.Infrastructure.Persistence.AppDbContext>();
+
+                    var tenant = await db.Tenants.FirstOrDefaultAsync(t => t.Id == orgId,
+                        context.HttpContext.RequestAborted);
+                    if (tenant is null)
+                    {
+                        // JIT provisioning: first HIVE sign-in materializes the
+                        // organization here with the same id as the account org.
+                        tenant = new HiveOps.Domain.Entities.Tenant
+                        {
+                            Id = orgId,
+                            Name = string.IsNullOrWhiteSpace(orgName) ? $"org-{orgId:N}" : orgName,
+                            ApiKey = $"tenant-{Guid.NewGuid():N}",
+                            IsActive = true,
+                            Plan = HiveOps.Domain.Entities.PlanTier.Starter
+                        };
+                        db.Tenants.Add(tenant);
+                        await db.SaveChangesAsync(context.HttpContext.RequestAborted);
+                    }
+                    else if (!tenant.IsActive)
+                    {
+                        context.Fail("Organization is inactive.");
+                        return;
+                    }
+
+                    identity.AddClaim(new System.Security.Claims.Claim(
+                        HiveOps.Api.Authentication.AppClaimTypes.TenantId, tenant.Id.ToString("D")));
+                    identity.AddClaim(new System.Security.Claims.Claim(
+                        HiveOps.Api.Authentication.AppClaimTypes.TenantName, tenant.Name));
+                }
+            };
+        }
     })
     .AddScheme<HiveOps.Api.Authentication.ApiKeyAuthenticationOptions, HiveOps.Api.Authentication.ApiKeyAuthenticationHandler>(
         HiveOps.Api.Authentication.ApiKeyAuthScheme.SchemeName, _ => { });
@@ -153,6 +241,7 @@ builder.Services.AddSwaggerGen(c =>
 
 // -- SignalR -------------------------------------------------------------------
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<ChatOpsApprovalTokenService>();
 builder.Services.AddScoped<SupervisionNotificationService>();
 builder.Services.AddScoped<ISupervisionNotifier>(sp => sp.GetRequiredService<SupervisionNotificationService>());
 builder.Services.AddScoped<IndustrySettingsService>();
@@ -179,11 +268,16 @@ builder.Services.AddSingleton<IIncidentMessageHistoryService, IncidentMessageHis
 builder.Services.AddSingleton<IApprovalWorkflowService, ApprovalWorkflowService>();
 builder.Services.AddSingleton<IncidentEmailService>();
 builder.Services.AddSingleton<KbArticleGenerator>();
+// Scoped: TenantContextPackService consumes the scoped AppDbContext.
+builder.Services.AddScoped<ITenantContextPackService, TenantContextPackService>();
+builder.Services.AddScoped<ITenantImprovementService, TenantImprovementService>();
+builder.Services.AddScoped<ILlmTaskQueue, LlmTaskQueueService>();
 
 // -- Background Workers --------------------------------------------------------
 builder.Services.AddHostedService<AuthBootstrapHostedService>();
 builder.Services.AddHostedService<TenantCacheWarmerHostedService>();
 builder.Services.AddHostedService<IncidentAutoWorkflowService>();
+builder.Services.AddHostedService<LlmTaskRetryHostedService>();
 builder.Services.AddSingleton<IMessageQueueService, BackgroundMessageQueueService>();
 builder.Services.AddHostedService(sp => (BackgroundMessageQueueService)sp.GetRequiredService<IMessageQueueService>());
 
