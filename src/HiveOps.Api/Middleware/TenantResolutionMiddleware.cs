@@ -59,6 +59,19 @@ public sealed class TenantResolutionMiddleware
             return;
         }
 
+        // The default authentication scheme is the cookie; bearer calls never
+        // populate context.User on their own. Authenticate the JWT scheme
+        // explicitly so bearer principals (including HIVE account tokens) are
+        // available to the tenant resolution below.
+        if (context.User.Identity?.IsAuthenticated != true &&
+            context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            var jwtResult = await context.AuthenticateAsync(
+                Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme);
+            if (jwtResult.Succeeded && jwtResult.Principal is not null)
+                context.User = jwtResult.Principal;
+        }
+
         // SuperAdmin/Admin bypass without tenant resolution
         // Controllers will handle IsPrivileged check to allow global data access
         if (context.User.Identity?.IsAuthenticated == true &&
