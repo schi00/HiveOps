@@ -6,6 +6,20 @@ try{
    window.anime=Object.assign(function(){return null;}, { stagger: () => noop });
  }
 }catch{}
+// HIVE account handoff: the launcher passes the shared identity JWT in the URL
+// hash (#token=...) so it never reaches server logs or referer headers.
+try{
+ const _h=location.hash||'',_m=_h.match(/token=([^&]+)/);
+ if(_m){
+   const _jwt=decodeURIComponent(_m[1]);
+   const _b64=_jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+   const _p=JSON.parse(decodeURIComponent(escape(atob(_b64))));
+   localStorage.setItem('token',_jwt);
+   localStorage.setItem('user',JSON.stringify({username:_p.name||_p.email||'usuario',role:_p.role||'Tenant',tenantName:_p.org_name||''}));
+   if(_p.org_id) localStorage.setItem('tenantId',_p.org_id);
+   history.replaceState(null,'',location.pathname+location.search);
+ }
+}catch(_e){console.warn('HIVE token handoff failed',_e)}
 const s={token:localStorage.getItem('token'),user:JSON.parse(localStorage.getItem('user')||'null'),isAdmin:false,incidents:[],tenantId:localStorage.getItem('tenantId')||null,tenants:[],deploymentMode:null};
 if(s.token&&s.user){showApp();}else{showLogin();}
 async function lb(){
