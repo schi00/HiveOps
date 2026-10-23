@@ -14,10 +14,8 @@ try{
    const _jwt=decodeURIComponent(_m[1]);
    const _b64=_jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
    const _p=JSON.parse(decodeURIComponent(escape(atob(_b64))));
-   const _name=_p['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name']||_p.name||_p.email||'usuario';
-   const _role=_p['http://schemas.microsoft.com/ws/2008/06/identity/claims/role']||_p.role||'Tenant';
    localStorage.setItem('token',_jwt);
-   localStorage.setItem('user',JSON.stringify({username:_name,role:_role,tenantName:_p.org_name||''}));
+   localStorage.setItem('user',JSON.stringify({username:_p.name||_p.email||'usuario',role:_p.role||'Tenant',tenantName:_p.org_name||''}));
    if(_p.org_id) localStorage.setItem('tenantId',_p.org_id);
    history.replaceState(null,'',location.pathname+location.search);
  }
@@ -61,15 +59,15 @@ try{
  if(s.tenantId) sel.value=s.tenantId;
  document.getElementById('bill-ensure').onclick=async ()=>{
    const tid=sel.value; const pid=(document.getElementById('bill-price').value||'').trim();
-   if(!tid){toast('Selecciona un tenant','error');return;}
+   if(!tid){toast('Selecciona un cliente','error');return;}
    if(!pid){toast('Ingresa un PriceId','error');return;}
    try{await api('POST',`/admin/tenants/${tid}/billing/ensure-subscription`,{priceId:pid}); toast('Suscripción activada','success'); lb();}
    catch(e){toast(e.message,'error');}
  };
  const st=document.getElementById('bill-status');
  const cur=ts.find(x=>x.id===sel.value);
- st.textContent=cur?`Estado actual: ${cur.subscriptionStatus||'—'} · Price: ${cur.stripePriceId||'—'}`:'Selecciona un tenant';
- sel.onchange=()=>{ const c=ts.find(x=>x.id===sel.value); st.textContent=c?`Estado actual: ${c.subscriptionStatus||'—'} · Price: ${c.stripePriceId||'—'}`:'Selecciona un tenant'; };
+ st.textContent=cur?`Estado actual: ${cur.subscriptionStatus||'—'} · Price: ${cur.stripePriceId||'—'}`:'Selecciona un cliente';
+ sel.onchange=()=>{ const c=ts.find(x=>x.id===sel.value); st.textContent=c?`Estado actual: ${c.subscriptionStatus||'—'} · Price: ${c.stripePriceId||'—'}`:'Selecciona un cliente'; };
  const lt=document.getElementById('l-tenants');
  if(lt){
    lt.innerHTML=ts.length?ts.map(t=>{
@@ -84,7 +82,7 @@ try{
          <button type="button" onclick="actAsTenant('${t.id}')" class="btn-secondary px-3 py-1.5 rounded-lg text-xs">${active?'Viendo':'Actuar como'}</button>
        </div>
      </div>`;
-   }).join(''):'<div class="text-center py-6 text-sm" style="color:var(--text-secondary)">Sin tenants registrados</div>';
+   }).join(''):'<div class="text-center py-6 text-sm" style="color:var(--text-secondary)">Sin clientes registrados</div>';
  }
 const billCard=document.getElementById('billing-card');
 if(billCard) billCard.style.display=(s.deploymentMode==null||s.deploymentMode==='SaaS')?'':'none';
@@ -95,7 +93,7 @@ if(billCard) billCard.style.display=(s.deploymentMode==null||s.deploymentMode===
      dbCard.id='selfhosted-db-card';
      dbCard.className='hive-card p-6';
      dbCard.innerHTML=`<h3 class="font-semibold text-lg mb-4">Base de datos dedicada (self-hosted)</h3>
-     <p class="text-sm mb-4" style="color:var(--text-secondary)">Asigná la cadena SQL para este tenant (queda cifrada en el servidor). Dejá vacío para borrar y usar la base catálogo.</p>
+     <p class="text-sm mb-4" style="color:var(--text-secondary)">Asigná la cadena SQL para este cliente (queda cifrada en el servidor). Dejá vacío para borrar y usar la base catálogo.</p>
      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
        <div class="col-span-1"><label class="text-sm block mb-2" style="color:var(--text-secondary)">Tenant</label>
        <select id="shdb-tenant" class="input-field w-full px-3 py-2 rounded-xl text-sm"></select></div>
@@ -111,7 +109,7 @@ if(billCard) billCard.style.display=(s.deploymentMode==null||s.deploymentMode===
      document.getElementById('shdb-save').onclick=async ()=>{
        const tid=(document.getElementById('shdb-tenant')||{}).value;
        const cs=(document.getElementById('shdb-conn')||{}).value||'';
-       if(!tid){toast('Selecciona un tenant','error');return;}
+       if(!tid){toast('Selecciona un cliente','error');return;}
        try{
          await fetch(`${API}/admin/tenants/${tid}/dedicated-database`,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(s.token||'')},credentials:'include',body:JSON.stringify({connectionString:cs})});
          document.getElementById('shdb-conn').value='';
@@ -120,7 +118,7 @@ if(billCard) billCard.style.display=(s.deploymentMode==null||s.deploymentMode===
      };
      document.getElementById('shdb-clear').onclick=async ()=>{
        const tid=(document.getElementById('shdb-tenant')||{}).value;
-       if(!tid){toast('Selecciona un tenant','error');return;}
+       if(!tid){toast('Selecciona un cliente','error');return;}
        try{
          await fetch(`${API}/admin/tenants/${tid}/dedicated-database`,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(s.token||'')},credentials:'include',body:JSON.stringify({connectionString:null})});
          toast('Cadena eliminada','success'); shdbRefresh();
@@ -146,30 +144,15 @@ try{
  const r=await fetch(`${API}/admin/tenants/${tid}/dedicated-database`,{headers:{'Authorization':'Bearer '+(s.token||''),'Content-Type':'application/json'},credentials:'include'});
  if(!r.ok){ st.textContent='No se pudo leer el estado'; return; }
  const j=await r.json();
- st.textContent=j&&j.configured?'Hay cadena dedicada configurada para este tenant.':'Sin cadena dedicada (usa catálogo).';
+ st.textContent=j&&j.configured?'Hay cadena dedicada configurada para este cliente.':'Sin cadena dedicada (usa catálogo).';
 }catch{}
 }
 document.getElementById('login-form').addEventListener('submit',async e=>{
 e.preventDefault();
 const el=document.getElementById('le');el.classList.add('hidden');
 try{
-const _u=document.getElementById('lu').value,_p=document.getElementById('lp').value;
-const r=await fetch(`${API}/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:_u,password:_p})});
-if(!r.ok){
-  // Fallback: unified HIVE account credentials (issued by the accounts authority)
-  const hr=await fetch('https://api.crew.hivecorp.com.ar/api/accounts/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:_u,password:_p})});
-  if(!hr.ok)throw new Error('Credenciales inválidas');
-  const {token:_jwt}=await hr.json();
-  const _b64=_jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
-  const _pl=JSON.parse(decodeURIComponent(escape(atob(_b64))));
-  s.token=_jwt;
-  s.user={username:_pl['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name']||_pl.name||_pl.email||'usuario',role:_pl['http://schemas.microsoft.com/ws/2008/06/identity/claims/role']||_pl.role||'Tenant',tenantName:_pl.org_name||''};
-  s.isAdmin=false;
-  if(_pl.org_id){s.tenantId=_pl.org_id;localStorage.setItem('tenantId',s.tenantId);}
-  localStorage.setItem('token',s.token);localStorage.setItem('user',JSON.stringify(s.user));
-  showApp();
-  return;
-}
+const r=await fetch(`${API}/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('lu').value,password:document.getElementById('lp').value})});
+if(!r.ok)throw new Error('Credenciales inválidas');
 const d=await r.json();
 s.token=d.token;
 s.user={username:d.displayName||d.username||'',role:d.role,tenantName:d.tenantName||null};
@@ -219,7 +202,7 @@ if(s.isAdmin){const adm=document.getElementById('n-adm');if(adm)adm.classList.re
 else {const adm=document.getElementById('n-adm');if(adm)adm.classList.add('hidden');}
 updateMobileAdminNav();
 renderIdentityBadge();
-setTimeout(()=>{if(s.isAdmin)loadTenants();n('dashboard');ld();initRealtime();},100);
+setTimeout(()=>{loadTenants();n('dashboard');ld();initRealtime();},100);
 }catch(e){console.error('Error in showApp:',e);showLogin();}
 }
 function renderIdentityBadge(){
@@ -233,14 +216,14 @@ if(udName)udName.textContent=(s.user&&s.user.username)||'Usuario';
 if(s.user&&s.user.role==='SuperAdmin'){
 badge.textContent='SUPER USUARIO';badge.className=amber;
 if(udRole)udRole.textContent='Super usuario · plataforma';
-if(scope)scope.textContent='Plataforma · todos los tenants';
+if(scope)scope.textContent='Plataforma · todos los clientes';
 }else if(s.user&&s.user.role==='Admin'){
 badge.textContent='ADMIN';badge.className=amber;
-if(udRole)udRole.textContent='Admin · multi-tenant';
-if(scope)scope.textContent='Administración multi-tenant';
+if(udRole)udRole.textContent='Admin · multi-cliente';
+if(scope)scope.textContent='Administración multi-cliente';
 }else{
 badge.textContent='TENANT';badge.className=cyan;
-if(udRole)udRole.textContent='Administrador del tenant';
+if(udRole)udRole.textContent='Administrador del cliente';
 if(sel)sel.classList.add('hidden');
 updateScopeLabel();
 }
@@ -249,9 +232,9 @@ function updateScopeLabel(){
 const scope=document.getElementById('scope-label');if(!scope)return;
 if(s.isAdmin){
 const t=(s.tenants||[]).find(x=>x.id===s.tenantId);
-scope.textContent=s.tenantId?('Actuando como: '+(t?t.name:s.tenantId)):'Sin tenant seleccionado';
+scope.textContent=s.tenantId?('Actuando como: '+(t?t.name:s.tenantId)):'Sin cliente seleccionado';
 }else{
-scope.textContent=s.user&&s.user.tenantName?('Tenant: '+s.user.tenantName):'';
+scope.textContent=s.user&&s.user.tenantName?('Cliente: '+s.user.tenantName):'';
 }
 }
 function logout(){localStorage.clear();s.token=null;s.user=null;showLogin();}
@@ -296,7 +279,7 @@ document.getElementById('c-open').textContent='0';
 document.getElementById('c-crit').textContent='0';
 document.getElementById('c-res').textContent='0';
 document.getElementById('c-avg').textContent='0';
-document.getElementById('l-rec').innerHTML='<div class="p-8 text-center" style="color:var(--text-secondary)">Selecciona un tenant</div>';
+document.getElementById('l-rec').innerHTML='<div class="p-8 text-center" style="color:var(--text-secondary)">Selecciona un cliente</div>';
 return;
 }
 const d=await api('GET','/support/summary');
@@ -321,7 +304,7 @@ let incVisibleCount=INC_PAGE_SIZE;
 async function li(search){
 try{
 // Admins pueden ver incidentes globales sin tenant seleccionado
-if(!s.tenantId&&!s.isAdmin){document.getElementById('l-all').innerHTML='<div class="p-10 text-center" style="color:var(--text-secondary)">Selecciona un tenant</div>';return;}
+if(!s.tenantId&&!s.isAdmin){document.getElementById('l-all').innerHTML='<div class="p-10 text-center" style="color:var(--text-secondary)">Selecciona un cliente</div>';return;}
 const f=document.getElementById('fs').value,v=document.getElementById('fv').value;
 const q=`/support/incidents?${f?'status='+f+'&':''}${v?'severity='+v+'&':''}${search?'q='+encodeURIComponent(search)+'&':''}`;
 const d=await api('GET',q);s.incidents=d||[];
@@ -444,10 +427,9 @@ n('incidents');
 li();
 }
 function searchIncidents(){
-const q=(document.getElementById('global-search').value||'').trim()||((document.getElementById('global-search-mobile')||{}).value||'').trim();
+const q=((document.getElementById('inc-search')||{}).value||'').trim();
 if(!q){li();return;}
 n('incidents');
-closeMobileMenu();
 li(q);
 }
 function esc(t){const d=document.createElement('div');d.textContent=t||'';return d.innerHTML;}
@@ -524,7 +506,7 @@ function handleRipple(e){const b=e.currentTarget;const r=document.createElement(
 document.getElementById('fc').addEventListener('submit',async e=>{
 e.preventDefault();
 try{
-if(!s.tenantId&&!s.isAdmin){toast('Selecciona un tenant primero','error');return;}
+if(!s.tenantId&&!s.isAdmin){toast('Selecciona un cliente primero','error');return;}
 const d=await api('POST','/support/incidents',{title:document.getElementById('ct').value,description:document.getElementById('cd').value,severity:document.getElementById('cv').value,category:document.getElementById('cc').value});
 cm('mc');toast('Incidente creado','success');document.getElementById('fc').reset();li();ld();od(d.id);
 }catch(x){toast(x.message,'error');}
@@ -535,11 +517,11 @@ const tenants=await api('GET','/tenants');
 s.tenants=tenants||[];
 const sel=document.getElementById('tenant-select');
 if(sel){
-sel.innerHTML='<option value="">Seleccionar Tenant...</option>'+(tenants||[]).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+sel.innerHTML='<option value="">Seleccionar Cliente...</option>'+(tenants||[]).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
 if(s.tenantId&&tenants&&tenants.find(t=>t.id===s.tenantId)){sel.value=s.tenantId;changeTenant();}
 }
 updateScopeLabel();
-}catch(e){console.error('Error loading tenants:',e);toast('Error al cargar tenants','error');}
+}catch(e){console.error('Error loading tenants:',e);toast('Error al cargar clientes','error');}
 }
 function changeTenant(){
 const sel=document.getElementById('tenant-select');
@@ -564,11 +546,11 @@ updateScopeLabel();
 ld();li();
 ctxReloadIfActive();
 if(hubConn&&hubConn.invoke){hubConn.invoke('JoinTenantGroup',tid).catch(()=>{});}
-toast('Operando como el tenant seleccionado','success');
+toast('Operando como el cliente seleccionado','success');
 }
 function ctxReloadIfActive(){const v=document.getElementById('v-ctx');if(v&&v.classList.contains('active'))lctx();}
 async function patchTenantPath(pathRel, payload){
-if(!s.tenantId){throw new Error('Sin tenant');}
+if(!s.tenantId){throw new Error('Sin cliente');}
 const o={method:'PATCH',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(s.token||'')},credentials:'include',body:JSON.stringify(payload)};
 if(s.tenantId)o.headers['X-Tenant-Id']=s.tenantId;
 const r=await fetch(`${API}/tenants/${s.tenantId}${pathRel}`,o);
@@ -578,7 +560,7 @@ if(!r.ok){throw new Error(t||r.statusText);}
 return t?JSON.parse(t):null;}
 async function lc(){
 try{
-if(!s.tenantId){toast('Selecciona un tenant primero','warning');return;}
+if(!s.tenantId){toast('Selecciona un cliente primero','warning');return;}
 const cfg=await api('GET','/tenants/'+s.tenantId+'/config');
 const el=id=>document.getElementById(id);
 const llmHint=el('cfg-llm-selfhosted-hint');
@@ -623,7 +605,7 @@ await loadChatOpsWebhookConfig();
 }catch(e){toast(e.message,'error');}
 }
 function applyPreset(preset){
-if(!s.tenantId){toast('Selecciona un tenant primero','warning');return;}
+if(!s.tenantId){toast('Selecciona un cliente primero','warning');return;}
 const presets={
 basic:{model:'gpt-3.5-turbo',temperature:0.5,maxTokens:1600},
 standard:{model:'gpt-4',temperature:0.7,maxTokens:2000},
@@ -690,7 +672,7 @@ else{el.classList.add('hidden');}
 }
 async function loadNotifications(){
 try{
-if(!s.tenantId&&!s.isAdmin){document.getElementById('notif-list').innerHTML='<div class="p-4 text-center text-sm" style="color:var(--text-secondary)">Selecciona un tenant</div>';return;}
+if(!s.tenantId&&!s.isAdmin){document.getElementById('notif-list').innerHTML='<div class="p-4 text-center text-sm" style="color:var(--text-secondary)">Selecciona un cliente</div>';return;}
 const d=await api('GET','/support/notifications');
 notifications=d||[];
 const nl=document.getElementById('notif-list');
@@ -877,7 +859,7 @@ async function loadReadinessAndOutcomes() {
   } catch (e) {
     console.warn('Readiness check error:', e);
     s.readiness = null;
-    showWidgetError('rd-checks-list', 'No se pudo verificar la configuración del tenant', 'loadReadinessAndOutcomes()');
+    showWidgetError('rd-checks-list', 'No se pudo verificar la configuración del cliente', 'loadReadinessAndOutcomes()');
   }
   renderSetupWizard();
 }
@@ -937,7 +919,7 @@ async function loadPlaybooks() {
     const list = await api('GET', '/support/playbooks');
     s.playbooks = list || [];
     if (!s.playbooks.length) {
-      listEl.innerHTML = '<div class="hive-card p-8 text-center col-span-full" style="color:var(--text-secondary)">No hay playbooks activos configurados para este tenant. Creá el primero con "+ Nuevo Playbook".</div>';
+      listEl.innerHTML = '<div class="hive-card p-8 text-center col-span-full" style="color:var(--text-secondary)">No hay playbooks activos configurados para este cliente. Creá el primero con "+ Nuevo Playbook".</div>';
       return;
     }
     listEl.innerHTML = s.playbooks.map(pb => {
@@ -1178,7 +1160,7 @@ async function loadChatOpsWebhookConfig() {
 
 async function saveChatOpsWebhook(silent) {
   if (!s.tenantId) {
-    if (!silent) toast('Selecciona un tenant primero', 'warning');
+    if (!silent) toast('Selecciona un cliente primero', 'warning');
     return;
   }
   const events = [...document.querySelectorAll('.cfg-wh-evt:checked')].map(cb => cb.value);
@@ -1201,7 +1183,7 @@ async function saveChatOpsWebhook(silent) {
 
 async function testChatOpsWebhook() {
   if (!s.tenantId) {
-    toast('Selecciona un tenant primero', 'warning');
+    toast('Selecciona un cliente primero', 'warning');
     return;
   }
   await saveChatOpsWebhook(true);
@@ -1420,7 +1402,7 @@ async function loadIncidentSnapshots(incidentId) {
 async function revertSnapshot(incidentId, snapshotId) {
   const ok = await askConfirm({
     title: 'Revertir snapshot (1-Click Undo)',
-    detail: 'Se ejecutará el SQL inverso del snapshot sobre la base del tenant.',
+    detail: 'Se ejecutará el SQL inverso del snapshot sobre la base del cliente.',
     preview: 'Se restaurarán las filas al estado Before capturado',
     confirmLabel: 'Revertir',
     danger: true
@@ -1554,14 +1536,14 @@ function renderSetupWizard() {
     {
       key: 'targetDatabase',
       title: 'Conectar base de datos del producto',
-      desc: 'Vinculá la DB del tenant para introspección de esquema y snapshots Before/After.',
+      desc: 'Vinculá la DB del cliente para introspección de esquema y snapshots Before/After.',
       ok: checkOk('targetDatabase'),
       cta: 'Configurar DB →',
       action: "jumpToReadinessFix('targetDatabase')"
     },
     {
       key: 'gitWorkspace',
-      title: 'Clonar workspace Git del tenant',
+      title: 'Clonar workspace Git del cliente',
       desc: 'El agente clona el repo para generar commits y Pull Requests de fixes L3.',
       ok: checkOk('gitWorkspace'),
       cta: 'Configurar Git →',
@@ -1742,7 +1724,7 @@ async function lctx(){
   const grid=document.getElementById('ctx-grid');
   if(!emptyEl||!grid)return;
   if(!s.tenantId&&!s.isAdmin){
-    ctxShowEmpty('<div class="text-sm" style="color:var(--text-secondary)">Seleccioná un tenant para ver su contexto.</div>');
+    ctxShowEmpty('<div class="text-sm" style="color:var(--text-secondary)">Seleccioná un cliente para ver su contexto.</div>');
     return;
   }
   try{
@@ -1752,7 +1734,7 @@ async function lctx(){
       ctxPack=null;
       ctxUpdateVersionBadge();
       ctxShowEmpty(`<svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 3.75c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125"/></svg>
-        <div class="text-sm mb-1 font-semibold" style="color:var(--text-primary)">El agente todavía no tiene contexto de este tenant</div>
+        <div class="text-sm mb-1 font-semibold" style="color:var(--text-primary)">El agente todavía no tiene contexto de este cliente</div>
         <div class="text-xs mb-5" style="color:var(--text-secondary)">Inicializá el Context Pack para escanear la base y empezar a cargar glosario, documentos y memoria.</div>
         <button type="button" id="ctx-init-btn" onclick="ctxInit()" class="btn-primary px-6 py-3 rounded-xl text-sm">Inicializar contexto</button>`);
     }else if(!r.ok){
@@ -2109,7 +2091,7 @@ async function limpr(){
   const cnt=document.getElementById('ctx-improve-count');
   if(!s.tenantId&&!s.isAdmin){
     s.ctxImprovements=[];
-    el.innerHTML='<div class="text-xs py-6 text-center rounded-xl border border-dashed" style="border-color:var(--border-color);color:var(--text-secondary)">Seleccioná un tenant para ver la auto-mejora del agente</div>';
+    el.innerHTML='<div class="text-xs py-6 text-center rounded-xl border border-dashed" style="border-color:var(--border-color);color:var(--text-secondary)">Seleccioná un cliente para ver la auto-mejora del agente</div>';
     if(cnt)cnt.classList.add('hidden');
     return;
   }
@@ -2260,7 +2242,7 @@ async function llt(){
   const cnt=document.getElementById('ctx-llmtasks-count');
   if(!el)return;
   if(!s.tenantId&&!s.isAdmin){
-    el.innerHTML='<div class="text-xs py-6 text-center rounded-xl border border-dashed" style="border-color:var(--border-color);color:var(--text-secondary)">Seleccioná un tenant para ver las tareas IA pendientes</div>';
+    el.innerHTML='<div class="text-xs py-6 text-center rounded-xl border border-dashed" style="border-color:var(--border-color);color:var(--text-secondary)">Seleccioná un cliente para ver las tareas IA pendientes</div>';
     if(cnt)cnt.classList.add('hidden');
     return;
   }

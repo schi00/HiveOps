@@ -607,46 +607,61 @@ html.light .by-hive-badge {
 
 <!-- App -->
 <div id="app" class="hidden">
-  <!-- Navbar -->
-  <nav class="fixed top-0 left-0 right-0 h-20 glass z-40 flex items-center justify-between px-6">
-    <div class="flex items-center gap-6">
-      <div class="flex items-center gap-3">
-        <div class="hive-logo">
-          <img src="hiveops-mark.svg" width="42" height="42" alt="HiveOps" class="brand-mark-dark"/>
-          <img src="hiveops-mark-light.svg" width="42" height="42" alt="HiveOps" class="brand-mark-light"/>
-        </div>
-        <div>
-          <span class="font-display font-bold text-lg text-white brand-title">Hive<span class="cyan-text">Ops</span></span>
-          <span class="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-widest text-cyan-300/90 ml-2 by-hive-badge">by HIVE</span>
-          <span class="text-xs block mt-0.5" style="color: var(--text-secondary)">AI Support Engineer</span>
-        </div>
+  <!-- Sidebar (desktop) -->
+  <aside class="hidden md:flex fixed top-0 left-0 bottom-0 w-60 glass z-40 flex-col border-r" style="border-color: var(--border-color)">
+    <div class="flex items-center gap-3 px-5 h-16 shrink-0">
+      <div class="hive-logo">
+        <img src="hiveops-mark.svg" width="36" height="36" alt="HiveOps" class="brand-mark-dark"/>
+        <img src="hiveops-mark-light.svg" width="36" height="36" alt="HiveOps" class="brand-mark-light"/>
       </div>
-      <div class="hidden md:flex items-center gap-1 ml-6 border-l pl-6" style="border-color: var(--border-color)">
-        <button onclick="n('dashboard')" id="n-dash" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Resumen</button>
-        <button onclick="n('incidents')" id="n-inc" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Incidentes</button>
-        <button onclick="n('kb')" id="n-kb" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Knowledge Base</button>
-        <button onclick="n('playbooks')" id="n-pb" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Playbooks</button>
-        <button onclick="n('ctx')" id="n-ctx" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Contexto</button>
-        <button onclick="window.location.href='/dashboard/api-inventory.html'" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">API Inventory</button>
-        <button onclick="n('config')" id="n-cfg" class="nav-item px-4 py-2 text-sm font-medium" style="color: var(--text-secondary)">Configuración</button>
-        <span class="border-l pl-2 ml-2 flex items-center" style="border-color: var(--border-color)">
-          <button onclick="n('admin')" id="n-adm" class="nav-item px-4 py-2 text-sm font-semibold hidden" style="color: #fbbf24">Plataforma</button>
-        </span>
+      <div>
+        <span class="font-display font-bold text-base text-white brand-title">Hive<span class="cyan-text">Ops</span></span>
+        <span class="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-widest text-cyan-300/90 ml-1 by-hive-badge">by HIVE</span>
+        <span class="text-[10px] block mt-0.5" style="color: var(--text-secondary)">AI Support Engineer</span>
       </div>
     </div>
-    
-    <div class="flex items-center gap-3">
-      <!-- Identity: role badge + scope -->
-      <div class="hidden md:flex items-center gap-2">
+    <nav class="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-1" aria-label="Navegación principal">
+      <button onclick="n('dashboard')" id="n-dash" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Resumen</button>
+      <button onclick="n('incidents')" id="n-inc" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Incidentes</button>
+      <button onclick="n('kb')" id="n-kb" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Knowledge Base</button>
+      <button onclick="n('playbooks')" id="n-pb" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Playbooks</button>
+      <button onclick="n('ctx')" id="n-ctx" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Contexto</button>
+      <button onclick="window.location.href='/dashboard/api-inventory.html'" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">API Inventory</button>
+      <button onclick="n('config')" id="n-cfg" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Configuración</button>
+      <div class="my-2 border-t" style="border-color: var(--border-color)"></div>
+      <button onclick="n('admin')" id="n-adm" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-semibold hidden" style="color: #fbbf24">Plataforma</button>
+    </nav>
+    <div class="shrink-0 px-4 py-4 border-t flex flex-col gap-3" style="border-color: var(--border-color)">
+      <div class="flex items-center gap-2">
         <span id="role-badge" class="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest border" style="border-color: var(--border-color); color: var(--text-tertiary)">…</span>
         <span id="scope-label" class="text-xs" style="color: var(--text-tertiary)"></span>
       </div>
+      <div>
+        <label class="text-[10px] font-medium uppercase tracking-widest block mb-1.5" for="tenant-select" style="color: var(--text-tertiary)">Cliente</label>
+        <select id="tenant-select" onchange="changeTenant()" class="input-field w-full px-3 py-2 rounded-xl text-sm">
+          <option value="">Seleccionar Cliente...</option>
+        </select>
+      </div>
+    </div>
+  </aside>
 
-      <!-- Tenant Selector (solo admin de plataforma: actúa sobre un tenant) -->
-      <select id="tenant-select" onchange="changeTenant()" class="input-field px-4 py-2 rounded-xl text-sm hidden md:block" style="width: 200px;">
-        <option value="">Seleccionar Tenant...</option>
-      </select>
-      
+  <!-- Topbar -->
+  <nav class="fixed top-0 left-0 right-0 md:left-60 h-16 glass z-30 flex items-center justify-between px-4 md:px-6">
+    <div class="flex items-center gap-3">
+      <!-- Mobile nav hamburger -->
+      <button type="button" id="btn-mobile-nav" class="theme-toggle md:hidden" aria-label="Abrir menú" aria-expanded="false" aria-controls="mobile-menu" onclick="toggleMobileMenu()">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-secondary)" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+      <div class="flex items-center gap-2 md:hidden">
+        <img src="hiveops-mark.svg" width="28" height="28" alt="HiveOps" class="brand-mark-dark"/>
+        <img src="hiveops-mark-light.svg" width="28" height="28" alt="HiveOps" class="brand-mark-light"/>
+        <span class="font-display font-bold text-base text-white brand-title">Hive<span class="cyan-text">Ops</span></span>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
       <!-- Theme Toggle -->
       <div class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema" role="button" tabindex="0" aria-label="Cambiar tema" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleTheme();}">
         <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #22d3ee" aria-hidden="true">
@@ -654,14 +669,6 @@ html.light .by-hive-badge {
         </svg>
         <svg id="moon-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #22d3ee" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
-        </svg>
-      </div>
-      
-      <!-- Search -->
-      <div class="relative hidden md:block">
-        <input type="text" id="global-search" placeholder="Buscar incidentes..." class="input-field w-64 px-4 py-2 rounded-xl text-sm pl-10" onkeyup="if(event.key==='Enter')searchIncidents()" aria-label="Buscar incidentes"/>
-        <svg onclick="searchIncidents()" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-tertiary)" role="button" tabindex="0" aria-label="Buscar" onkeydown="if(event.key==='Enter')searchIncidents()">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
         </svg>
       </div>
       
@@ -705,13 +712,6 @@ html.light .by-hive-badge {
           </div>
         </div>
       </div>
-
-      <!-- Mobile nav hamburger -->
-      <button type="button" id="btn-mobile-nav" class="theme-toggle md:hidden" aria-label="Abrir menú" aria-expanded="false" aria-controls="mobile-menu" onclick="toggleMobileMenu()">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-secondary)" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-        </svg>
-      </button>
     </div>
   </nav>
 
@@ -739,17 +739,10 @@ html.light .by-hive-badge {
       </nav>
 
       <div class="flex flex-col gap-3 pt-4 border-t" style="border-color: var(--border-color)">
-        <label class="text-xs font-medium uppercase tracking-widest" for="tenant-select-mobile" style="color: var(--text-tertiary)">Tenant</label>
+        <label class="text-xs font-medium uppercase tracking-widest" for="tenant-select-mobile" style="color: var(--text-tertiary)">Cliente</label>
         <select id="tenant-select-mobile" onchange="changeTenantMobile()" class="input-field w-full px-4 py-2 rounded-xl text-sm">
-          <option value="">Seleccionar Tenant...</option>
+          <option value="">Seleccionar Cliente...</option>
         </select>
-
-        <div class="relative">
-          <input type="text" id="global-search-mobile" placeholder="Buscar incidentes..." class="input-field w-full px-4 py-2 rounded-xl text-sm pl-10" onkeyup="if(event.key==='Enter')searchIncidents()" aria-label="Buscar incidentes"/>
-          <svg onclick="searchIncidents()" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-tertiary)" role="button" tabindex="0" aria-label="Buscar" onkeydown="if(event.key==='Enter')searchIncidents()">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-          </svg>
-        </div>
       </div>
 
       <button type="button" onclick="toggleTheme()" class="btn-secondary w-full px-4 py-2.5 rounded-xl text-sm flex items-center justify-between">
@@ -762,7 +755,7 @@ html.light .by-hive-badge {
   </div>
 
   <!-- Main -->
-  <main class="pt-24 pb-10 px-6 max-w-7xl mx-auto" style="position:relative; z-index:1;">
+  <main class="pt-20 pb-10 px-6 md:ml-60 max-w-7xl mx-auto" style="position:relative; z-index:1;">
     
     <!-- Dashboard View -->
     <div id="v-dash" class="view-section space-y-8">
@@ -886,7 +879,7 @@ html.light .by-hive-badge {
             </div>
 
             <div id="rd-checks-list" class="space-y-2.5">
-              <div class="text-xs py-4 text-center" style="color: var(--text-secondary)">Verificando estado del tenant...</div>
+              <div class="text-xs py-4 text-center" style="color: var(--text-secondary)">Verificando estado del cliente...</div>
             </div>
           </div>
         </div>
@@ -929,7 +922,13 @@ html.light .by-hive-badge {
     <div id="v-inc" class="view-section space-y-6">
       <div class="flex flex-wrap justify-between items-center gap-4">
         <h2 class="text-2xl font-bold">Incidentes</h2>
-        <div class="flex gap-3">
+        <div class="flex flex-wrap gap-3 items-center">
+          <div class="relative">
+            <input type="text" id="inc-search" placeholder="Buscar incidentes..." class="input-field w-56 px-4 py-2.5 rounded-xl text-sm pl-10" onkeyup="if(event.key==='Enter')searchIncidents()" aria-label="Buscar incidentes"/>
+            <svg onclick="searchIncidents()" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-tertiary)" role="button" tabindex="0" aria-label="Buscar" onkeydown="if(event.key==='Enter')searchIncidents()">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+          </div>
           <select id="fs" onchange="li()" class="input-field px-4 py-2.5 rounded-xl text-sm" aria-label="Filtrar por estado">
             <option value="">Todos los estados</option>
             <option value="Open">Abierto</option>
@@ -962,13 +961,13 @@ html.light .by-hive-badge {
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 class="text-2xl font-bold">Administración de Plataforma</h2>
-            <p class="text-sm mt-1" style="color: var(--text-secondary)">Solo super usuario / admin de plataforma — estas acciones afectan a todos los tenants. Para operar dentro de un tenant, selecciónalo arriba o desde "Actuar como".</p>
+            <p class="text-sm mt-1" style="color: var(--text-secondary)">Solo super usuario / admin de plataforma — estas acciones afectan a todos los clientes. Para operar dentro de un cliente, seleccionalo en el menú lateral o desde "Actuar como".</p>
           </div>
           <span class="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest border border-amber-500/40 bg-amber-500/15 text-amber-300">Super User</span>
         </div>
       </div>
       <div class="hive-card p-6">
-        <h3 class="font-semibold text-lg mb-4">Tenants</h3>
+        <h3 class="font-semibold text-lg mb-4">Clientes</h3>
         <div id="l-tenants" class="space-y-2">
           <div class="text-center py-6" style="color: var(--text-secondary)">Cargando...</div>
         </div>
@@ -1136,7 +1135,7 @@ html.light .by-hive-badge {
     <div id="v-ctx" class="view-section space-y-6">
       <div class="flex flex-wrap justify-between items-center gap-4">
         <div>
-          <h2 class="text-2xl font-bold">Contexto del Tenant</h2>
+          <h2 class="text-2xl font-bold">Contexto del Cliente</h2>
           <p class="text-sm mt-1" style="color: var(--text-secondary)">Context Pack: lo que el agente conoce de tu negocio, base de datos, repositorios e historial de resoluciones.</p>
         </div>
         <div class="flex items-center gap-3">
@@ -1203,7 +1202,7 @@ html.light .by-hive-badge {
           <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
               <h3 class="font-semibold text-lg">Perfil de datos y repositorios</h3>
-              <p class="text-xs mt-0.5" style="color: var(--text-tertiary)">Esquema introspectado y mapa de módulos del código del tenant.</p>
+              <p class="text-xs mt-0.5" style="color: var(--text-tertiary)">Esquema introspectado y mapa de módulos del código del cliente.</p>
             </div>
             <button type="button" id="ctx-refreshdb-btn" onclick="ctxRefreshDb()" class="btn-secondary px-4 py-2 rounded-xl text-sm">Re-escanear base de datos</button>
           </div>
@@ -1276,7 +1275,7 @@ html.light .by-hive-badge {
     <!-- Config View -->
     <div id="v-config" class="view-section space-y-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <h2 class="text-2xl font-bold">Configuración del Tenant</h2>
+        <h2 class="text-2xl font-bold">Configuración del Cliente</h2>
         <div class="flex items-center gap-2">
           <button id="cfg-adv-toggle" type="button" onclick="toggleAdvancedConfig()" class="btn-secondary px-3 py-1.5 rounded-xl text-xs">Mostrar avanzado (LLM · Deploy · Políticas)</button>
           <span id="cfg-schema-banner" class="text-xs px-3 py-1 rounded-full hive-card border" style="color:var(--text-tertiary)">Schema —</span>
@@ -1409,7 +1408,7 @@ html.light .by-hive-badge {
       <!-- Deploy / Git (avanzado) -->
       <div class="hive-card p-6 cfg-adv hidden">
         <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
-          <h3 class="font-semibold text-lg">Deploy y Git (tenant)</h3>
+          <h3 class="font-semibold text-lg">Deploy y Git (cliente)</h3>
           <button type="button" onclick="saveDeployGitSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar Deploy/Git</button>
         </div>
         <div class="space-y-3">
@@ -1797,7 +1796,7 @@ initTheme();
       portalBtn.style.color = '#fff';
       portalBtn.style.border = '1px solid var(--border-color)';
       portalBtn.textContent = 'Abrir Portal de Pagos';
-      portalBtn.title = 'Abrir el portal de pagos de Stripe para este tenant';
+      portalBtn.title = 'Abrir el portal de pagos de Stripe para este cliente';
       ensureBtn.parentElement.appendChild(portalBtn);
 
       var sel = document.getElementById('bill-tenant');
@@ -1807,7 +1806,7 @@ initTheme();
           var opt = sel && sel.options && sel.options[sel.selectedIndex];
           var hasStatus = !!(opt && /\u00B7|·/.test(opt.text));
           portalBtn.disabled = false; // Permitimos click; manejamos error con mensaje
-          portalBtn.title = hasStatus ? 'Abrir el portal de pagos de Stripe para este tenant' : 'Si falla, primero activa la suscripción';
+          portalBtn.title = hasStatus ? 'Abrir el portal de pagos de Stripe para este cliente' : 'Si falla, primero activa la suscripción';
           portalBtn.style.opacity = hasStatus ? '1' : '0.9';
         }catch{}
       }
@@ -1817,7 +1816,7 @@ initTheme();
         try{
           var selEl = document.getElementById('bill-tenant');
           var tid = selEl && selEl.value;
-          if(!tid){ if(window.toast) toast('Selecciona un tenant','error'); return; }
+          if(!tid){ if(window.toast) toast('Selecciona un cliente','error'); return; }
           var original = portalBtn.textContent;
           portalBtn.textContent = 'Abriendo…';
           portalBtn.disabled = true;
