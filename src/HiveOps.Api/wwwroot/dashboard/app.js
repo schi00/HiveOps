@@ -14,8 +14,10 @@ try{
    const _jwt=decodeURIComponent(_m[1]);
    const _b64=_jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
    const _p=JSON.parse(decodeURIComponent(escape(atob(_b64))));
+   const _name=_p['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name']||_p.name||_p.email||'usuario';
+   const _role=_p['http://schemas.microsoft.com/ws/2008/06/identity/claims/role']||_p.role||'Tenant';
    localStorage.setItem('token',_jwt);
-   localStorage.setItem('user',JSON.stringify({username:_p.name||_p.email||'usuario',role:_p.role||'Tenant',tenantName:_p.org_name||''}));
+   localStorage.setItem('user',JSON.stringify({username:_name,role:_role,tenantName:_p.org_name||''}));
    if(_p.org_id) localStorage.setItem('tenantId',_p.org_id);
    history.replaceState(null,'',location.pathname+location.search);
  }
@@ -151,8 +153,23 @@ document.getElementById('login-form').addEventListener('submit',async e=>{
 e.preventDefault();
 const el=document.getElementById('le');el.classList.add('hidden');
 try{
-const r=await fetch(`${API}/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:document.getElementById('lu').value,password:document.getElementById('lp').value})});
-if(!r.ok)throw new Error('Credenciales inválidas');
+const _u=document.getElementById('lu').value,_p=document.getElementById('lp').value;
+const r=await fetch(`${API}/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:_u,password:_p})});
+if(!r.ok){
+  // Fallback: unified HIVE account credentials (issued by the accounts authority)
+  const hr=await fetch('https://api.crew.hivecorp.com.ar/api/accounts/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:_u,password:_p})});
+  if(!hr.ok)throw new Error('Credenciales inválidas');
+  const {token:_jwt}=await hr.json();
+  const _b64=_jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+  const _pl=JSON.parse(decodeURIComponent(escape(atob(_b64))));
+  s.token=_jwt;
+  s.user={username:_pl['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name']||_pl.name||_pl.email||'usuario',role:_pl['http://schemas.microsoft.com/ws/2008/06/identity/claims/role']||_pl.role||'Tenant',tenantName:_pl.org_name||''};
+  s.isAdmin=false;
+  if(_pl.org_id){s.tenantId=_pl.org_id;localStorage.setItem('tenantId',s.tenantId);}
+  localStorage.setItem('token',s.token);localStorage.setItem('user',JSON.stringify(s.user));
+  showApp();
+  return;
+}
 const d=await r.json();
 s.token=d.token;
 s.user={username:d.displayName||d.username||'',role:d.role,tenantName:d.tenantName||null};
@@ -202,7 +219,7 @@ if(s.isAdmin){const adm=document.getElementById('n-adm');if(adm)adm.classList.re
 else {const adm=document.getElementById('n-adm');if(adm)adm.classList.add('hidden');}
 updateMobileAdminNav();
 renderIdentityBadge();
-setTimeout(()=>{loadTenants();n('dashboard');ld();initRealtime();},100);
+setTimeout(()=>{if(s.isAdmin)loadTenants();n('dashboard');ld();initRealtime();},100);
 }catch(e){console.error('Error in showApp:',e);showLogin();}
 }
 function renderIdentityBadge(){

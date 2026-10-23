@@ -54,16 +54,11 @@ public sealed class TenantResolutionMiddleware
     {
         var path = context.Request.Path.Value ?? string.Empty;
 
-        if (_exemptPaths.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
-        {
-            await _next(context);
-            return;
-        }
-
         // The default authentication scheme is the cookie; bearer calls never
         // populate context.User on their own. Authenticate the JWT scheme
         // explicitly so bearer principals (including HIVE account tokens) are
-        // available to the tenant resolution below.
+        // available — exempt paths resolve their own tenant in the controller,
+        // the rest use it for the tenant resolution below.
         if (context.User.Identity?.IsAuthenticated != true &&
             context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
         {
@@ -71,6 +66,12 @@ public sealed class TenantResolutionMiddleware
                 Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme);
             if (jwtResult.Succeeded && jwtResult.Principal is not null)
                 context.User = jwtResult.Principal;
+        }
+
+        if (_exemptPaths.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+        {
+            await _next(context);
+            return;
         }
 
         // SuperAdmin/Admin bypass without tenant resolution
