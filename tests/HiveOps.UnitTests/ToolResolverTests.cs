@@ -99,6 +99,12 @@ public sealed class ToolResolverTests
         public Task<TenantConfiguration> PatchLlmConfigAsync(Guid tenantId, LlmConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default)
             => PatchLlmConfigAsync(tenantId, patch, ct);
 
+        public Task<TenantConfiguration> PatchDiagnosticsConfigAsync(Guid tenantId, DiagnosticsConfig patch, CancellationToken ct = default)
+            => Task.FromResult(_configuration);
+
+        public Task<TenantConfiguration> PatchDiagnosticsConfigAsync(Guid tenantId, DiagnosticsConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+            => PatchDiagnosticsConfigAsync(tenantId, patch, ct);
+
         public Task<TenantConfiguration> PatchDeployGitConfigAsync(Guid tenantId, DeployGitConfig patch, CancellationToken ct = default)
             => Task.FromResult(_configuration);
 

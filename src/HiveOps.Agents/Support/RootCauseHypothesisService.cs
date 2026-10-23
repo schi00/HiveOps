@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
@@ -34,7 +35,7 @@ namespace HiveOps.Agents.Support;
 /// </summary>
 public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
 {
-    private const int MaxDiagnosticQueries = 3;
+    private const int FallbackMaxDiagnosticQueries = 5;
     private const int MaxSchemaCharsForPrompt = 6000;
     private const int MaxEvidenceCharsForPrompt = 4000;
     private const int MaxGitPathCandidates = 20;
@@ -257,17 +258,47 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
     {
         var evidence = new List<DiagnosticQueryEvidence>();
 
+        DiagnosticsConfig diagnostics;
+        try
+        {
+            diagnostics = (await _tenantConfigService.GetConfigurationAsync(incident.TenantId, ct)).Diagnostics;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Tenant diagnostics config unavailable for incident {IncidentId}; using defaults.", incident.Id);
+            diagnostics = new DiagnosticsConfig();
+        }
+
+        var maxDiagnosticQueries = FallbackMaxDiagnosticQueries;
+        try
+        {
+            var plan = await _db.Tenants
+                .AsNoTracking()
+                .Where(t => t.Id == incident.TenantId)
+                .Select(t => (HiveOps.Domain.Entities.PlanTier?)t.Plan)
+                .FirstOrDefaultAsync(ct) ?? HiveOps.Domain.Entities.PlanTier.Starter;
+            maxDiagnosticQueries = HiveOps.Domain.Models.PlanCapabilities.RootCauseQueriesPerInvestigation(plan);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Tenant plan lookup failed for incident {IncidentId}; using fallback query cap.", incident.Id);
+        }
+
         var schemaForPrompt = Truncate(schemaDdl, MaxSchemaCharsForPrompt);
         if (string.IsNullOrWhiteSpace(schemaForPrompt))
             schemaForPrompt = "-- schema unavailable";
 
         var systemPrompt = $$"""
-            You are the HiveOps Root-Cause Diagnostic Planner. Given the target application's database schema (DDL) and an incident report, propose up to {{MaxDiagnosticQueries}} READ-ONLY PostgreSQL diagnostic queries that would gather evidence about the root cause.
+            You are the HiveOps Root-Cause Diagnostic Planner. Given the target application's database schema (DDL) and an incident report, propose up to {{maxDiagnosticQueries}} READ-ONLY PostgreSQL diagnostic queries that would gather evidence about the root cause.
 
             RULES (violation = discard the query):
             - ONLY SELECT statements. Never INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CALL or UNION.
             - Always cap rows: end the query with LIMIT 20.
             - Only use tables and columns present in the DDL below.
+            - Never query tables storing credentials, secrets, passwords, tokens, sessions or keys — even if they appear in the schema.
+            - Scope queries to the incident's own symptom. Do not probe for general vulnerabilities or audit unrelated data.
             - Prefer filtering by the concrete ids, statuses or values mentioned in the incident.
             - If no useful query can be derived from the schema, return an empty array.
 
@@ -301,7 +332,7 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
 
         foreach (var sql in ParseDiagnosticQueriesJson(raw))
         {
-            if (evidence.Count >= MaxDiagnosticQueries)
+            if (evidence.Count >= maxDiagnosticQueries)
                 break;
 
             if (!IsCandidateDiagnosticQuery(sql))
@@ -309,6 +340,18 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
                 _logger.LogWarning(
                     "Rejected unsafe LLM-suggested diagnostic query for incident {IncidentId}.", incident.Id);
                 continue;
+            }
+
+            if (!diagnostics.AllowSensitiveTables)
+            {
+                var blockedTable = HiveOps.Application.SafetyValidator.FindBlockedTableReference(sql, diagnostics.BlockedTables);
+                if (blockedTable is not null)
+                {
+                    _logger.LogWarning(
+                        "Rejected LLM-suggested diagnostic query touching blocked table {Table} for incident {IncidentId}.",
+                        blockedTable, incident.Id);
+                    continue;
+                }
             }
 
             TargetQueryResult result;
@@ -484,7 +527,7 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
             return array.EnumerateArray()
                 .Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() ?? string.Empty : string.Empty)
                 .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Take(MaxDiagnosticQueries)
+                .Take(20)
                 .ToList();
         }
         catch (JsonException)

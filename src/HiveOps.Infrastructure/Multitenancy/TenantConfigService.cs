@@ -193,6 +193,16 @@ public sealed class TenantConfigService : ITenantConfigService
         return await UpsertConfigurationAsync(tenantId, current, audit ?? new TenantConfigAuditInfo(null, nameof(EscalationConfig), "Patch escalation"), ct);
     }
 
+    public Task<TenantConfiguration> PatchDiagnosticsConfigAsync(Guid tenantId, DiagnosticsConfig patch, CancellationToken ct = default)
+        => PatchDiagnosticsConfigAsync(tenantId, patch, null, ct);
+
+    public async Task<TenantConfiguration> PatchDiagnosticsConfigAsync(Guid tenantId, DiagnosticsConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+    {
+        var current = await LoadEffectiveFromDatabaseAsync(tenantId, ct);
+        current.Diagnostics = patch;
+        return await UpsertConfigurationAsync(tenantId, current, audit ?? new TenantConfigAuditInfo(null, nameof(DiagnosticsConfig), "Patch diagnostics"), ct);
+    }
+
     public Task InvalidateAsync(Guid tenantId, CancellationToken ct = default)
     {
         _cache.Remove(BuildCacheKey(tenantId));

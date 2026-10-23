@@ -197,6 +197,15 @@ public sealed class AgentRuntimeTests
             return Task.FromResult(Default);
         }
 
+        public Task<TenantConfiguration> PatchDiagnosticsConfigAsync(Guid tenantId, DiagnosticsConfig patch, CancellationToken ct = default)
+        {
+            Default.Diagnostics = patch;
+            return Task.FromResult(Default);
+        }
+
+        public Task<TenantConfiguration> PatchDiagnosticsConfigAsync(Guid tenantId, DiagnosticsConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+            => PatchDiagnosticsConfigAsync(tenantId, patch, ct);
+
         public Task<TenantConfiguration> PatchLlmConfigAsync(Guid tenantId, LlmConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default)
             => PatchLlmConfigAsync(tenantId, patch, ct);
 

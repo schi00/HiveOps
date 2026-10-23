@@ -173,11 +173,12 @@ public sealed class RootCauseHypothesisServiceTests
     }
 
     [Fact]
-    public void ParseDiagnosticQueriesJson_Caps_At_Three_And_Skips_NonStrings()
+    public void ParseDiagnosticQueriesJson_Caps_At_Twenty_And_Skips_NonStrings()
     {
-        var raw = "{ \"diagnosticQueries\": [\"q1\", 42, \"q2\", \"q3\", \"q4\", null] }";
+        var queries = string.Join(", ", Enumerable.Range(1, 25).Select(i => $"\"q{i}\""));
+        var raw = $"{{ \"diagnosticQueries\": [\"q0\", 42, {queries}, null] }}";
         RootCauseHypothesisService.ParseDiagnosticQueriesJson(raw)
-            .Should().Equal("q1", "q2", "q3");
+            .Should().HaveCount(20).And.StartWith("q0").And.NotContainNulls();
     }
 
     [Fact]

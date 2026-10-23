@@ -150,6 +150,17 @@ public sealed class TenantsController : ControllerBase
         return Ok(await _configService.PatchEscalationConfigAsync(id, body, Audit(nameof(EscalationConfig)), ct));
     }
 
+    [HttpPatch("{id:guid}/config/diagnostics")]
+    public async Task<ActionResult<TenantConfiguration>> PatchTenantDiagnostics(Guid id, [FromBody] DiagnosticsConfig body, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var cfg = await _configService.GetConfigurationAsync(id, ct);
+        cfg.Diagnostics = body;
+        var errors = TenantConfigurationValidator.Validate(cfg);
+        if (errors.Count > 0) return BadRequest(new { errors });
+        return Ok(await _configService.PatchDiagnosticsConfigAsync(id, body, Audit(nameof(DiagnosticsConfig)), ct));
+    }
+
     [HttpGet("{id:guid}/config/outbound-webhook")]
     public async Task<ActionResult<OutboundWebhookSettings>> GetOutboundWebhook(Guid id, CancellationToken ct)
     {

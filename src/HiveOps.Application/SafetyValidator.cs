@@ -122,6 +122,47 @@ public static class SafetyValidator
         return null;
     }
 
+    // Table references after FROM / JOIN / UPDATE / INTO (with optional schema. prefix)
+    private static readonly Regex TableReferencePattern = new(
+        @"\b(?:FROM|JOIN|UPDATE|INTO)\s+(?:ONLY\s+)?[""'\[\]]?(\w+)[""'\[\]]?(?:\s*\.\s*[""'\[\]]?(\w+)[""'\[\]]?)?",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Built-in denylist: tables that store credentials, secrets or auth material.
+    // The agent never needs their contents for incident diagnostics — only their
+    // existence/counts, which can be checked via non-sensitive catalog tables.
+    private static readonly Regex SensitiveTablePattern = new(
+        @"^(__)?(user_?)?(credentials?|secrets?|passwords?|passwd|api_?keys?|access_?tokens?|refresh_?tokens?|auth_?tokens?|tokens?|sessions?|oauth_?\w*|mfa_?\w*|totp_?\w*|private_?keys?|ssh_?keys?|encryption_?keys?)(__)?$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Returns the name of the first sensitive/blocked table the SQL touches, or null.
+    /// <paramref name="extraBlockedPatterns"/> are tenant-configured regex fragments
+    /// matched (case-insensitive) against the bare table name.
+    /// </summary>
+    public static string? FindBlockedTableReference(string sql, IEnumerable<string>? extraBlockedPatterns = null)
+    {
+        if (string.IsNullOrWhiteSpace(sql))
+            return null;
+
+        var cleaned = StripSqlComments(sql);
+        foreach (Match m in TableReferencePattern.Matches(cleaned))
+        {
+            // Two-part name schema.table → use the table part; single part → group 1.
+            var table = m.Groups[2].Success ? m.Groups[2].Value : m.Groups[1].Value;
+            if (SensitiveTablePattern.IsMatch(table))
+                return table;
+            if (extraBlockedPatterns is not null)
+            {
+                foreach (var pattern in extraBlockedPatterns)
+                {
+                    if (!string.IsNullOrWhiteSpace(pattern) && Regex.IsMatch(table, pattern, RegexOptions.IgnoreCase))
+                        return table;
+                }
+            }
+        }
+        return null;
+    }
+
     /// <summary>
     /// Validates that an UPDATE or DELETE has a primary-key WHERE clause.
     /// This is a stricter check than IsSafeSql.

@@ -24,6 +24,9 @@ public sealed class TenantConfiguration
     /// <summary>Optional references (key vault identifiers, etc.) — never plaintext secrets.</summary>
     public TenantSecurityReferencesConfig SecurityRefs { get; set; } = new();
 
+    /// <summary>Abuse/scope guardrails for agent-driven database diagnostics.</summary>
+    public DiagnosticsConfig Diagnostics { get; set; } = new();
+
     public static TenantConfiguration CreateDefault() => new();
 }
 
@@ -120,6 +123,35 @@ public sealed class LlmConfig
     public double? TopP { get; set; }
 
     public int MaxOutputTokens { get; set; } = 2000;
+}
+
+/// <summary>
+/// Guardrails that keep agent diagnostics scoped to the reported incident and away
+/// from credential-bearing tables. Prevent ticket-driven abuse (e.g. a vague
+/// "security problem" report turning into an unrestricted data-browsing session).
+/// </summary>
+public sealed class DiagnosticsConfig
+{
+    /// <summary>
+    /// Optional per-tenant override for interactive diagnostic queries per incident
+    /// (chat-driven <c>run_db_diagnostic</c> calls). When null, the plan-tier default
+    /// from <see cref="HiveOps.Domain.Models.PlanCapabilities"/> applies —
+    /// Starter 10 / Pro 30 / Enterprise 60. Raise it for tenants with complex schemas.
+    /// </summary>
+    public int? MaxDiagnosticQueriesPerIncident { get; set; }
+
+    /// <summary>
+    /// Extra table name patterns (regex, case-insensitive) the agent must never query,
+    /// on top of the built-in sensitive-table denylist (credentials, tokens, secrets…).
+    /// </summary>
+    public List<string> BlockedTables { get; set; } = [];
+
+    /// <summary>
+    /// Escape hatch: when true, the built-in sensitive-table denylist is skipped.
+    /// Tenant extra <see cref="BlockedTables"/> still apply. Use only for trusted
+    /// on-call scenarios; prefer scoping with <see cref="BlockedTables"/> inverted.
+    /// </summary>
+    public bool AllowSensitiveTables { get; set; }
 }
 
 /// <summary>Git + deployment policy for sandbox and pipeline automation scoped to a tenant.</summary>

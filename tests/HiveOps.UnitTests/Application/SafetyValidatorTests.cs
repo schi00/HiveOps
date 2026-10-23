@@ -120,4 +120,53 @@ public sealed class SafetyValidatorTests
     {
         SafetyValidator.GetRejectionReason(sql).Should().BeNull();
     }
+
+    [Theory]
+    // Sensitive tables blocked regardless of query shape
+    [InlineData("SELECT * FROM credentials", "credentials")]
+    [InlineData("SELECT * FROM user_credentials WHERE user_id = 1", "user_credentials")]
+    [InlineData("SELECT hash FROM passwords LIMIT 5", "passwords")]
+    [InlineData("SELECT * FROM api_keys", "api_keys")]
+    [InlineData("SELECT * FROM refresh_tokens WHERE user_id = 7", "refresh_tokens")]
+    [InlineData("SELECT * FROM sessions WHERE active = true", "sessions")]
+    [InlineData("SELECT * FROM oauth_clients", "oauth_clients")]
+    [InlineData("SELECT * FROM private_keys", "private_keys")]
+    [InlineData("SELECT u.email FROM users u JOIN credentials c ON c.user_id = u.id", "credentials")]
+    // Schema-qualified references resolve to the table part
+    [InlineData("SELECT * FROM auth.sessions", "sessions")]
+    [InlineData("SELECT * FROM \"public\".\"tokens\"", "tokens")]
+    public void FindBlockedTableReference_SensitiveTable_ReturnsName(string sql, string expectedTable)
+    {
+        SafetyValidator.FindBlockedTableReference(sql).Should().Be(expectedTable);
+    }
+
+    [Theory]
+    // Normal business tables are never blocked
+    [InlineData("SELECT * FROM Users")]
+    [InlineData("SELECT * FROM incidents WHERE status = 'open'")]
+    [InlineData("SELECT o.id FROM orders o JOIN order_items i ON i.order_id = o.id")]
+    [InlineData("SELECT COUNT(*) FROM conversations")]
+    // 'token' inside a word does not match (word-boundary anchored)
+    [InlineData("SELECT * FROM tokenized_products")]
+    public void FindBlockedTableReference_NormalTable_ReturnsNull(string sql)
+    {
+        SafetyValidator.FindBlockedTableReference(sql).Should().BeNull();
+    }
+
+    [Fact]
+    public void FindBlockedTableReference_TenantExtraPattern_BlocksTable()
+    {
+        var blocked = new[] { "^legacy_users$", "hr_" };
+        SafetyValidator.FindBlockedTableReference("SELECT * FROM legacy_users", blocked).Should().Be("legacy_users");
+        SafetyValidator.FindBlockedTableReference("SELECT * FROM hr_payroll", blocked).Should().Be("hr_payroll");
+        SafetyValidator.FindBlockedTableReference("SELECT * FROM incidents", blocked).Should().BeNull();
+    }
+
+    [Fact]
+    public void FindBlockedTableReference_CommentHiddenTable_IsStillDetected()
+    {
+        // Comments are stripped before scanning, so they cannot smuggle a table reference
+        SafetyValidator.FindBlockedTableReference(
+            "SELECT * /* innocuous */ FROM credentials").Should().Be("credentials");
+    }
 }

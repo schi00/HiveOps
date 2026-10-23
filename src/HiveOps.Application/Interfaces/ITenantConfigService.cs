@@ -43,5 +43,9 @@ public interface ITenantConfigService
 
     Task<TenantConfiguration> PatchEscalationConfigAsync(Guid tenantId, EscalationConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default);
 
+    Task<TenantConfiguration> PatchDiagnosticsConfigAsync(Guid tenantId, DiagnosticsConfig patch, CancellationToken ct = default);
+
+    Task<TenantConfiguration> PatchDiagnosticsConfigAsync(Guid tenantId, DiagnosticsConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default);
+
     Task InvalidateAsync(Guid tenantId, CancellationToken ct = default);
 }
