@@ -15,6 +15,25 @@ This document describes how to run HiveOps in **SaaS-style local dev**, **self-h
 
 Secrets must come from environment variables or your secret store; do not commit real passwords.
 
+### HIVE shared identity (suite SSO)
+
+HiveOps is a product in the HIVE suite; `HiveCrew.Api` (`accounts.hivecorp.com.ar`) is the identity authority. HiveOps accepts HIVE-issued JWTs alongside its own tokens:
+
+| Setting | Description |
+|---------|-------------|
+| `HiveIdentity:Key` | Shared symmetric key — **must equal** `HiveIdentity:Key`/`HIVE_IDENTITY_KEY` on HiveCrew |
+| `HiveIdentity:Issuer` | `https://accounts.hivecorp.com.ar` |
+| `HiveIdentity:Audience` | `hive-products` |
+
+Behavior (wired in `Program.cs` JwtBearer `OnTokenValidated` + `TenantResolutionMiddleware`):
+
+- Tokens carrying `org_id` are treated as HIVE account tokens; they must include a `product` claim containing `ops`, or they are rejected.
+- `org_id` maps to `tenant_id` 1:1 — the middleware adds `tenant_id`/`tenant_name` claims, and **JIT-provisions** the tenant (same GUID, `PlanTier.Starter`) on first use.
+- The middleware **explicitly authenticates the bearer scheme on every route**, including exempt paths (`/api/support`, `/api/admin`, `/api/auth`) — exempt routes resolve their own tenant in the controller, so the bearer principal must be populated there or they return 401.
+- Browser handoff: the HIVE accounts portal launches the app as `{appUrl}#token=<jwt>`; `dashboard/app.js` parses the fragment, stores token/user/tenantId in localStorage, and strips the hash (tokens never appear in query strings, server logs, or referers).
+- Login fallback: the dashboard login form first tries local `/api/auth/login`; on failure it requests a HIVE token from `https://api.crew.hivecorp.com.ar/api/accounts/token` with the same credentials (crew API exposes the `hive-products` CORS policy for `*.hivecorp.com.ar` origins).
+- Product activation/cancellation is managed per-product via `POST /api/accounts/products/{product}/subscribe|cancel|activate-trial` on the accounts authority; each product maps to its own MercadoPago preapproval (`external_reference = "{tenantId}:{product}"`).
+
 ### Operation matrix (summary)
 
 | Variable / concern | SaaS (production) | Self-hosted | Ephemeral (CI) |
