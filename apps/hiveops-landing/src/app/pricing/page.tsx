@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function PricingPage() {
   const comparisonRows = [
     { label: "Por dónde entran los problemas", starter: "WhatsApp + formulario web", pro: "WhatsApp, web y tickets de tus sistemas", enterprise: "Todos los canales que uses, a medida" },
-    { label: "Qué puede resolver solo", starter: "Consultas frecuentes; el resto lo deriva", pro: "Consultas + correcciones de datos en tu base", enterprise: "Lo anterior + correcciones de código listas para revisar" },
+    { label: "Qué resuelve solo", starter: "Soluciones conocidas: reinicios, limpiezas, ajustes documentados", pro: "Lo anterior + investiga y corrige datos en tu base", enterprise: "Lo anterior + corrige código y deja el cambio listo para revisar" },
     { label: "Cómo encuentra la causa", starter: "Análisis automático del problema", pro: "Revisa datos, registros e historial de cambios", enterprise: "Investiga en todas tus fuentes, incluidas las propias" },
     { label: "Aviso si algo cambia en tus sistemas", starter: "—", pro: "Alerta en tiempo real", enterprise: "Alerta + corrección automática" },
     { label: "Cambios bajo tu control", starter: "Simula antes de aplicar; todo con tu OK", pro: "Límites por acción + copia de seguridad de cada dato", enterprise: "Tus propias reglas + volver atrás en 1 clic" },

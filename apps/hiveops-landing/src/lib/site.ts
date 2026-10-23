@@ -22,7 +22,7 @@ export const siteConfig = {
 export const pricingPlans = [
   {
     name: "Starter",
-    badge: "Growth — automatización de soporte para equipos y PyMEs",
+    badge: "Growth — soporte que resuelve solo, para equipos y PyMEs",
     monthly: 200,
     annual: 1800,
     founderNote: "Piloto fundador: USD 99/mes los primeros 3 meses (primeros 50 clientes)",
@@ -35,7 +35,7 @@ export const pricingPlans = [
       "Hasta 2 cuentas de trabajo separadas",
       "Recibe problemas por WhatsApp y formulario web",
       "Clasifica y prioriza cada incidente automáticamente",
-      "Resuelve consultas frecuentes con guías paso a paso (simula antes de aplicar)",
+      "Ejecuta soluciones conocidas por vos: reinicios, limpiezas, ajustes — simuladas y con tu aprobación",
       "Tus datos separados en la nube",
       "Panel de incidentes + informe de tiempos de resolución",
     ],
