@@ -633,10 +633,13 @@ html.light .by-hive-badge {
     </nav>
     <div class="shrink-0 px-4 py-4 border-t flex flex-col gap-3" style="border-color: var(--border-color)">
       <div>
-        <label class="text-[10px] font-medium uppercase tracking-widest block mb-1.5" for="tenant-select" style="color: var(--text-tertiary)">Cliente</label>
-        <select id="tenant-select" onchange="changeTenant()" class="input-field w-full px-3 py-2 rounded-xl text-sm">
-          <option value="">Seleccionar Cliente...</option>
-        </select>
+        <label class="text-[10px] font-medium uppercase tracking-widest block mb-1.5" for="tenant-select" style="color: var(--text-tertiary)">Cuenta</label>
+        <div id="tenant-select-wrap">
+          <select id="tenant-select" onchange="changeTenant()" class="input-field w-full px-3 py-2 rounded-xl text-sm">
+            <option value="">Seleccionar Cuenta...</option>
+          </select>
+        </div>
+        <div id="account-name" class="hidden px-3 py-2 rounded-xl text-sm border" style="border-color: var(--border-color); color: var(--text-primary)"></div>
       </div>
       <span id="role-badge" class="self-start px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest border" style="border-color: var(--border-color); color: var(--text-tertiary)">…</span>
     </div>
@@ -776,10 +779,16 @@ html.light .by-hive-badge {
       </nav>
 
       <div class="flex flex-col gap-3 pt-4 border-t" style="border-color: var(--border-color)">
-        <label class="text-xs font-medium uppercase tracking-widest" for="tenant-select-mobile" style="color: var(--text-tertiary)">Cliente</label>
-        <select id="tenant-select-mobile" onchange="changeTenantMobile()" class="input-field w-full px-4 py-2 rounded-xl text-sm">
-          <option value="">Seleccionar Cliente...</option>
-        </select>
+        <div id="tenant-select-wrap-mobile">
+          <label class="text-xs font-medium uppercase tracking-widest block mb-1.5" for="tenant-select-mobile" style="color: var(--text-tertiary)">Cuenta</label>
+          <select id="tenant-select-mobile" onchange="changeTenantMobile()" class="input-field w-full px-4 py-2 rounded-xl text-sm">
+            <option value="">Seleccionar Cuenta...</option>
+          </select>
+        </div>
+        <div id="account-name-mobile" class="hidden">
+          <label class="text-xs font-medium uppercase tracking-widest block mb-1.5" style="color: var(--text-tertiary)">Cuenta</label>
+          <div class="px-4 py-2 rounded-xl text-sm border" style="border-color: var(--border-color); color: var(--text-primary)"></div>
+        </div>
       </div>
 
       <button type="button" onclick="toggleTheme()" class="btn-secondary w-full px-4 py-2.5 rounded-xl text-sm flex items-center justify-between">
@@ -916,7 +925,7 @@ html.light .by-hive-badge {
             </div>
 
             <div id="rd-checks-list" class="space-y-2.5">
-              <div class="text-xs py-4 text-center" style="color: var(--text-secondary)">Verificando estado del cliente...</div>
+              <div class="text-xs py-4 text-center" style="color: var(--text-secondary)">Verificando estado de la cuenta...</div>
             </div>
           </div>
         </div>
@@ -998,13 +1007,13 @@ html.light .by-hive-badge {
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 class="text-2xl font-bold">Administración de Plataforma</h2>
-            <p class="text-sm mt-1" style="color: var(--text-secondary)">Solo super usuario / admin de plataforma — estas acciones afectan a todos los clientes. Para operar dentro de un cliente, seleccionalo en el menú lateral o desde "Actuar como".</p>
+            <p class="text-sm mt-1" style="color: var(--text-secondary)">Solo super usuario / admin de plataforma — estas acciones afectan a todos las cuentas. Para operar dentro de una cuenta, seleccionala en el menú lateral o desde "Actuar como".</p>
           </div>
           <span class="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest border border-amber-500/40 bg-amber-500/15 text-amber-300">Super User</span>
         </div>
       </div>
       <div class="hive-card p-6">
-        <h3 class="font-semibold text-lg mb-4">Clientes</h3>
+        <h3 class="font-semibold text-lg mb-4">Cuentas</h3>
         <div id="l-tenants" class="space-y-2">
           <div class="text-center py-6" style="color: var(--text-secondary)">Cargando...</div>
         </div>
@@ -1172,7 +1181,7 @@ html.light .by-hive-badge {
     <div id="v-ctx" class="view-section space-y-6">
       <div class="flex flex-wrap justify-between items-center gap-4">
         <div>
-          <h2 class="text-2xl font-bold">Contexto del Cliente</h2>
+          <h2 class="text-2xl font-bold">Contexto de la Cuenta</h2>
           <p class="text-sm mt-1" style="color: var(--text-secondary)">Context Pack: lo que el agente conoce de tu negocio, base de datos, repositorios e historial de resoluciones.</p>
         </div>
         <div class="flex items-center gap-3">
@@ -1239,7 +1248,7 @@ html.light .by-hive-badge {
           <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
               <h3 class="font-semibold text-lg">Perfil de datos y repositorios</h3>
-              <p class="text-xs mt-0.5" style="color: var(--text-tertiary)">Esquema introspectado y mapa de módulos del código del cliente.</p>
+              <p class="text-xs mt-0.5" style="color: var(--text-tertiary)">Esquema introspectado y mapa de módulos del código de la cuenta.</p>
             </div>
             <button type="button" id="ctx-refreshdb-btn" onclick="ctxRefreshDb()" class="btn-secondary px-4 py-2 rounded-xl text-sm">Re-escanear base de datos</button>
           </div>
@@ -1312,7 +1321,7 @@ html.light .by-hive-badge {
     <!-- Config View -->
     <div id="v-config" class="view-section space-y-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <h2 class="text-2xl font-bold">Configuración del Cliente</h2>
+        <h2 class="text-2xl font-bold">Configuración de la Cuenta</h2>
         <div class="flex items-center gap-2">
           <button id="cfg-adv-toggle" type="button" onclick="toggleAdvancedConfig()" class="btn-secondary px-3 py-1.5 rounded-xl text-xs">Mostrar avanzado (LLM · Deploy · Políticas)</button>
           <span id="cfg-schema-banner" class="text-xs px-3 py-1 rounded-full hive-card border" style="color:var(--text-tertiary)">Schema —</span>
@@ -1445,7 +1454,7 @@ html.light .by-hive-badge {
       <!-- Deploy / Git (avanzado) -->
       <div class="hive-card p-6 cfg-adv hidden">
         <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
-          <h3 class="font-semibold text-lg">Deploy y Git (cliente)</h3>
+          <h3 class="font-semibold text-lg">Deploy y Git (cuenta)</h3>
           <button type="button" onclick="saveDeployGitSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar Deploy/Git</button>
         </div>
         <div class="space-y-3">
@@ -1845,7 +1854,7 @@ initTheme();
       portalBtn.style.color = '#fff';
       portalBtn.style.border = '1px solid var(--border-color)';
       portalBtn.textContent = 'Abrir Portal de Pagos';
-      portalBtn.title = 'Abrir el portal de pagos de Stripe para este cliente';
+      portalBtn.title = 'Abrir el portal de pagos de Stripe para esta cuenta';
       ensureBtn.parentElement.appendChild(portalBtn);
 
       var sel = document.getElementById('bill-tenant');
@@ -1855,7 +1864,7 @@ initTheme();
           var opt = sel && sel.options && sel.options[sel.selectedIndex];
           var hasStatus = !!(opt && /\u00B7|·/.test(opt.text));
           portalBtn.disabled = false; // Permitimos click; manejamos error con mensaje
-          portalBtn.title = hasStatus ? 'Abrir el portal de pagos de Stripe para este cliente' : 'Si falla, primero activa la suscripción';
+          portalBtn.title = hasStatus ? 'Abrir el portal de pagos de Stripe para esta cuenta' : 'Si falla, primero activa la suscripción';
           portalBtn.style.opacity = hasStatus ? '1' : '0.9';
         }catch{}
       }
@@ -1865,7 +1874,7 @@ initTheme();
         try{
           var selEl = document.getElementById('bill-tenant');
           var tid = selEl && selEl.value;
-          if(!tid){ if(window.toast) toast('Selecciona un cliente','error'); return; }
+          if(!tid){ if(window.toast) toast('Selecciona una cuenta','error'); return; }
           var original = portalBtn.textContent;
           portalBtn.textContent = 'Abriendo…';
           portalBtn.disabled = true;

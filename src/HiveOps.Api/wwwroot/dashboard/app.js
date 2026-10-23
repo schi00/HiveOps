@@ -34,7 +34,7 @@ try{
    wrap.innerHTML=`<h3 class="font-semibold text-lg mb-4">Billing & Suscripciones</h3>
    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
      <div class="col-span-1">
-       <label class="text-sm block mb-2" style="color:var(--text-secondary)">Cliente</label>
+       <label class="text-sm block mb-2" style="color:var(--text-secondary)">Cuenta</label>
        <select id="bill-tenant" class="input-field w-full px-3 py-2 rounded-xl text-sm"></select>
      </div>
      <div class="col-span-1">
@@ -59,15 +59,15 @@ try{
  if(s.tenantId) sel.value=s.tenantId;
  document.getElementById('bill-ensure').onclick=async ()=>{
    const tid=sel.value; const pid=(document.getElementById('bill-price').value||'').trim();
-   if(!tid){toast('Selecciona un cliente','error');return;}
+   if(!tid){toast('Selecciona una cuenta','error');return;}
    if(!pid){toast('Ingresa un PriceId','error');return;}
    try{await api('POST',`/admin/tenants/${tid}/billing/ensure-subscription`,{priceId:pid}); toast('Suscripción activada','success'); lb();}
    catch(e){toast(e.message,'error');}
  };
  const st=document.getElementById('bill-status');
  const cur=ts.find(x=>x.id===sel.value);
- st.textContent=cur?`Estado actual: ${cur.subscriptionStatus||'—'} · Price: ${cur.stripePriceId||'—'}`:'Selecciona un cliente';
- sel.onchange=()=>{ const c=ts.find(x=>x.id===sel.value); st.textContent=c?`Estado actual: ${c.subscriptionStatus||'—'} · Price: ${c.stripePriceId||'—'}`:'Selecciona un cliente'; };
+ st.textContent=cur?`Estado actual: ${cur.subscriptionStatus||'—'} · Price: ${cur.stripePriceId||'—'}`:'Selecciona una cuenta';
+ sel.onchange=()=>{ const c=ts.find(x=>x.id===sel.value); st.textContent=c?`Estado actual: ${c.subscriptionStatus||'—'} · Price: ${c.stripePriceId||'—'}`:'Selecciona una cuenta'; };
  const lt=document.getElementById('l-tenants');
  if(lt){
    lt.innerHTML=ts.length?ts.map(t=>{
@@ -82,7 +82,7 @@ try{
          <button type="button" onclick="actAsTenant('${t.id}')" class="btn-secondary px-3 py-1.5 rounded-lg text-xs">${active?'Viendo':'Actuar como'}</button>
        </div>
      </div>`;
-   }).join(''):'<div class="text-center py-6 text-sm" style="color:var(--text-secondary)">Sin clientes registrados</div>';
+   }).join(''):'<div class="text-center py-6 text-sm" style="color:var(--text-secondary)">Sin cuentas registrados</div>';
  }
 const billCard=document.getElementById('billing-card');
 if(billCard) billCard.style.display=(s.deploymentMode==null||s.deploymentMode==='SaaS')?'':'none';
@@ -93,7 +93,7 @@ if(billCard) billCard.style.display=(s.deploymentMode==null||s.deploymentMode===
      dbCard.id='selfhosted-db-card';
      dbCard.className='hive-card p-6';
      dbCard.innerHTML=`<h3 class="font-semibold text-lg mb-4">Base de datos dedicada (self-hosted)</h3>
-     <p class="text-sm mb-4" style="color:var(--text-secondary)">Asigná la cadena SQL para este cliente (queda cifrada en el servidor). Dejá vacío para borrar y usar la base catálogo.</p>
+     <p class="text-sm mb-4" style="color:var(--text-secondary)">Asigná la cadena SQL para esta cuenta (queda cifrada en el servidor). Dejá vacío para borrar y usar la base catálogo.</p>
      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
        <div class="col-span-1"><label class="text-sm block mb-2" style="color:var(--text-secondary)">Tenant</label>
        <select id="shdb-tenant" class="input-field w-full px-3 py-2 rounded-xl text-sm"></select></div>
@@ -109,7 +109,7 @@ if(billCard) billCard.style.display=(s.deploymentMode==null||s.deploymentMode===
      document.getElementById('shdb-save').onclick=async ()=>{
        const tid=(document.getElementById('shdb-tenant')||{}).value;
        const cs=(document.getElementById('shdb-conn')||{}).value||'';
-       if(!tid){toast('Selecciona un cliente','error');return;}
+       if(!tid){toast('Selecciona una cuenta','error');return;}
        try{
          await fetch(`${API}/admin/tenants/${tid}/dedicated-database`,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(s.token||'')},credentials:'include',body:JSON.stringify({connectionString:cs})});
          document.getElementById('shdb-conn').value='';
@@ -118,7 +118,7 @@ if(billCard) billCard.style.display=(s.deploymentMode==null||s.deploymentMode===
      };
      document.getElementById('shdb-clear').onclick=async ()=>{
        const tid=(document.getElementById('shdb-tenant')||{}).value;
-       if(!tid){toast('Selecciona un cliente','error');return;}
+       if(!tid){toast('Selecciona una cuenta','error');return;}
        try{
          await fetch(`${API}/admin/tenants/${tid}/dedicated-database`,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(s.token||'')},credentials:'include',body:JSON.stringify({connectionString:null})});
          toast('Cadena eliminada','success'); shdbRefresh();
@@ -144,7 +144,7 @@ try{
  const r=await fetch(`${API}/admin/tenants/${tid}/dedicated-database`,{headers:{'Authorization':'Bearer '+(s.token||''),'Content-Type':'application/json'},credentials:'include'});
  if(!r.ok){ st.textContent='No se pudo leer el estado'; return; }
  const j=await r.json();
- st.textContent=j&&j.configured?'Hay cadena dedicada configurada para este cliente.':'Sin cadena dedicada (usa catálogo).';
+ st.textContent=j&&j.configured?'Hay cadena dedicada configurada para esta cuenta.':'Sin cadena dedicada (usa catálogo).';
 }catch{}
 }
 document.getElementById('login-form').addEventListener('submit',async e=>{
@@ -216,25 +216,31 @@ if(udName)udName.textContent=(s.user&&s.user.username)||'Usuario';
 if(s.user&&s.user.role==='SuperAdmin'){
 badge.textContent='SUPER USUARIO';badge.className=amber;
 if(udRole)udRole.textContent='Super usuario · plataforma';
-if(scope)scope.textContent='Plataforma · todos los clientes';
+if(scope)scope.textContent='Plataforma · todos las cuentas';
 }else if(s.user&&s.user.role==='Admin'){
 badge.textContent='ADMIN';badge.className=amber;
-if(udRole)udRole.textContent='Admin · multi-cliente';
-if(scope)scope.textContent='Administración multi-cliente';
+if(udRole)udRole.textContent='Admin · multi-cuenta';
+if(scope)scope.textContent='Administración multi-cuenta';
 }else{
-badge.textContent='CLIENTE';badge.className=cyan;
-if(udRole)udRole.textContent='Administrador del cliente';
-if(sel)sel.classList.add('hidden');
+badge.textContent='CUENTA';badge.className=cyan;
+if(udRole)udRole.textContent='Administrador de la cuenta';
 updateScopeLabel();
 }
+const canSwitch=s.isAdmin;
+const wrap=document.getElementById('tenant-select-wrap'),wrapM=document.getElementById('tenant-select-wrap-mobile');
+const acc=document.getElementById('account-name'),accM=document.getElementById('account-name-mobile');
+if(wrap)wrap.classList.toggle('hidden',!canSwitch);
+if(wrapM)wrapM.classList.toggle('hidden',!canSwitch);
+if(acc){acc.classList.toggle('hidden',canSwitch);acc.textContent=(s.user&&s.user.tenantName)||'';}
+if(accM){accM.classList.toggle('hidden',canSwitch);const t=accM.querySelector('div');if(t)t.textContent=(s.user&&s.user.tenantName)||'';}
 }
 function updateScopeLabel(){
 const scope=document.getElementById('scope-label');if(!scope)return;
 if(s.isAdmin){
 const t=(s.tenants||[]).find(x=>x.id===s.tenantId);
-scope.textContent=s.tenantId?('Actuando como: '+(t?t.name:s.tenantId)):'Sin cliente seleccionado';
+scope.textContent=s.tenantId?('Actuando como: '+(t?t.name:s.tenantId)):'Sin cuenta seleccionada';
 }else{
-scope.textContent=s.user&&s.user.tenantName?('Cliente: '+s.user.tenantName):'';
+scope.textContent=s.user&&s.user.tenantName?('Cuenta: '+s.user.tenantName):'';
 }
 }
 function logout(){localStorage.clear();s.token=null;s.user=null;showLogin();}
@@ -279,7 +285,7 @@ document.getElementById('c-open').textContent='0';
 document.getElementById('c-crit').textContent='0';
 document.getElementById('c-res').textContent='0';
 document.getElementById('c-avg').textContent='0';
-document.getElementById('l-rec').innerHTML='<div class="p-8 text-center" style="color:var(--text-secondary)">Selecciona un cliente</div>';
+document.getElementById('l-rec').innerHTML='<div class="p-8 text-center" style="color:var(--text-secondary)">Selecciona una cuenta</div>';
 return;
 }
 const d=await api('GET','/support/summary');
@@ -304,7 +310,7 @@ let incVisibleCount=INC_PAGE_SIZE;
 async function li(search){
 try{
 // Admins pueden ver incidentes globales sin tenant seleccionado
-if(!s.tenantId&&!s.isAdmin){document.getElementById('l-all').innerHTML='<div class="p-10 text-center" style="color:var(--text-secondary)">Selecciona un cliente</div>';return;}
+if(!s.tenantId&&!s.isAdmin){document.getElementById('l-all').innerHTML='<div class="p-10 text-center" style="color:var(--text-secondary)">Selecciona una cuenta</div>';return;}
 const f=document.getElementById('fs').value,v=document.getElementById('fv').value;
 const q=`/support/incidents?${f?'status='+f+'&':''}${v?'severity='+v+'&':''}${search?'q='+encodeURIComponent(search)+'&':''}`;
 const d=await api('GET',q);s.incidents=d||[];
@@ -506,7 +512,7 @@ function handleRipple(e){const b=e.currentTarget;const r=document.createElement(
 document.getElementById('fc').addEventListener('submit',async e=>{
 e.preventDefault();
 try{
-if(!s.tenantId&&!s.isAdmin){toast('Selecciona un cliente primero','error');return;}
+if(!s.tenantId&&!s.isAdmin){toast('Selecciona una cuenta primero','error');return;}
 const d=await api('POST','/support/incidents',{title:document.getElementById('ct').value,description:document.getElementById('cd').value,severity:document.getElementById('cv').value,category:document.getElementById('cc').value});
 cm('mc');toast('Incidente creado','success');document.getElementById('fc').reset();li();ld();od(d.id);
 }catch(x){toast(x.message,'error');}
@@ -517,11 +523,11 @@ const tenants=await api('GET','/tenants');
 s.tenants=tenants||[];
 const sel=document.getElementById('tenant-select');
 if(sel){
-sel.innerHTML='<option value="">Seleccionar Cliente...</option>'+(tenants||[]).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+sel.innerHTML='<option value="">Seleccionar Cuenta...</option>'+(tenants||[]).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
 if(s.tenantId&&tenants&&tenants.find(t=>t.id===s.tenantId)){sel.value=s.tenantId;changeTenant();}
 }
 updateScopeLabel();
-}catch(e){console.error('Error loading tenants:',e);toast('Error al cargar clientes','error');}
+}catch(e){console.error('Error loading tenants:',e);toast('Error al cargar cuentas','error');}
 }
 function changeTenant(){
 const sel=document.getElementById('tenant-select');
@@ -546,11 +552,11 @@ updateScopeLabel();
 ld();li();
 ctxReloadIfActive();
 if(hubConn&&hubConn.invoke){hubConn.invoke('JoinTenantGroup',tid).catch(()=>{});}
-toast('Operando como el cliente seleccionado','success');
+toast('Operando como el cuenta seleccionada','success');
 }
 function ctxReloadIfActive(){const v=document.getElementById('v-ctx');if(v&&v.classList.contains('active'))lctx();}
 async function patchTenantPath(pathRel, payload){
-if(!s.tenantId){throw new Error('Sin cliente');}
+if(!s.tenantId){throw new Error('Sin cuenta');}
 const o={method:'PATCH',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(s.token||'')},credentials:'include',body:JSON.stringify(payload)};
 if(s.tenantId)o.headers['X-Tenant-Id']=s.tenantId;
 const r=await fetch(`${API}/tenants/${s.tenantId}${pathRel}`,o);
@@ -560,7 +566,7 @@ if(!r.ok){throw new Error(t||r.statusText);}
 return t?JSON.parse(t):null;}
 async function lc(){
 try{
-if(!s.tenantId){toast('Selecciona un cliente primero','warning');return;}
+if(!s.tenantId){toast('Selecciona una cuenta primero','warning');return;}
 const cfg=await api('GET','/tenants/'+s.tenantId+'/config');
 const el=id=>document.getElementById(id);
 const llmHint=el('cfg-llm-selfhosted-hint');
@@ -605,7 +611,7 @@ await loadChatOpsWebhookConfig();
 }catch(e){toast(e.message,'error');}
 }
 function applyPreset(preset){
-if(!s.tenantId){toast('Selecciona un cliente primero','warning');return;}
+if(!s.tenantId){toast('Selecciona una cuenta primero','warning');return;}
 const presets={
 basic:{model:'gpt-3.5-turbo',temperature:0.5,maxTokens:1600},
 standard:{model:'gpt-4',temperature:0.7,maxTokens:2000},
@@ -672,7 +678,7 @@ else{el.classList.add('hidden');}
 }
 async function loadNotifications(){
 try{
-if(!s.tenantId&&!s.isAdmin){document.getElementById('notif-list').innerHTML='<div class="p-4 text-center text-sm" style="color:var(--text-secondary)">Selecciona un cliente</div>';return;}
+if(!s.tenantId&&!s.isAdmin){document.getElementById('notif-list').innerHTML='<div class="p-4 text-center text-sm" style="color:var(--text-secondary)">Selecciona una cuenta</div>';return;}
 const d=await api('GET','/support/notifications');
 notifications=d||[];
 const nl=document.getElementById('notif-list');
@@ -859,7 +865,7 @@ async function loadReadinessAndOutcomes() {
   } catch (e) {
     console.warn('Readiness check error:', e);
     s.readiness = null;
-    showWidgetError('rd-checks-list', 'No se pudo verificar la configuración del cliente', 'loadReadinessAndOutcomes()');
+    showWidgetError('rd-checks-list', 'No se pudo verificar la configuración de la cuenta', 'loadReadinessAndOutcomes()');
   }
   renderSetupWizard();
 }
@@ -919,7 +925,7 @@ async function loadPlaybooks() {
     const list = await api('GET', '/support/playbooks');
     s.playbooks = list || [];
     if (!s.playbooks.length) {
-      listEl.innerHTML = '<div class="hive-card p-8 text-center col-span-full" style="color:var(--text-secondary)">No hay playbooks activos configurados para este cliente. Creá el primero con "+ Nuevo Playbook".</div>';
+      listEl.innerHTML = '<div class="hive-card p-8 text-center col-span-full" style="color:var(--text-secondary)">No hay playbooks activos configurados para esta cuenta. Creá el primero con "+ Nuevo Playbook".</div>';
       return;
     }
     listEl.innerHTML = s.playbooks.map(pb => {
@@ -1160,7 +1166,7 @@ async function loadChatOpsWebhookConfig() {
 
 async function saveChatOpsWebhook(silent) {
   if (!s.tenantId) {
-    if (!silent) toast('Selecciona un cliente primero', 'warning');
+    if (!silent) toast('Selecciona una cuenta primero', 'warning');
     return;
   }
   const events = [...document.querySelectorAll('.cfg-wh-evt:checked')].map(cb => cb.value);
@@ -1183,7 +1189,7 @@ async function saveChatOpsWebhook(silent) {
 
 async function testChatOpsWebhook() {
   if (!s.tenantId) {
-    toast('Selecciona un cliente primero', 'warning');
+    toast('Selecciona una cuenta primero', 'warning');
     return;
   }
   await saveChatOpsWebhook(true);
@@ -1402,7 +1408,7 @@ async function loadIncidentSnapshots(incidentId) {
 async function revertSnapshot(incidentId, snapshotId) {
   const ok = await askConfirm({
     title: 'Revertir snapshot (1-Click Undo)',
-    detail: 'Se ejecutará el SQL inverso del snapshot sobre la base del cliente.',
+    detail: 'Se ejecutará el SQL inverso del snapshot sobre la base de la cuenta.',
     preview: 'Se restaurarán las filas al estado Before capturado',
     confirmLabel: 'Revertir',
     danger: true
@@ -1536,14 +1542,14 @@ function renderSetupWizard() {
     {
       key: 'targetDatabase',
       title: 'Conectar base de datos del producto',
-      desc: 'Vinculá la DB del cliente para introspección de esquema y snapshots Before/After.',
+      desc: 'Vinculá la DB de la cuenta para introspección de esquema y snapshots Before/After.',
       ok: checkOk('targetDatabase'),
       cta: 'Configurar DB →',
       action: "jumpToReadinessFix('targetDatabase')"
     },
     {
       key: 'gitWorkspace',
-      title: 'Clonar workspace Git del cliente',
+      title: 'Clonar workspace Git de la cuenta',
       desc: 'El agente clona el repo para generar commits y Pull Requests de fixes L3.',
       ok: checkOk('gitWorkspace'),
       cta: 'Configurar Git →',
@@ -1724,7 +1730,7 @@ async function lctx(){
   const grid=document.getElementById('ctx-grid');
   if(!emptyEl||!grid)return;
   if(!s.tenantId&&!s.isAdmin){
-    ctxShowEmpty('<div class="text-sm" style="color:var(--text-secondary)">Seleccioná un cliente para ver su contexto.</div>');
+    ctxShowEmpty('<div class="text-sm" style="color:var(--text-secondary)">Seleccioná una cuenta para ver su contexto.</div>');
     return;
   }
   try{
@@ -1734,7 +1740,7 @@ async function lctx(){
       ctxPack=null;
       ctxUpdateVersionBadge();
       ctxShowEmpty(`<svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 3.75c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125"/></svg>
-        <div class="text-sm mb-1 font-semibold" style="color:var(--text-primary)">El agente todavía no tiene contexto de este cliente</div>
+        <div class="text-sm mb-1 font-semibold" style="color:var(--text-primary)">El agente todavía no tiene contexto de esta cuenta</div>
         <div class="text-xs mb-5" style="color:var(--text-secondary)">Inicializá el Context Pack para escanear la base y empezar a cargar glosario, documentos y memoria.</div>
         <button type="button" id="ctx-init-btn" onclick="ctxInit()" class="btn-primary px-6 py-3 rounded-xl text-sm">Inicializar contexto</button>`);
     }else if(!r.ok){
@@ -2091,7 +2097,7 @@ async function limpr(){
   const cnt=document.getElementById('ctx-improve-count');
   if(!s.tenantId&&!s.isAdmin){
     s.ctxImprovements=[];
-    el.innerHTML='<div class="text-xs py-6 text-center rounded-xl border border-dashed" style="border-color:var(--border-color);color:var(--text-secondary)">Seleccioná un cliente para ver la auto-mejora del agente</div>';
+    el.innerHTML='<div class="text-xs py-6 text-center rounded-xl border border-dashed" style="border-color:var(--border-color);color:var(--text-secondary)">Seleccioná una cuenta para ver la auto-mejora del agente</div>';
     if(cnt)cnt.classList.add('hidden');
     return;
   }
@@ -2242,7 +2248,7 @@ async function llt(){
   const cnt=document.getElementById('ctx-llmtasks-count');
   if(!el)return;
   if(!s.tenantId&&!s.isAdmin){
-    el.innerHTML='<div class="text-xs py-6 text-center rounded-xl border border-dashed" style="border-color:var(--border-color);color:var(--text-secondary)">Seleccioná un cliente para ver las tareas IA pendientes</div>';
+    el.innerHTML='<div class="text-xs py-6 text-center rounded-xl border border-dashed" style="border-color:var(--border-color);color:var(--text-secondary)">Seleccioná una cuenta para ver las tareas IA pendientes</div>';
     if(cnt)cnt.classList.add('hidden');
     return;
   }
