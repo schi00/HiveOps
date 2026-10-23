@@ -8,7 +8,7 @@ const ecosystemProducts = [
     accentClass: "border-amber-500/25 bg-gradient-to-b from-amber-500/10 to-transparent",
     dotClass: "bg-amber-400",
     badgeClass: "border-amber-400/30 bg-amber-400/10 text-amber-200",
-    category: "Conversational Commerce IA",
+    category: "Ventas y atención con IA",
     description:
       "Ventas y atención autónoma por WhatsApp e Instagram conectada a tu catálogo real y cobros con MercadoPago.",
   },
@@ -19,9 +19,9 @@ const ecosystemProducts = [
     accentClass: "border-cyan-500/50 bg-gradient-to-b from-cyan-500/15 to-transparent",
     dotClass: "bg-cyan-400",
     badgeClass: "border-cyan-400/40 bg-cyan-400/15 text-cyan-200",
-    category: "Autonomous Support & Incident Remediation",
+    category: "Soporte e incidentes con IA",
     description:
-      "AI Support Engineer: triage, causa raíz multi-fuente y remediación gobernada L1/L2/L3 con aprobaciones, snapshots y audit trail SHA-256.",
+      "El agente de soporte de la suite: atiende reportes, encuentra la causa y propone soluciones que solo se aplican con tu aprobación.",
   },
   {
     name: "HiveGathers",
@@ -30,9 +30,9 @@ const ecosystemProducts = [
     accentClass: "border-emerald-500/25 bg-gradient-to-b from-emerald-500/10 to-transparent",
     dotClass: "bg-emerald-400",
     badgeClass: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
-    category: "Logistics Orchestration & Tracking",
+    category: "Orquestación logística",
     description:
-      "Orquestación de eventos logísticos en tiempo real: ciclo de vida de envíos, proveedores con tarifarios, cálculo de costos y tracking vivo por tenant.",
+      "Seguimiento de envíos en tiempo real: proveedores, costos y el estado de cada entrega.",
   },
 ];
 

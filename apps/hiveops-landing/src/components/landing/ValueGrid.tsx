@@ -2,34 +2,34 @@ import { AnimatedSection } from "./AnimatedSection";
 
 const values = [
   {
-    tag: "RESOLUCIÓN VERIFICADA",
-    title: "Resuelve de punta a punta, no deflecta tickets",
-    text: "Cada caso termina con una verification query o una suite de tests que confirma que el incidente quedó resuelto — no con una respuesta genérica que patea el problema.",
+    tag: "SOLO RESULTADOS",
+    title: "Resuelve de punta a punta, no solo deriva tickets",
+    text: "Cada caso termina con una verificación automática que confirma que el problema quedó resuelto — no con una respuesta genérica que patea el problema.",
   },
   {
-    tag: "CAUSA RAÍZ MULTI-FUENTE",
-    title: "Investiga en schema SQL, logs del tenant y git blame",
-    text: "Arma un RootCauseBundle con evidencia cruzada: estructura de base de datos, logs de la app y el diff que introdujo el bug. La confianza del diagnóstico se reporta explícita.",
+    tag: "ENCUENTRA LA CAUSA",
+    title: "Investiga en tus datos, registros e historial de cambios",
+    text: "Cruza evidencia de varias fuentes para llegar al origen real del problema, y te dice con qué nivel de confianza llegó a ese diagnóstico.",
   },
   {
-    tag: "REMEDIACIÓN GOBERNADA",
-    title: "Dry-run, aprobaciones y snapshots reversibles",
-    text: "Nada se aplica sin pasar por el nivel de aprobación configurado. Los fixes de datos llevan snapshot fila a fila y SQL inverso generado para volver atrás en segundos.",
+    tag: "BAJO TU CONTROL",
+    title: "Todo se simula, se aprueba y se puede revertir",
+    text: "Nada se aplica sin pasar por el nivel de aprobación que configures. Cada cambio de datos lleva su copia de seguridad para volver atrás en segundos.",
   },
   {
-    tag: "AUDIT TRAIL SHA-256",
-    title: "Cada acción queda firmada en un ledger encadenado",
-    text: "Triage, diagnóstico, aprobación, ejecución y verificación se registran en una cadena criptográfica inmutable. Auditá quién aprobó qué, cuándo y con qué evidencia.",
+    tag: "TODO REGISTRADO",
+    title: "Cada acción queda registrada y sellada",
+    text: "Análisis, aprobación, ejecución y verificación quedan en un registro inalterable. Auditá quién aprobó qué, cuándo y con qué evidencia.",
   },
   {
-    tag: "MENOS MTTR, MENOS HANDOFFS",
-    title: "El tiempo de resolución cae sin quemar a tu equipo",
-    text: "El agente atiende 24/7, resuelve lo que puede y escala a humanos solo con el contexto completo del caso. Tu equipo deja de hacer triage manual y pases de mano.",
+    tag: "MENOS TIEMPO, MENOS DERIVACIONES",
+    title: "Resuelve más rápido sin quemar a tu equipo",
+    text: "El agente atiende 24/7, resuelve lo que puede y deriva a personas solo con el contexto completo del caso. Tu equipo deja de clasificar tickets a mano.",
   },
   {
-    tag: "KB QUE APRENDE",
-    title: "Cada resolución alimenta la knowledge base",
-    text: "Los fixes validados se convierten en playbooks y entradas de KB reutilizables. La próxima vez que aparezca el mismo patrón, se resuelve más rápido y con más confianza.",
+    tag: "APRENDE DE CADA CASO",
+    title: "Cada resolución lo hace más inteligente",
+    text: "Las soluciones validadas se convierten en guías reutilizables. La próxima vez que aparezca el mismo problema, se resuelve más rápido y con más confianza.",
   },
 ];
 
@@ -62,11 +62,11 @@ export function ValueGrid() {
           <div>
             <p className="font-mono text-xs uppercase tracking-widest text-cyan-300">Modelo por resultado</p>
             <p className="mt-1 font-display text-lg font-semibold text-white sm:text-xl">
-              “Pagás por incidente resuelto y verificado — no por seats ni por tickets derivados.”
+              “Pagás por problema resuelto y verificado — no por usuarios ni por tickets derivados.”
             </p>
           </div>
           <span className="shrink-0 rounded-full border border-cyan-400/40 bg-cyan-400/15 px-4 py-1.5 font-mono text-xs font-semibold text-cyan-200">
-            Outcome metering · solo resultados
+            Solo resultados verificados
           </span>
         </div>
       </div>

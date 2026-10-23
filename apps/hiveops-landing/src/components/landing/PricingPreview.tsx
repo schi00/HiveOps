@@ -19,7 +19,7 @@ export function PricingPreview() {
             </h2>
           </div>
           <span className="rounded-full border border-cyan-500/30 bg-white/5 px-4 py-1.5 font-mono text-xs font-semibold text-cyan-200">
-            Base mensual + outcome verificado · sin seats
+            Base mensual + solo resultados · sin cargos por usuario
           </span>
         </div>
 
@@ -82,9 +82,9 @@ export function PricingPreview() {
           ))}
         </div>
         <p className="mt-4 max-w-3xl text-xs leading-relaxed text-slate-400">
-          La unidad de facturación variable es la resolución verificada: un incidente que HiveOps cerró y que
-          quedó confirmado por verification query o suite de tests. Las derivaciones a tu equipo no se
-          computan. Pro y Enterprise incluyen un cupo mensual; el excedente se factura por unidad.
+          La unidad de facturación variable es la resolución verificada: un problema que HiveOps cerró y que
+          quedó confirmado automáticamente. Las derivaciones a tu equipo no se computan. Pro y Enterprise
+          incluyen un cupo mensual; el excedente se factura por unidad.
         </p>
       </div>
     </AnimatedSection>

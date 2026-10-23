@@ -3,39 +3,39 @@ import { AnimatedSection } from "./AnimatedSection";
 const steps = [
   {
     number: "01",
-    badge: "INTAKE",
-    title: "1. Entra el incidente",
-    text: "El reporte llega por WhatsApp, tu sistema de ticketing o la API. HiveOps normaliza el caso y lo asocia al tenant correcto.",
+    badge: "ENTRADA",
+    title: "1. Entra el problema",
+    text: "El reporte llega por WhatsApp, tu sistema de tickets o una integración. HiveOps lo ordena y lo asocia a la cuenta correcta.",
   },
   {
     number: "02",
-    badge: "TRIAGE",
-    title: "2. Triage + causa raíz",
-    text: "Investiga en paralelo: schema SQL, logs del tenant, git blame y KB. Produce un RootCauseBundle con evidencia y nivel de confianza.",
+    badge: "ANÁLISIS",
+    title: "2. Encuentra la causa",
+    text: "Investiga en paralelo: tus datos, registros de errores e historial de cambios. Entrega un diagnóstico con evidencia y nivel de confianza.",
   },
   {
     number: "03",
-    badge: "TRACK",
-    title: "3. Elige el track de resolución",
-    text: "Playbook L1 conocido, DatabaseFix con snapshot, CodeFix con parche y test — o Escalate a un humano con todo el contexto.",
+    badge: "SOLUCIÓN",
+    title: "3. Elige cómo resolverlo",
+    text: "Una guía conocida, una corrección de datos con copia de seguridad, un arreglo de código probado — o lo deriva a una persona con todo el contexto.",
   },
   {
     number: "04",
-    badge: "VALIDACIÓN",
-    title: "4. Valida antes de aplicar",
-    text: "Los cambios corren en dry-run o en HiveArena (build + tests + sandbox de datos). Si no pasan, no se aplican.",
+    badge: "PRUEBA",
+    title: "4. Lo ensaya antes de aplicar",
+    text: "Cada cambio se prueba primero en un entorno aislado. Si no funciona, no se aplica.",
   },
   {
     number: "05",
-    badge: "GOBIERNO",
-    title: "5. Confirmación humana",
-    text: "Según el umbral configurado, un responsable aprueba la acción desde el dashboard. Sin aprobación, no hay ejecución.",
+    badge: "TU CONTROL",
+    title: "5. Vos aprobás",
+    text: "Según las reglas que configures, un responsable aprueba la acción desde el panel. Sin aprobación, no se ejecuta nada.",
   },
   {
     number: "06",
-    badge: "OUTCOME",
-    title: "6. Resolución medida",
-    text: "Una verification query confirma el fix, se registra en el ledger SHA-256 y se computa como resolución — la unidad que se factura.",
+    badge: "RESULTADO",
+    title: "6. Resolución verificada",
+    text: "Se comprueba automáticamente que el problema quedó resuelto, queda registrado — y es lo único que se factura.",
   },
 ];
 
@@ -44,9 +44,9 @@ export function HowItWorks() {
     <AnimatedSection className="px-6 py-16">
       <div id="como-funciona" className="mx-auto w-full max-w-6xl scroll-mt-24">
         <div className="mb-10 max-w-2xl">
-          <span className="hive-badge-cyan mb-3">Pipeline de resolución</span>
+          <span className="hive-badge-cyan mb-3">Cómo resuelve</span>
           <h2 className="text-3xl font-bold md:text-4xl">
-            Del reporte al <span className="cyan-text">fix verificado</span>, con gobierno en cada paso
+            Del reporte a la <span className="cyan-text">solución verificada</span>, con tu control en cada paso
           </h2>
         </div>
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">

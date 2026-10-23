@@ -3,7 +3,7 @@ import { siteConfig } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Contacto Comercial",
-  description: "Solicitá una demo o un piloto de HiveOps by HIVE con onboarding asistido sobre tu propio stack.",
+  description: "Solicitá una demo o un piloto de HiveOps by HIVE con acompañamiento paso a paso sobre tu propio entorno.",
 };
 
 export default function ContactPage() {
@@ -16,18 +16,18 @@ export default function ContactPage() {
             Hablemos de <span className="cyan-text">tu soporte</span>
           </h1>
           <p className="mb-6 text-slate-300">
-            Si tu equipo de soporte está saturado de L1 repetitivos, si los incidentes esperan horas por triage o
-            si querés ver una resolución verificada sobre tu propio stack, nuestro equipo te acompaña paso a paso.
+            Si tu equipo de soporte está saturado de consultas repetitivas, si los problemas esperan horas
+            para ser atendidos o si querés ver una resolución real sobre tu propio entorno, te acompañamos paso a paso.
           </p>
           <div className="space-y-3 text-sm text-slate-200 sm:text-base">
             <p className="flex items-center gap-2">
               <span className="text-cyan-400">✓</span> Demo guiada con un escenario real de tu operación
             </p>
             <p className="flex items-center gap-2">
-              <span className="text-cyan-400">✓</span> Readiness check de tu stack: base de datos, repo Git, pipeline e intake
+              <span className="text-cyan-400">✓</span> Revisión de tu entorno: base de datos, repositorio y canal de entrada
             </p>
             <p className="flex items-center gap-2">
-              <span className="text-cyan-400">✓</span> Piloto acotado con onboarding asistido y métricas de MTTR
+              <span className="text-cyan-400">✓</span> Piloto acotado con acompañamiento y medición de resultados
             </p>
           </div>
           <p className="mt-8 font-mono text-xs text-slate-400">
@@ -60,7 +60,7 @@ export default function ContactPage() {
             />
             <textarea
               className="min-h-32 w-full rounded-xl border border-white/15 bg-black/40 px-4 py-3 text-sm outline-none transition-colors focus:border-[var(--cyan-primary)]"
-              placeholder="Contanos tu stack (BD, repo, CI, ticketing) y cuántos incidentes manejan por semana"
+              placeholder="Contanos tu entorno (base de datos, repositorio, tickets) y cuántos problemas manejan por semana"
               required
             />
             <button

@@ -2,39 +2,39 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Seguridad y Gobernanza",
-  description: "Aislamiento por tenant, diagnóstico read-only, aprobaciones humanas por umbral, snapshots reversibles y audit trail SHA-256 en HiveOps by HIVE.",
+  description: "Separación total entre cuentas, diagnóstico de solo lectura, aprobaciones humanas, cambios reversibles y registro sellado en HiveOps by HIVE.",
 };
 
 const pillars = [
   {
-    badge: "AISLAMIENTO MULTI-TENANT",
-    title: "Datos y acciones 100% separados por tenant",
-    text: "Cada cliente opera en su propio entorno aislado: query filters de EF Core sobre cada consulta y el header X-Tenant-Id en cada request. Las credenciales de conexión se guardan cifradas en el servidor y nunca se exponen al agente ni al navegador.",
+    badge: "CUENTAS AISLADAS",
+    title: "Datos y acciones 100% separados por cuenta",
+    text: "Cada cliente opera en su propio entorno aislado: cada consulta y cada acción quedan confinadas a su cuenta. Las credenciales se guardan cifradas en el servidor y nunca se exponen al agente ni al navegador.",
   },
   {
-    badge: "DIAGNÓSTICO READ-ONLY",
+    badge: "SOLO LECTURA",
     title: "El agente mira antes de tocar",
-    text: "La investigación de causa raíz corre con acceso de solo lectura a la base de datos del tenant. Todo SQL generado pasa por el SafetyValidator — que rechaza escrituras fuera de alcance — y por un dry-run antes de cualquier ejecución real.",
+    text: "La investigación corre con acceso de solo lectura a tu base de datos. Toda corrección se valida y se simula primero — si algo no cierra, nunca llega a ejecutarse de verdad.",
   },
   {
-    badge: "REMEDIACIÓN GOBERNADA",
-    title: "Aprobación humana por umbral, rollback siempre listo",
-    text: "Configurás qué acciones requieren aprobación y quién puede darla. Cada fix de datos genera un snapshot fila a fila con su SQL inverso, de modo que revertir es una operación de segundos. Ninguna automatización destructiva corre sin gobierno.",
+    badge: "TU APROBACIÓN",
+    title: "Vos aprobás, y siempre se puede volver atrás",
+    text: "Configurás qué acciones requieren aprobación y quién puede darla. Cada cambio de datos genera su copia de seguridad, de modo que revertir es una operación de segundos. Ninguna automatización sensible corre sin tu control.",
   },
   {
-    badge: "AUDIT TRAIL CRIPTOGRÁFICO",
-    title: "Ledger SHA-256 encadenado sobre cada acción",
-    text: "Triage, diagnóstico, aprobación, ejecución y verificación quedan firmados en una cadena de hashes inmutable. Podés auditar qué hizo el agente, con qué evidencia y quién lo autorizó — incluso meses después.",
+    badge: "REGISTRO SELLADO",
+    title: "Cada acción queda registrada y firmada",
+    text: "Análisis, aprobación, ejecución y verificación quedan firmados en un registro inalterable. Podés auditar qué hizo el agente, con qué evidencia y quién lo autorizó — incluso meses después.",
   },
   {
-    badge: "PROVING GROUND",
-    title: "HiveArena valida antes de producción",
-    text: "Los fixes de código se compilan y se testean en HiveArena — un sandbox con build y suite de regresión — antes de convertirse en PR. Solo lo que sale verde llega a tu repositorio, y el deploy sigue esperando aprobación humana.",
+    badge: "ENTORNO DE PRUEBAS",
+    title: "Las correcciones se prueban antes de producción",
+    text: "Los arreglos de código se compilan y testean en un entorno aislado antes de proponerse. Solo lo que sale verde llega a tu repositorio — y la publicación sigue esperando tu OK.",
   },
   {
-    badge: "MODOS DE DESPLIEGUE",
-    title: "SaaS multi-tenant, dedicado o self-hosted",
-    text: "Elegí dónde corre el agente: SaaS compartido con aislamiento estricto, instancia dedicada, o self-hosted asistido dentro de tu infraestructura con conexión de base de datos por tenant.",
+    badge: "DÓNDE CORRE",
+    title: "Nube, dedicado o tu propia infraestructura",
+    text: "Elegí dónde corre el agente: nube compartida con separación estricta, instancia dedicada, o instalación asistida dentro de tu propia infraestructura.",
   },
 ];
 
@@ -47,8 +47,8 @@ export default function SecurityPage() {
           Autonomía de soporte con <span className="cyan-text">gobierno en cada acción</span>
         </h1>
         <p className="mb-10 max-w-3xl text-slate-300">
-          HiveOps puede diagnosticar, proponer y remediar — pero cada decisión sensible pasa por validación,
-          aprobación humana y registro criptográfico. Así se automatiza soporte L1/L2/L3 sin resignar control.
+          HiveOps puede diagnosticar, proponer y resolver — pero cada decisión sensible pasa por validación,
+          aprobación humana y registro. Así se automatiza el soporte sin resignar control.
         </p>
 
         <div className="grid gap-5 md:grid-cols-2">

@@ -10,8 +10,8 @@ export function FinalCta() {
           Que ningún incidente se quede <span className="cyan-text">esperando al lunes</span>
         </h2>
         <p className="mx-auto mb-8 max-w-2xl text-slate-200">
-          Agendá una demo con tu propio stack: conectamos intake, diagnóstico read-only y un playbook piloto para
-          que veas una resolución verificada de punta a punta.
+          Agendá una demo sobre tu propio entorno: conectamos un canal, investigamos en solo lectura y
+          resolvemos un caso piloto para que veas el resultado de punta a punta.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <CTAButton

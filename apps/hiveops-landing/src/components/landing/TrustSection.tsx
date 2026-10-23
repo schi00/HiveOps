@@ -6,49 +6,49 @@ export function TrustSection() {
       <div id="seguridad" className="mx-auto grid w-full max-w-6xl gap-5 scroll-mt-24 md:grid-cols-2">
         <article className="surface-card surface-card-hover rounded-2xl p-6 sm:p-7">
           <span className="mb-3 inline-block font-mono text-xs uppercase tracking-widest text-cyan-300">
-            Remediación gobernada
+            Bajo tu control
           </span>
           <h3 className="mb-3 text-2xl font-bold text-white">Autonomía con frenos de verdad</h3>
           <ul className="space-y-2.5 text-sm text-slate-300 sm:text-base">
             <li className="flex items-start gap-2">
               <span className="text-cyan-400">✓</span>
-              <span>Diagnóstico con acceso read-only a la base de datos del tenant</span>
+              <span>Investiga tu base de datos con acceso de solo lectura</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-cyan-400">✓</span>
-              <span>Dry-run obligatorio y SafetyValidator sobre todo SQL antes de ejecutar</span>
+              <span>Toda corrección se valida y se simula antes de ejecutarse</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-cyan-400">✓</span>
-              <span>Aprobación humana por umbral: vos decidís qué puede aplicarse solo</span>
+              <span>Vos decidís qué puede aplicarse solo y qué necesita tu OK</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-cyan-400">✓</span>
-              <span>Snapshots fila a fila con SQL inverso generado para rollback inmediato</span>
+              <span>Copia de seguridad de cada dato para revertir en segundos</span>
             </li>
           </ul>
         </article>
         <article className="surface-card surface-card-hover rounded-2xl p-6 sm:p-7">
           <span className="mb-3 inline-block font-mono text-xs uppercase tracking-widest text-cyan-300">
-            Auditabilidad verificable
+            Registro verificable
           </span>
           <h3 className="mb-3 text-2xl font-bold text-white">Todo queda probado y registrado</h3>
           <ul className="space-y-2.5 text-sm text-slate-300 sm:text-base">
             <li className="flex items-start gap-2">
               <span className="text-cyan-400">✓</span>
-              <span>Ledger de auditoría SHA-256 encadenado sobre cada acción del agente</span>
+              <span>Registro sellado e inalterable de cada acción del agente</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-cyan-400">✓</span>
-              <span>HiveArena como proving ground: build y tests antes de cada PR</span>
+              <span>Cada corrección de código se compila y prueba antes de proponerse</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-cyan-400">✓</span>
-              <span>Aislamiento por tenant: query filters EF Core y header X-Tenant-Id</span>
+              <span>Cada cuenta totalmente aislada de las demás</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-cyan-400">✓</span>
-              <span>Credenciales cifradas en servidor — nunca expuestas al agente ni al navegador</span>
+              <span>Credenciales cifradas en el servidor — nunca expuestas al agente ni al navegador</span>
             </li>
           </ul>
         </article>

@@ -27,7 +27,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
   title: {
-    default: "HiveOps by HIVE | AI Support Engineer: soporte autónomo L1/L2/L3",
+    default: "HiveOps by HIVE | Soporte con IA que resuelve bajo tu control",
     template: "%s | HiveOps by HIVE",
   },
   description: siteConfig.description,

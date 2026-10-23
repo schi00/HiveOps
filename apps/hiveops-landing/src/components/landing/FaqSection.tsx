@@ -3,27 +3,27 @@ import { AnimatedSection } from "./AnimatedSection";
 const faqItems = [
   {
     q: "¿El agente escribe en mi base de datos productiva?",
-    a: "Solo cuando vos lo autorizás. El diagnóstico corre con acceso read-only. Los fixes de datos pasan por SafetyValidator, se ensayan en dry-run, generan un snapshot fila a fila con SQL inverso para rollback, y se aplican únicamente si superan el umbral de aprobación humana que configuraste.",
+    a: "Solo cuando vos lo autorizás. Primero investiga con acceso de solo lectura. Cada corrección de datos se valida, se ensaya, genera una copia de seguridad con su camino de vuelta, y se aplica únicamente si supera la aprobación que configuraste.",
   },
   {
-    q: "¿Qué pasa si el fix es incorrecto?",
-    a: "Cada remediación nace con su camino de vuelta: snapshot previo y SQL inverso permiten un rollback inmediato. Si la verification query no confirma el resultado, el caso se revierte y escala a un humano con todo el contexto del RootCauseBundle.",
+    q: "¿Qué pasa si la solución es incorrecta?",
+    a: "Cada cambio nace con su vuelta atrás: la copia previa permite revertir en segundos. Si la verificación no confirma el resultado, el caso se revierte y pasa a una persona con todo el contexto.",
   },
   {
     q: "¿Cómo se cobra?",
-    a: "Modelo híbrido: una suscripción base mensual por tier (Starter USD 200 fijo con hasta 2 workspaces, Pro USD 499–899 con 5–10 workspaces, Enterprise USD 1.499–3.000+ con workspaces ilimitados) más cobro por resolución autónoma verificada por encima del cupo incluido. Enterprise también admite licencia self-hosted anual (USD 10.000–50.000+). Solo se computan los incidentes que HiveOps cerró y que quedaron confirmados por una verification query o una suite de tests. Las escalaciones a tu equipo no facturan.",
+    a: "Modelo híbrido: una suscripción base mensual por plan (Starter USD 200 fijo con hasta 2 cuentas, Pro USD 499–899 con 5–10 cuentas, Enterprise USD 1.499–3.000+ con cuentas ilimitadas) más cobro por resolución autónoma verificada por encima del cupo incluido. Enterprise también admite licencia anual en tu infraestructura (USD 10.000–50.000+). Solo se computan los problemas que HiveOps cerró y quedaron confirmados automáticamente. Las derivaciones a tu equipo no facturan.",
   },
   {
-    q: "¿Qué necesita para funcionar en mi tenant?",
-    a: "Un canal de intake (WhatsApp Business, ticketing o API), acceso read-only a la base de datos para diagnóstico, el repo Git y el pipeline de CI. En el onboarding hacemos un readiness check de tu stack y configuramos playbooks y umbrales de aprobación con vos.",
+    q: "¿Qué necesito para empezar?",
+    a: "Un canal de entrada (WhatsApp, sistema de tickets o integración), acceso de solo lectura a tu base de datos y tu repositorio de código. En el arranque revisamos tu entorno y configuramos guías de acción y límites de aprobación con vos.",
   },
   {
-    q: "¿Es multi-tenant?",
-    a: "Sí, desde la base de la arquitectura: cada tenant opera aislado con query filters de EF Core y el header X-Tenant-Id. Los datos, credenciales y hallazgos de un cliente nunca se cruzan con otro.",
+    q: "¿Mis datos están separados de otros clientes?",
+    a: "Sí, desde la base del diseño: cada cuenta opera completamente aislada. Los datos, credenciales y hallazgos de un cliente nunca se cruzan con los de otro.",
   },
   {
-    q: "¿Soporta despliegue self-hosted?",
-    a: "Sí. El plan Enterprise permite despliegue dedicado o self-hosted asistido en tu infraestructura, con conexión de base de datos por tenant y SLA acordado. También existe un modo SaaS multi-tenant estándar.",
+    q: "¿Puede instalarse en mi propia infraestructura?",
+    a: "Sí. El plan Enterprise permite una instalación dedicada o en tus propios servidores, con soporte asistido y SLA acordado. También existe el modo nube compartida con separación estricta.",
   },
 ];
 

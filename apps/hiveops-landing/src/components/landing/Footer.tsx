@@ -10,8 +10,8 @@ export function Footer() {
           <div className="space-y-3 md:col-span-2">
             <BrandLogo size="md" showParentBadge />
             <p className="max-w-md text-sm text-slate-400">
-              AI Support Engineer autónomo: recibe incidentes por WhatsApp, ticketing o API, investiga la causa
-              raíz en tu stack y remedia con gobierno humano, snapshots reversibles y audit trail SHA-256.
+              El agente de soporte de la suite HIVE: recibe los problemas de tus clientes, investiga la
+              causa en tus sistemas y los resuelve con tu aprobación — siempre reversible y registrado.
             </p>
             <p className="font-mono text-xs text-cyan-400/80">
               HIVE · Suite de software para comercio e inteligencia operativa

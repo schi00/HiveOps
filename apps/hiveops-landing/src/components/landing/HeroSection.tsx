@@ -6,7 +6,7 @@ import { CTAButton } from "./CTAButton";
 const pipelineSteps = [
   {
     number: "01",
-    tag: "INTAKE · WHATSAPP BUSINESS",
+    tag: "REPORTE · WHATSAPP",
     title: "Error 500 en módulo de facturación",
     body: "Reportado tras el deploy de anoche. Clientes esperando emisión de comprobantes.",
     borderClass: "border-white/10",
@@ -20,9 +20,9 @@ const pipelineSteps = [
   },
   {
     number: "02",
-    tag: "ROOT CAUSE ENGINE",
-    title: "Pool de conexiones agotado",
-    body: "Confianza 87% · Playbook L1 «Reinicio de Pool» ejecutado con dry-run OK. Snapshot fila a fila generado.",
+    tag: "DIAGNÓSTICO",
+    title: "Causa: base de datos saturada",
+    body: "Confianza 87% · Guía «Reinicio de conexiones» simulada OK. Copia de seguridad generada.",
     borderClass: "border-cyan-400/40",
     bgClass: "bg-cyan-400/[0.06]",
     tagClass: "text-cyan-300",
@@ -30,9 +30,9 @@ const pipelineSteps = [
   },
   {
     number: "03",
-    tag: "REMEDIACIÓN VERIFICADA",
-    title: "Fix validado en HiveArena",
-    body: "Build + suite de tests en verde · PR #142 abierto en GitHub · aguarda aprobación humana.",
+    tag: "RESOLUCIÓN VERIFICADA",
+    title: "Corrección probada y lista",
+    body: "Pruebas automáticas en verde · cambio listo para revisar · aguarda tu OK.",
     borderClass: "border-emerald-500/40",
     bgClass: "bg-emerald-500/[0.07]",
     tagClass: "text-emerald-300",
@@ -41,9 +41,9 @@ const pipelineSteps = [
 ];
 
 const kpis = [
-  { value: "-72%", label: "Tiempo de resolución (MTTR)" },
-  { value: "100%", label: "Auditado con firma SHA-256" },
-  { value: "0", label: "Cambios sin aprobación humana o dry-run" },
+  { value: "-72%", label: "Tiempo de resolución" },
+  { value: "100%", label: "De las acciones queda registro sellado" },
+  { value: "0", label: "Cambios sin tu aprobación" },
 ];
 
 const integrations = [
@@ -56,7 +56,7 @@ const integrations = [
     ),
   },
   {
-    name: "Ticketing / API",
+    name: "Tickets / Sistemas",
     icon: (
       <svg className="h-4 w-4 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
         <path d="M4 6h16M4 12h16M4 18h10" />
@@ -85,7 +85,7 @@ const integrations = [
     ),
   },
   {
-    name: "HiveArena",
+    name: "Entorno de pruebas",
     icon: (
       <svg className="h-4 w-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
         <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" />
@@ -94,7 +94,7 @@ const integrations = [
     ),
   },
   {
-    name: "Dashboard SignalR",
+    name: "Panel en vivo",
     icon: (
       <svg className="h-4 w-4 text-emerald-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
         <path d="M3 13a9 9 0 0 1 18 0" />
@@ -116,19 +116,19 @@ export function HeroSection() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-400" />
             </span>
-            HIVE ECOSYSTEM · AI SUPPORT ENGINEER V1.2
+            HIVE ECOSYSTEM · SOPORTE AUTÓNOMO CON IA
           </span>
 
           <h1 className="text-4xl font-extrabold leading-[1.06] tracking-tight sm:text-5xl md:text-6xl">
-            Soporte técnico autónomo que analiza logs,{" "}
+            El soporte técnico que encuentra la causa real{" "}
             <span className="cyan-text block sm:inline">
-              diagnostica tu DB y abre Pull Requests.
+              y resuelve bajo tu control.
             </span>
           </h1>
 
           <p className="max-w-xl text-base leading-relaxed text-slate-300 md:text-lg">
-            HiveOps investiga causas raíz en tiempo real, ejecuta playbooks deterministas con dry-run
-            y resuelve incidentes L1-L3 sin saturar a tu equipo de ingeniería.
+            HiveOps investiga la causa de cada problema en tus datos y sistemas, propone la solución
+            y la aplica solo con tu aprobación — sin saturar a tu equipo.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -148,13 +148,13 @@ export function HeroSection() {
 
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-400">
             <span className="flex items-center gap-1.5">
-              <span className="text-cyan-400">✓</span> Modelo por resolución verificada
+              <span className="text-cyan-400">✓</span> Pagás solo por problemas resueltos
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="text-cyan-400">✓</span> Snapshots reversibles con 1-click
+              <span className="text-cyan-400">✓</span> Volvé atrás cualquier cambio en 1 clic
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="text-cyan-400">✓</span> Audit Trail SHA-256
+              <span className="text-cyan-400">✓</span> Registro sellado de cada acción
             </span>
           </div>
         </div>
@@ -171,7 +171,7 @@ export function HeroSection() {
               <span className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
               <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70" />
               <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/70" />
-              <span className="ml-2 font-mono text-[11px] text-slate-400">hiveops · pipeline en vivo</span>
+              <span className="ml-2 font-mono text-[11px] text-slate-400">hiveops · caso en vivo</span>
             </div>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 font-mono text-[11px] font-medium text-emerald-300">
               <span className="relative flex h-1.5 w-1.5">
@@ -243,7 +243,7 @@ export function HeroSection() {
       {/* Integrations Bar */}
       <div className="mx-auto mt-14 w-full max-w-6xl border-t border-white/10 pt-8">
         <p className="mb-4 text-center font-mono text-xs uppercase tracking-widest text-slate-500">
-          Se conecta a tu stack real: intake, base de datos, repo y proving ground
+          Se conecta a lo que ya usás: canales, base de datos, repositorio y entorno de pruebas
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
           {integrations.map((item) => (
