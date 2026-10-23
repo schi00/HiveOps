@@ -240,8 +240,8 @@ html.light .by-hive-badge {
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-12px) rotate(0.5deg); }
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
 }
 
 .float {
@@ -381,7 +381,6 @@ html.light .by-hive-badge {
 
 .hive-logo:hover {
   filter: drop-shadow(0 0 20px rgba(34, 211, 238, 0.5));
-  transform: scale(1.05);
 }
 
 .theme-toggle {
@@ -399,7 +398,8 @@ html.light .by-hive-badge {
 
 .theme-toggle:hover {
   border-color: rgba(34, 211, 238, 0.5);
-  transform: rotate(15deg);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.15);
+  background: rgba(34, 211, 238, 0.08);
 }
 
 .shimmer {
