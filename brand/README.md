@@ -1,32 +1,29 @@
 # HIVE brand marks (editable source)
 
-SVG sources for the HIVE product family identity — honeycomb-cube system:
-filled hexagon + inner hexagon/cube frame + 6 radial trapezoids + product glyph.
+SVG sources for the HIVE product family identity — **filled honeycomb** system:
+color-filled hexagon + inner hexagon + 6 radial lines + product glyph.
 
-| File | Mark | Background |
-|---|---|---|
-| `hive-mark.svg` | Parent: honeycomb cube, amber fill | Light |
-| `hive-mark_dark.svg` | Parent: black cube, amber internals | Dark |
-| `hivecrew-mark.svg` | HiveCrew: cube + glyph, amber fill | Light |
-| `hivecrew-mark-dark.svg` | HiveCrew: black cube, amber internals | Dark |
-| `hiveops-mark.svg` | HiveOps: cube + gears, cyan fill `#00CCFF` | Light |
-| `hiveops-mark-dark.svg` | HiveOps: black cube, cyan internals | Dark |
+| File | Mark |
+|---|---|
+| `hive-mark.svg` / `hive-mark_dark.svg` | Parent: amber `#F5B323` filled honeycomb, dark lines |
+| `hivecrew-mark.svg` / `hivecrew-mark-dark.svg` | HiveCrew: amber filled honeycomb + dark headset glyph |
+| `hiveops-mark.svg` / `hiveops-mark-dark.svg` | HiveOps: cyan `#25D9E8` filled honeycomb + transparent gear cutout (accounts-style gear) |
 
 ## Variants
 
-- **Common (`*-mark.svg`)**: colored hexagon fill + black internal geometry — for
-  light/white backgrounds.
-- **Dark (`*-mark-dark.svg`)**: black hexagon fill + internals in the product
-  accent — for dark backgrounds (landing, dashboard, favicon).
+The filled hexagon provides its own contrast, so `*-mark.svg` and `*-mark-dark.svg`
+are currently identical — the same asset works on light and dark backgrounds.
+Keep the pair anyway so consumers can swap per theme if a variant ever diverges.
 
 ## Editing notes
 
-- All marks share the same outer hexagon (`M32 10 51.05 21v22L32 54 12.95 43V21Z`,
-  R=22, center 32,32) and inner hexagon (R=12), so glyphs can be swapped inside a
-  consistent container.
-- Internal linework lives in the `<g stroke-width="2">` group (inner hexagon +
-  6 radii) plus the `g50` wireframe-cube group and the per-product glyph path.
-- Recolor by editing `fill`/`stroke` in the `style` attributes; keep dark/common
-  pairs in sync.
-- Files keep Inkscape metadata (`sodipodi:*`, `inkscape:*`) so they round-trip
-  cleanly in Inkscape; consumers embed the geometry without that metadata.
+- All marks share the outer hexagon `M32 8 52.78 20v24L32 56 11.22 44V20Z`
+  (R=24, center 32,32), the inner hexagon (R=13) and the 6 radial spokes —
+  so glyphs can be swapped inside a consistent honeycomb container.
+- HiveOps gear is a **mask** (`gear-cut`): dashed ring + center disc are cut out
+  (transparent — the page background shows through); the small center hole stays
+  in the accent color. Gear size = ring r≈10 / disc r≈7.6 / hole r=3.
+- HiveCrew glyph is a scaled `translate/scale` group — adjust `scale()` to resize.
+- Recolor by editing the hexagon `fill` and the linework `stroke` (`#0B0F17`).
+- Consumers embed the geometry cropped (`viewBox="8 8 48 48"`) in favicons and
+  dashboard marks.
