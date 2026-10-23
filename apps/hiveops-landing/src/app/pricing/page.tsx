@@ -20,7 +20,7 @@ export default function PricingPage() {
     { label: "Aislamiento", starter: "Tenant en SaaS multi-tenant", pro: "Multi-tenant con aislamiento estricto", enterprise: "Dedicado o self-hosted (FailClosed)" },
     { label: "Workspaces aislados", starter: "Hasta 2", pro: "Hasta 5–10", enterprise: "Ilimitados" },
     { label: "Resoluciones incluidas", starter: "Incluidas en el plan", pro: "Cupo mensual + extras por unidad", enterprise: "Paquetes a medida" },
-    { label: "Facturación", starter: "USD 200/mes fijo", pro: "USD 499–899/mes según volumen", enterprise: "USD 1.499–3.000+/mes o licencia self-hosted USD 10.000–50.000+/año" },
+    { label: "Facturación", starter: "USD 200/mes · anual USD 1.800", pro: "desde USD 499/mes · anual desde USD 4.190", enterprise: "USD 1.499+/mes a medida o licencia self-hosted USD 10.000–50.000+/año" },
     { label: "Puesta en marcha", starter: "Onboarding guiado", pro: "Readiness check + playbooks", enterprise: "Despliegue asistido + SLA" },
   ];
 
@@ -36,6 +36,23 @@ export default function PricingPage() {
           incidentes que HiveOps resolvió de forma autónoma y que quedaron verificados por query o suite de
           tests — las derivaciones a tu equipo no se computan.
         </p>
+
+        <div className="mb-6 rounded-2xl border border-cyan-500/40 bg-gradient-to-r from-cyan-500/15 to-cyan-600/5 p-6 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="font-display text-base font-bold text-white">
+                Piloto fundador — solo para los primeros 50 clientes
+              </p>
+              <p className="mt-1 text-slate-300">
+                Entrá a Starter pagando USD 99/mes los primeros 3 meses (después USD 200/mes), o contratá el plan
+                anual y congelá el precio de lanzamiento mientras tu suscripción siga activa.
+              </p>
+            </div>
+            <span className="rounded-full bg-cyan-400 px-3.5 py-1 font-mono text-xs font-bold uppercase text-slate-950">
+              Hasta 50% off entrada
+            </span>
+          </div>
+        </div>
 
         <div className="surface-card mb-10 rounded-2xl p-6 text-sm text-slate-200">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -79,6 +96,14 @@ export default function PricingPage() {
                   {plan.priceLabel}{" "}
                   <span className="text-sm font-normal text-slate-300">{plan.priceDetail}</span>
                 </p>
+                {plan.annual && plan.monthly ? (
+                  <p className="font-mono text-xs text-cyan-300/90">
+                    Anual: USD {plan.annual}/año — ahorrás USD {plan.monthly * 12 - plan.annual}
+                  </p>
+                ) : null}
+                {plan.founderNote ? (
+                  <p className="mt-1 font-mono text-xs text-emerald-300">{plan.founderNote}</p>
+                ) : null}
                 <p className="mt-3 inline-block rounded-md bg-white/5 px-2.5 py-1 font-mono text-xs text-slate-200">
                   {plan.metering}
                 </p>

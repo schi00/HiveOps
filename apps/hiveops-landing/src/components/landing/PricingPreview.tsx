@@ -47,6 +47,14 @@ export function PricingPreview() {
                   {plan.priceLabel}
                   <span className="block text-sm font-normal text-slate-300">{plan.priceDetail}</span>
                 </p>
+                {plan.annual && plan.monthly ? (
+                  <p className="mt-1 font-mono text-xs text-cyan-300/90">
+                    Anual: USD {plan.annual}/año — ahorrás USD {plan.monthly * 12 - plan.annual}
+                  </p>
+                ) : null}
+                {plan.founderNote ? (
+                  <p className="mt-1 font-mono text-xs text-emerald-300">{plan.founderNote}</p>
+                ) : null}
                 <p className="mt-3 inline-block rounded-md bg-white/5 px-2.5 py-1 font-mono text-xs text-cyan-300">
                   {plan.metering}
                 </p>
