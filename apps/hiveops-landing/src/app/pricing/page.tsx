@@ -5,7 +5,7 @@ import { CTAButton } from "@/components/landing/CTAButton";
 export const metadata: Metadata = {
   title: "Precios y Planes",
   description:
-    "Modelo híbrido de HiveOps by HIVE: suscripción base + cobro por resolución autónoma verificada. Starter, Pro y Enterprise con opción self-hosted.",
+    "Modelo híbrido de HiveOps by HIVE: suscripción base + cobro por resolución autónoma verificada. Starter, Pro y Enterprise con opción en tu propia infraestructura.",
 };
 
 export default function PricingPage() {
@@ -33,8 +33,8 @@ export default function PricingPage() {
         </h1>
         <p className="mb-8 max-w-3xl text-slate-300">
           Una suscripción mensual cubre la plataforma, los canales y el gobierno. Encima, solo pagás por los
-          incidentes que HiveOps resolvió de forma autónoma y que quedaron verificados por query o suite de
-          tests — las derivaciones a tu equipo no se computan.
+          incidentes que HiveOps resolvió de forma autónoma y que quedaron verificados automáticamente — las
+          derivaciones a tu equipo no se computan.
         </p>
 
         <div className="mb-6 rounded-2xl border border-cyan-500/40 bg-gradient-to-r from-cyan-500/15 to-cyan-600/5 p-6 text-sm">
@@ -61,9 +61,8 @@ export default function PricingPage() {
                 Piloto acotado con onboarding asistido
               </p>
               <p className="mt-1 text-slate-300">
-                Hacemos un readiness check de tu stack (base de datos, repo Git, pipeline, canal de intake),
-                configuramos playbooks y umbrales de aprobación, y medimos outcomes reales con el
-                OutcomeMeteringService antes de escalar.
+                Revisamos tu entorno (base de datos, repositorio y canal de entrada), configuramos guías
+                de acción y límites de aprobación, y medimos resultados reales antes de escalar.
               </p>
             </div>
             <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3.5 py-1 font-mono text-xs font-semibold text-emerald-300">
@@ -129,10 +128,10 @@ export default function PricingPage() {
         </div>
 
         <p className="mt-4 max-w-3xl text-xs leading-relaxed text-slate-400">
-          La base mensual cubre plataforma, canales y gobierno por workspace; las resoluciones autónomas
-          verificadas por encima del cupo se facturan por unidad. Enterprise admite licencia self-hosted
-          anual (USD 10.000–50.000+) en tu propia infraestructura. Volúmenes altos pueden traer sus propias
-          API keys de LLM.
+          La base mensual cubre plataforma, canales y gobierno por cuenta; las resoluciones autónomas
+          verificadas por encima del cupo se facturan por unidad. Enterprise admite licencia anual
+          (USD 10.000–50.000+) en tu propia infraestructura. Volúmenes altos pueden usar sus propias
+          credenciales de IA.
         </p>
 
         <section className="mt-14">
