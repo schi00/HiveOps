@@ -116,7 +116,19 @@ var hiveIdentityIssuer = builder.Configuration["HiveIdentity:Issuer"] ?? "https:
 var hiveIdentityAudience = builder.Configuration["HiveIdentity:Audience"] ?? "hive-products";
 var hiveIdentityEnabled = !string.IsNullOrWhiteSpace(hiveIdentityKey);
 
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+// Smart scheme: cookie sessions keep working as before; when no auth cookie is
+// present but an Authorization: Bearer header arrives (HIVE suite handoff),
+// authentication is forwarded to the JWT bearer handler.
+builder.Services.AddAuthentication("SmartAuth")
+    .AddPolicyScheme("SmartAuth", "SmartAuth", options =>
+    {
+        options.ForwardDefaultSelector = context =>
+            context.Request.Cookies.ContainsKey("HiveOps.auth")
+                ? CookieAuthenticationDefaults.AuthenticationScheme
+                : context.Request.Headers.Authorization.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                    ? JwtBearerDefaults.AuthenticationScheme
+                    : CookieAuthenticationDefaults.AuthenticationScheme;
+    })
     .AddCookie(options =>
     {
         options.Cookie.Name = "HiveOps.auth";

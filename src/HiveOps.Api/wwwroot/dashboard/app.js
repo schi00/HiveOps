@@ -189,6 +189,18 @@ async function initRealtime(){
   }catch(e){console.warn('Realtime init failed',e)}
 }
 function showLogin(){document.getElementById('login-screen').classList.remove('hidden');document.getElementById('app').classList.add('hidden');}
+async function refreshIdentity(){
+try{
+const o={method:'GET',headers:{'Content-Type':'application/json'},credentials:'include'};
+const r=await fetch(API+'/auth/me',o);
+if(!r.ok)return;
+const d=await r.json();
+if(!d||d.authenticated!==true)return;
+s.user={username:d.displayName||(s.user&&s.user.username)||'',role:d.role||(s.user&&s.user.role),tenantName:d.tenantName||(s.user&&s.user.tenantName)};
+localStorage.setItem('user',JSON.stringify(s.user));
+if(d.tenantId){s.tenantId=d.tenantId;localStorage.setItem('tenantId',d.tenantId);}
+}catch{}
+}
 async function loadDeploymentInfo(){
 try{const d=await api('GET','/deployment/info');s.deploymentMode=d&&d.mode?d.mode:null;}catch{s.deploymentMode=null;}
 }
@@ -196,6 +208,7 @@ async function showApp(){
 try{
 document.getElementById('login-screen').classList.add('hidden');
 document.getElementById('app').classList.remove('hidden');
+await refreshIdentity();
 s.isAdmin=s.user.role==='SuperAdmin'||s.user.role==='Admin';
 await loadDeploymentInfo();
 if(s.isAdmin){const adm=document.getElementById('n-adm');if(adm)adm.classList.remove('hidden');}
@@ -533,14 +546,17 @@ function changeTenant(){
 const sel=document.getElementById('tenant-select');
 s.tenantId=sel.value;
 updateScopeLabel();
+const t=(s.tenants||[]).find(x=>x.id===s.tenantId);
 if(s.tenantId){
 localStorage.setItem('tenantId',s.tenantId);
-ld();li();
+toast('Supervisando cuenta: '+(t?t.name:s.tenantId),'success');
 ctxReloadIfActive();
- if(hubConn&&hubConn.invoke){hubConn.invoke('JoinTenantGroup', s.tenantId).catch(()=>{});} 
+if(hubConn&&hubConn.invoke){hubConn.invoke('JoinTenantGroup', s.tenantId).catch(()=>{});} 
 }else{
 localStorage.removeItem('tenantId');
+toast('Modo plataforma · vista global','info');
 }
+Promise.allSettled([ld(),li()]);
 }
 function actAsTenant(tid){
 if(!tid)return;
