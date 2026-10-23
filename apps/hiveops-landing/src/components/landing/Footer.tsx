@@ -52,8 +52,10 @@ export function Footer() {
             </p>
             <ul className="space-y-2 text-sm text-slate-400">
               <li className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400/60" />
-                HiveCrew · Ventas IA
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400/60" />
+                <a href="https://crew.hivecorp.com.ar" className="transition-colors hover:text-amber-300">
+                  HiveCrew · Ventas IA
+                </a>
               </li>
               <li className="flex items-center gap-2 text-cyan-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
@@ -62,6 +64,11 @@ export function Footer() {
               <li className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/60" />
                 HiveGathers · Logística (Próximamente)
+              </li>
+              <li className="flex items-center gap-2 pt-1">
+                <a href="https://hivecorp.com.ar" className="text-xs transition-colors hover:text-cyan-300">
+                  Ver toda la suite → hivecorp.com.ar
+                </a>
               </li>
             </ul>
           </div>
