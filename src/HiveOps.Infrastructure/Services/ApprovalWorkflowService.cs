@@ -4,6 +4,7 @@ using HiveOps.Application.Support;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
 using HiveOps.Domain.Interfaces;
+using HiveOps.Domain.Models;
 using HiveOps.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -129,9 +130,29 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             "ApprovalWorkflow",
             cancellationToken);
 
+        var tenantPlan = await db.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == incident.TenantId)
+            .Select(t => (PlanTier?)t.Plan)
+            .FirstOrDefaultAsync(cancellationToken) ?? PlanTier.Starter;
+
         // Execute based on incident category
         if (incident.Category == IncidentCategory.Code && !string.IsNullOrEmpty(incident.GitBranch))
         {
+            if (!PlanCapabilities.CanApplyTrack(tenantPlan, PlanCapabilities.CodeFixTrack))
+            {
+                await _messageHistory.AppendMessageToIncidentAsync(
+                    incidentId,
+                    MessageRole.Assistant,
+                    "El despliegue automático de correcciones de código requiere el plan Enterprise. La propuesta queda lista para revisión y despliegue manual.",
+                    "ApprovalWorkflow",
+                    cancellationToken);
+                incident.Status = IncidentStatus.AwaitingApproval;
+                incident.UpdatedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(cancellationToken);
+                return true;
+            }
+
             var cfg = scope.ServiceProvider.GetRequiredService<ITenantConfigService>();
             if (!await TenantDeployPolicy.IsManualDeployAllowedAsync(cfg, incident.TenantId, cancellationToken))
             {
@@ -164,6 +185,19 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         }
         else if (incident.Category == IncidentCategory.Database)
         {
+            if (!PlanCapabilities.CanApplyTrack(tenantPlan, PlanCapabilities.DatabaseFixTrack))
+            {
+                await _messageHistory.AppendMessageToIncidentAsync(
+                    incidentId,
+                    MessageRole.Assistant,
+                    "La aplicación automática de correcciones de datos requiere el plan Pro. La propuesta queda lista para revisión y aplicación manual.",
+                    "ApprovalWorkflow",
+                    cancellationToken);
+                incident.Status = IncidentStatus.AwaitingApproval;
+                incident.UpdatedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(cancellationToken);
+                return true;
+            }
             // Execute DB fix (already validated and backed up)
             // The SQL would be in ResolutionNotes or attached as an IncidentAttachment
             // For now, mark as resolved since the fix was already applied during proposal

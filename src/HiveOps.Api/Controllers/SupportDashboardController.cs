@@ -410,6 +410,14 @@ public sealed class SupportDashboardController : ControllerBase
             .FirstOrDefaultAsync(i => i.Id == id && i.TenantId == effectiveTenantId.Value, ct);
         if (incident is null) return NotFound();
 
+        var tenantPlan = await _db.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == incident.TenantId)
+            .Select(t => t.Plan)
+            .FirstOrDefaultAsync(ct);
+        if (!PlanCapabilities.CanApplyTrack(tenantPlan, PlanCapabilities.DatabaseFixTrack))
+            return StatusCode(403, new { message = "La aplicación automática de correcciones de datos está disponible a partir del plan Pro." });
+
         var scriptAttachment = incident.Attachments
             .FirstOrDefault(a => a.Type == IncidentAttachmentType.SqlScript);
         if (scriptAttachment is null)

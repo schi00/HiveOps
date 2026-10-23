@@ -174,6 +174,53 @@ public sealed class SupportPlugin
 
         var incident = await _db.Incidents
             .FirstOrDefaultAsync(i => i.ConversationId == convId && i.Status != IncidentStatus.Closed, cancellationToken);
+        if (incident is null)
+            return "Diagnóstico rechazado: no hay un incidente activo en esta conversación. Las consultas a la base de datos solo se permiten dentro del análisis de un incidente.";
+
+        var config = await _tenantConfigService.GetConfigurationAsync(tenantId, cancellationToken);
+        var diagnostics = config.Diagnostics;
+
+        if (!diagnostics.AllowSensitiveTables)
+        {
+            var blockedTable = SafetyValidator.FindBlockedTableReference(normalized, diagnostics.BlockedTables);
+            if (blockedTable is not null)
+            {
+                _db.DiagnosticLogs.Add(new DiagnosticLog
+                {
+                    TenantId = tenantId,
+                    IncidentId = incident.Id,
+                    StepName = "db_diagnostic_blocked",
+                    Result = $"Blocked sensitive-table query: {normalized}",
+                    IsSuccess = false
+                });
+                await _db.SaveChangesAsync(cancellationToken);
+                return $"Diagnóstico rechazado: la tabla '{blockedTable}' está fuera del alcance permitido para investigación automática.";
+            }
+        }
+
+        var tenantPlan = await _db.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == tenantId)
+            .Select(t => (PlanTier?)t.Plan)
+            .FirstOrDefaultAsync(cancellationToken) ?? PlanTier.Starter;
+        var maxQueries = diagnostics.MaxDiagnosticQueriesPerIncident
+            ?? PlanCapabilities.DefaultDiagnosticQueriesPerIncident(tenantPlan);
+
+        var used = await _db.DiagnosticLogs.CountAsync(
+            l => l.IncidentId == incident.Id && l.StepName == "db_diagnostic", cancellationToken);
+        if (used >= maxQueries)
+        {
+            _db.DiagnosticLogs.Add(new DiagnosticLog
+            {
+                TenantId = tenantId,
+                IncidentId = incident.Id,
+                StepName = "db_diagnostic_budget",
+                Result = $"Diagnostic budget exhausted ({used}/{maxQueries}). Blocked query: {normalized}",
+                IsSuccess = false
+            });
+            await _db.SaveChangesAsync(cancellationToken);
+            return $"Se alcanzó el límite de {maxQueries} consultas de diagnóstico para este incidente. Si necesitás más investigación, escalá el caso a un humano.";
+        }
 
         TargetQueryResult result;
         try
@@ -185,19 +232,16 @@ public sealed class SupportPlugin
             result = new TargetQueryResult(false, string.Empty, 0, ex.Message);
         }
 
-        if (incident is not null)
+        var logResult = $"Query: {normalized}\nSuccess: {result.Success} | Rows: {result.RowCount}\n{TruncateForLog(result.Success ? result.RenderedResult : result.Error ?? "unknown error")}";
+        _db.DiagnosticLogs.Add(new DiagnosticLog
         {
-            var logResult = $"Query: {normalized}\nSuccess: {result.Success} | Rows: {result.RowCount}\n{TruncateForLog(result.Success ? result.RenderedResult : result.Error ?? "unknown error")}";
-            _db.DiagnosticLogs.Add(new DiagnosticLog
-            {
-                TenantId = tenantId,
-                IncidentId = incident.Id,
-                StepName = "db_diagnostic",
-                Result = logResult,
-                IsSuccess = result.Success
-            });
-            await _db.SaveChangesAsync(cancellationToken);
-        }
+            TenantId = tenantId,
+            IncidentId = incident.Id,
+            StepName = "db_diagnostic",
+            Result = logResult,
+            IsSuccess = result.Success
+        });
+        await _db.SaveChangesAsync(cancellationToken);
 
         if (!result.Success)
             return $"La consulta de diagnóstico falló: {result.Error}";
@@ -540,6 +584,12 @@ public sealed class SupportPlugin
         if (incident is null)
             return "No active incident found.";
 
+        var tenantPlan = await _db.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == tenantId)
+            .Select(t => (PlanTier?)t.Plan)
+            .FirstOrDefaultAsync(cancellationToken) ?? PlanTier.Starter;
+
         // Database fix pending approval: execute the stored script via the
         // governed fixer (safety-validated, tenant-scoped connection).
         var pendingScript = incident.Attachments
@@ -547,6 +597,9 @@ public sealed class SupportPlugin
             .FirstOrDefault(a => a.Type == IncidentAttachmentType.SqlScript);
         if (pendingScript is not null && incident.Status == IncidentStatus.AwaitingApproval)
         {
+            if (!PlanCapabilities.CanApplyTrack(tenantPlan, PlanCapabilities.DatabaseFixTrack))
+                return "La aplicación automática de correcciones de datos está disponible a partir del plan Pro. La propuesta quedó registrada para que el equipo la revise y aplique manualmente.";
+
             if (!SafetyValidator.IsSafeSql(pendingScript.Content))
             {
                 var reason = SafetyValidator.GetRejectionReason(pendingScript.Content);
@@ -579,6 +632,9 @@ public sealed class SupportPlugin
 
         if (string.IsNullOrWhiteSpace(incident.GitBranch) || string.IsNullOrWhiteSpace(incident.GitCommitHash))
             return "No code fix has been proposed for this incident.";
+
+        if (!PlanCapabilities.CanApplyTrack(tenantPlan, PlanCapabilities.CodeFixTrack))
+            return "El despliegue automático de correcciones de código está disponible en el plan Enterprise. La propuesta quedó en la rama indicada para que el equipo la revise y despliegue manualmente.";
 
         if (!await TenantDeployPolicy.IsManualDeployAllowedAsync(_tenantConfigService, incident.TenantId, cancellationToken))
             return "Despliegue deshabilitado para este tenant en la configuración DeployGit (ManualDeployAllowed).";

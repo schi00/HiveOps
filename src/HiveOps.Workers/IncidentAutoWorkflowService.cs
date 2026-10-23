@@ -676,6 +676,77 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
     }
 
     /// <summary>
+    /// Resolves the tenant commercial plan (<see cref="PlanTier"/>). Defaults to
+    /// <see cref="PlanTier.Starter"/> — the most restrictive tier — when the
+    /// tenant row cannot be found, so apply-paths fail closed.
+    /// </summary>
+    private static async Task<PlanTier> GetTenantPlanAsync(AppDbContext db, Guid tenantId, CancellationToken ct)
+    {
+        return await db.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == tenantId)
+            .Select(t => t.Plan)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>
+    /// Records a remediation proposal for a tenant whose plan does not include
+    /// automatic application of that track. The incident keeps full diagnosis +
+    /// proposal value (the "investigate and propose" promise of lower tiers) but
+    /// is parked in AwaitingApproval so the polling loop does not re-process it
+    /// and no automated apply path runs. An engineer can apply it manually.
+    /// </summary>
+    private async Task RecordPlanGatedProposalAndParkAsync(
+        Incident incident,
+        AppDbContext db,
+        string track,
+        string proposal,
+        PlanTier requiredPlan,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var outcomeMetering = scope.ServiceProvider.GetService<IOutcomeMeteringService>();
+            if (outcomeMetering is not null)
+            {
+                await outcomeMetering.RecordShadowProposedResolutionAsync(incident, track, proposal, ct);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Plan-gated proposal outcome metering failed for incident {IncidentId}.",
+                incident.Id);
+        }
+
+        await AppendAuditAsync(incident, "PlanGatedProposal", new
+        {
+            track,
+            requiredPlan = requiredPlan.ToString(),
+            proposal
+        }, ct);
+
+        await _messageHistory.AppendMessageToIncidentAsync(
+            incident.Id,
+            MessageRole.Assistant,
+            $"Propuesta de corrección generada y lista para revisar. La aplicación automática de este tipo de corrección está disponible a partir del plan {requiredPlan}; el equipo puede revisarla y aplicarla manualmente.",
+            "IncidentAutoWorkflow",
+            ct);
+
+        incident.Status = IncidentStatus.AwaitingApproval;
+        incident.RequiresHumanApproval = true;
+        incident.AssignedTo = "engineer";
+        incident.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        await NotifyChannelProgressAsync(
+            incident,
+            "Tenemos un diagnóstico y una propuesta de solución lista para revisar. El equipo la revisará y la aplicará.",
+            ct);
+    }
+
+    /// <summary>
     /// Resolves the tenant target-database connection string through
     /// <see cref="IDynamicConnectionStringResolver"/> (warm cache + resolve).
     /// Returns null when resolution fails; on <see cref="SecurityException"/>
@@ -751,6 +822,17 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             incident.ResolutionNotes = shadowProposal;
             await RecordShadowProposalAndParkAsync(
                 incident, db, "CodeFix", shadowProposal, cancellationToken);
+            return;
+        }
+
+        var plan = await GetTenantPlanAsync(db, incident.TenantId, cancellationToken);
+        if (!PlanCapabilities.CanApplyTrack(plan, PlanCapabilities.CodeFixTrack))
+        {
+            var gatedProposal = await GenerateCodeFixProposalAsync(incident, feedbackError: null, cancellationToken);
+            incident.ResolutionNotes = gatedProposal;
+            await RecordPlanGatedProposalAndParkAsync(
+                incident, db, PlanCapabilities.CodeFixTrack, gatedProposal,
+                PlanCapabilities.RequiredPlanForApply(PlanCapabilities.CodeFixTrack), cancellationToken);
             return;
         }
 
@@ -1816,6 +1898,30 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             incident.ResolutionNotes = shadowSqlProposal;
             await RecordShadowProposalAndParkAsync(
                 incident, db, "DatabaseFix", shadowSqlProposal, cancellationToken);
+            return;
+        }
+
+        var plan = await GetTenantPlanAsync(db, incident.TenantId, cancellationToken);
+        if (!PlanCapabilities.CanApplyTrack(plan, PlanCapabilities.DatabaseFixTrack))
+        {
+            string gatedProposal;
+            try
+            {
+                gatedProposal = await GenerateDatabaseFixProposalAsync(incident, feedbackError: null, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex,
+                    "Plan-gated SQL proposal generation fell back to hypothesis summary for incident {IncidentId}",
+                    incident.Id);
+                gatedProposal = TryDeserializeRootCauseBundle(incident)?.SummaryHypothesis
+                    ?? $"Database remediation plan for incident {incident.Id}: {incident.Title}";
+            }
+
+            incident.ResolutionNotes = gatedProposal;
+            await RecordPlanGatedProposalAndParkAsync(
+                incident, db, PlanCapabilities.DatabaseFixTrack, gatedProposal,
+                PlanCapabilities.RequiredPlanForApply(PlanCapabilities.DatabaseFixTrack), cancellationToken);
             return;
         }
 
