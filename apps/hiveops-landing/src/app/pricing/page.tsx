@@ -10,18 +10,18 @@ export const metadata: Metadata = {
 
 export default function PricingPage() {
   const comparisonRows = [
-    { label: "Canales de intake", starter: "WhatsApp + webhooks", pro: "WhatsApp + webhooks + ticketing + API", enterprise: "Multi-canal + ITSM custom" },
-    { label: "Tracks de resolución", starter: "Playbooks L1 + Escalate", pro: "L1/L2: Playbook + DatabaseFix + Escalate", enterprise: "L1/L2/L3 completo: + CodeFix con PRs" },
-    { label: "Diagnóstico", starter: "Reglas deterministas + triage IA", pro: "SQL read-only + logs + git blame + KB", enterprise: "Root cause multi-fuente + fuentes custom" },
-    { label: "API Drift detection", starter: "—", pro: "Alertas en tiempo real", enterprise: "Alertas + remediación automática" },
-    { label: "Remediación gobernada", starter: "Dry-run + aprobación total", pro: "Umbrales por acción + snapshots fila a fila", enterprise: "Políticas a medida + rollback 1-click" },
-    { label: "Validación de codefixes", starter: "—", pro: "Verification query", enterprise: "HiveArena: build + tests → PR automático" },
-    { label: "Audit trail", starter: "Registro de acciones", pro: "Ledger SHA-256 encadenado", enterprise: "Ledger + export a tu SIEM" },
-    { label: "Aislamiento", starter: "Tenant en SaaS multi-tenant", pro: "Multi-tenant con aislamiento estricto", enterprise: "Dedicado o self-hosted (FailClosed)" },
-    { label: "Workspaces aislados", starter: "Hasta 2", pro: "Hasta 5–10", enterprise: "Ilimitados" },
-    { label: "Resoluciones incluidas", starter: "Incluidas en el plan", pro: "Cupo mensual + extras por unidad", enterprise: "Paquetes a medida" },
-    { label: "Facturación", starter: "USD 200/mes · anual USD 1.800", pro: "desde USD 499/mes · anual desde USD 4.190", enterprise: "USD 1.499+/mes a medida o licencia self-hosted USD 10.000–50.000+/año" },
-    { label: "Puesta en marcha", starter: "Onboarding guiado", pro: "Readiness check + playbooks", enterprise: "Despliegue asistido + SLA" },
+    { label: "Por dónde entran los problemas", starter: "WhatsApp + formulario web", pro: "WhatsApp, web y tickets de tus sistemas", enterprise: "Todos los canales que uses, a medida" },
+    { label: "Qué puede resolver solo", starter: "Consultas frecuentes; el resto lo deriva", pro: "Consultas + correcciones de datos en tu base", enterprise: "Lo anterior + correcciones de código listas para revisar" },
+    { label: "Cómo encuentra la causa", starter: "Análisis automático del problema", pro: "Revisa datos, registros e historial de cambios", enterprise: "Investiga en todas tus fuentes, incluidas las propias" },
+    { label: "Aviso si algo cambia en tus sistemas", starter: "—", pro: "Alerta en tiempo real", enterprise: "Alerta + corrección automática" },
+    { label: "Cambios bajo tu control", starter: "Simula antes de aplicar; todo con tu OK", pro: "Límites por acción + copia de seguridad de cada dato", enterprise: "Tus propias reglas + volver atrás en 1 clic" },
+    { label: "Correcciones verificadas", starter: "—", pro: "Comprueba el resultado antes de proponerlo", enterprise: "Compila y prueba el código antes de entregarlo" },
+    { label: "Registro de todo lo que hace", starter: "Historial de acciones", pro: "Historial sellado e inalterable", enterprise: "Historial + exportación a tu sistema de seguridad" },
+    { label: "Dónde corren tus datos", starter: "Nube con datos separados", pro: "Nube con separación estricta", enterprise: "Dedicado o en tu propia infraestructura" },
+    { label: "Cuentas separadas", starter: "Hasta 2", pro: "Hasta 5–10", enterprise: "Ilimitadas" },
+    { label: "Resoluciones incluidas", starter: "Incluidas en el plan", pro: "Cupo mensual + adicionales", enterprise: "Paquetes a medida" },
+    { label: "Precio", starter: "USD 200/mes · anual USD 1.800", pro: "desde USD 499/mes · anual desde USD 4.190", enterprise: "desde USD 1.499/mes o licencia anual en tu infraestructura" },
+    { label: "Cómo arrancás", starter: "Asistente guiado", pro: "Revisión de tu entorno + guías de acción", enterprise: "Instalación acompañada + SLA" },
   ];
 
   return (
@@ -136,7 +136,7 @@ export default function PricingPage() {
         </p>
 
         <section className="mt-14">
-          <h2 className="mb-5 text-2xl font-bold md:text-3xl">Comparativo detallado de capacidades</h2>
+          <h2 className="mb-5 text-2xl font-bold md:text-3xl">Qué incluye cada plan, en detalle</h2>
           <div className="overflow-x-auto rounded-2xl border border-cyan-500/20 bg-[#161B22]/80">
             <table className="min-w-full text-sm">
               <thead>
