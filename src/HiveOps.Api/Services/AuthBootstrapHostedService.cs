@@ -37,9 +37,17 @@ public sealed class AuthBootstrapHostedService : IHostedService
         if (!await db.Database.CanConnectAsync(cancellationToken))
             return;
 
-        await EnsureAdminUserAsync(db, cancellationToken);
+        // Seed users are disabled in production (Auth:Bootstrap:SeedUsers=false):
+        // real tenants/users are provisioned through onboarding or admin flows.
+        if (_configuration.GetValue("Auth:Bootstrap:SeedUsers", true))
+        {
+            await EnsureAdminUserAsync(db, cancellationToken);
+        }
         await EnsureComandaTenantAsync(db, cancellationToken);
-        await EnsureTenantUsersAndDefaultsAsync(db, industrySettings, cancellationToken);
+        if (_configuration.GetValue("Auth:Bootstrap:SeedUsers", true))
+        {
+            await EnsureTenantUsersAndDefaultsAsync(db, industrySettings, cancellationToken);
+        }
         await db.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Auth bootstrap completed.");
     }
