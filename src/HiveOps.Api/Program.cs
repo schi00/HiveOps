@@ -186,11 +186,18 @@ builder.Services.AddAuthentication("SmartAuth")
                     if (!string.Equals(identity.FindFirst("iss")?.Value, hiveIdentityIssuer, StringComparison.OrdinalIgnoreCase))
                         return;
 
+                    // HIVE platform admins carry no org claim — they resolve
+                    // tenants on demand via X-Tenant-Id like native admins.
+                    var hiveRole = identity.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+                    if (string.Equals(hiveRole, HiveOps.Api.Authentication.AppRoles.Admin, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(hiveRole, HiveOps.Api.Authentication.AppRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase))
+                        return;
+
                     if (identity.HasClaim(c => c.Type == HiveOps.Api.Authentication.AppClaimTypes.TenantId))
                         return;
 
                     var orgIdClaim = identity.FindFirst("org_id")?.Value;
-                    if (!Guid.TryParse(orgIdClaim, out var orgId))
+                    if (!Guid.TryParse(orgIdClaim, out var orgId) || orgId == Guid.Empty)
                     {
                         context.Fail("HIVE token is missing a valid org_id claim.");
                         return;
