@@ -179,8 +179,13 @@ builder.Services.AddAuthentication("SmartAuth")
                         || !identity.IsAuthenticated)
                         return;
 
-                    // Only HIVE-account tokens need mapping: they carry "org_id"
-                    // instead of the HiveOps-native "tenant_id".
+                    // Only HIVE-account tokens (issued by accounts.hivecorp.com.ar) need
+                    // mapping: they carry "org_id" instead of the HiveOps-native
+                    // "tenant_id". HiveOps-issued JWTs already carry their final claims —
+                    // platform admins legitimately have no tenant claim at all.
+                    if (!string.Equals(identity.FindFirst("iss")?.Value, hiveIdentityIssuer, StringComparison.OrdinalIgnoreCase))
+                        return;
+
                     if (identity.HasClaim(c => c.Type == HiveOps.Api.Authentication.AppClaimTypes.TenantId))
                         return;
 
