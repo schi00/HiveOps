@@ -632,16 +632,13 @@ html.light .by-hive-badge {
       <button onclick="n('admin')" id="n-adm" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-semibold hidden" style="color: #fbbf24">Plataforma</button>
     </nav>
     <div class="shrink-0 px-4 py-4 border-t flex flex-col gap-3" style="border-color: var(--border-color)">
-      <div class="flex items-center gap-2">
-        <span id="role-badge" class="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest border" style="border-color: var(--border-color); color: var(--text-tertiary)">…</span>
-        <span id="scope-label" class="text-xs" style="color: var(--text-tertiary)"></span>
-      </div>
       <div>
         <label class="text-[10px] font-medium uppercase tracking-widest block mb-1.5" for="tenant-select" style="color: var(--text-tertiary)">Cliente</label>
         <select id="tenant-select" onchange="changeTenant()" class="input-field w-full px-3 py-2 rounded-xl text-sm">
           <option value="">Seleccionar Cliente...</option>
         </select>
       </div>
+      <span id="role-badge" class="self-start px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest border" style="border-color: var(--border-color); color: var(--text-tertiary)">…</span>
     </div>
   </aside>
 
@@ -662,6 +659,46 @@ html.light .by-hive-badge {
     </div>
 
     <div class="flex items-center gap-3">
+      <!-- HIVE Suite Switcher -->
+      <div class="relative" id="suite-menu-container">
+        <button type="button" onclick="toggleSuiteMenu()" title="Suite HIVE" class="theme-toggle" style="width: 40px; height: 40px;" aria-label="Suite HIVE" aria-haspopup="true" aria-expanded="false">
+          <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor" style="color: var(--text-secondary)" aria-hidden="true">
+            <circle cx="3" cy="3" r="1.4"/><circle cx="8" cy="3" r="1.4"/><circle cx="13" cy="3" r="1.4"/>
+            <circle cx="3" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="13" cy="8" r="1.4"/>
+            <circle cx="3" cy="13" r="1.4"/><circle cx="8" cy="13" r="1.4"/><circle cx="13" cy="13" r="1.4"/>
+          </svg>
+        </button>
+        <div id="suite-dropdown" class="hidden absolute right-0 mt-2 w-72 hive-card rounded-xl shadow-2xl border z-50 overflow-hidden" style="background: var(--bg-card); border-color: var(--border-color); backdrop-filter: blur(12px);">
+          <div class="px-4 py-3 border-b flex justify-between items-center" style="border-color: var(--border-color)">
+            <span class="font-semibold text-sm" style="color: var(--text-primary)">Suite HIVE</span>
+            <span class="text-[10px]" style="color: var(--text-tertiary)">Ecosistema IA</span>
+          </div>
+          <div class="p-2 space-y-1">
+            <a href="https://app.crew.hivecorp.com.ar/dashboard/" target="_blank" rel="noopener" class="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/5 transition-colors">
+              <div>
+                <p class="text-xs font-semibold" style="color: var(--text-primary)">HiveCrew</p>
+                <p class="text-[11px]" style="color: var(--text-tertiary)">Ventas por WhatsApp e Instagram</p>
+              </div>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded-full border" style="border-color: var(--border-color); color: var(--text-tertiary)">Abrir ↗</span>
+            </a>
+            <div class="flex items-center justify-between p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/25">
+              <div>
+                <p class="text-xs font-semibold" style="color: var(--text-primary)">HiveOps</p>
+                <p class="text-[11px]" style="color: var(--text-tertiary)">Soporte técnico y salud de datos</p>
+              </div>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">Activo</span>
+            </div>
+            <div class="flex items-center justify-between p-2.5 rounded-xl opacity-60">
+              <div>
+                <p class="text-xs font-semibold" style="color: var(--text-primary)">HiveGathers</p>
+                <p class="text-[11px]" style="color: var(--text-tertiary)">Logística y seguimiento de envíos</p>
+              </div>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded-full border" style="border-color: var(--border-color); color: var(--text-tertiary)">Próximamente</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Theme Toggle -->
       <div class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema" role="button" tabindex="0" aria-label="Cambiar tema" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleTheme();}">
         <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #22d3ee" aria-hidden="true">
@@ -1657,6 +1694,18 @@ function closeUserDropdown(e) {
   }
 }
 document.addEventListener('click', closeUserDropdown);
+
+// HIVE Suite menu
+function toggleSuiteMenu() {
+  document.getElementById('suite-dropdown').classList.toggle('hidden');
+}
+function closeSuiteMenu(e) {
+  const container = document.getElementById('suite-menu-container');
+  if (container && !container.contains(e.target)) {
+    document.getElementById('suite-dropdown').classList.add('hidden');
+  }
+}
+document.addEventListener('click', closeSuiteMenu);
 
 function openChangePasswordModal() {
   document.getElementById('user-dropdown').classList.remove('open');

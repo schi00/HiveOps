@@ -34,7 +34,7 @@ try{
    wrap.innerHTML=`<h3 class="font-semibold text-lg mb-4">Billing & Suscripciones</h3>
    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
      <div class="col-span-1">
-       <label class="text-sm block mb-2" style="color:var(--text-secondary)">Tenant</label>
+       <label class="text-sm block mb-2" style="color:var(--text-secondary)">Cliente</label>
        <select id="bill-tenant" class="input-field w-full px-3 py-2 rounded-xl text-sm"></select>
      </div>
      <div class="col-span-1">
@@ -222,7 +222,7 @@ badge.textContent='ADMIN';badge.className=amber;
 if(udRole)udRole.textContent='Admin · multi-cliente';
 if(scope)scope.textContent='Administración multi-cliente';
 }else{
-badge.textContent='TENANT';badge.className=cyan;
+badge.textContent='CLIENTE';badge.className=cyan;
 if(udRole)udRole.textContent='Administrador del cliente';
 if(sel)sel.classList.add('hidden');
 updateScopeLabel();
