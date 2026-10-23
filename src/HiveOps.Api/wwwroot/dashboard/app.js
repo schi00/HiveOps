@@ -14,9 +14,12 @@ try{
    const _jwt=decodeURIComponent(_m[1]);
    const _b64=_jwt.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
    const _p=JSON.parse(decodeURIComponent(escape(atob(_b64))));
+   const _role=_p.role||_p['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
+   const _name=_p.name||_p['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name']||_p.email;
    localStorage.setItem('token',_jwt);
-   localStorage.setItem('user',JSON.stringify({username:_p.name||_p.email||'usuario',role:_p.role||'Tenant',tenantName:_p.org_name||''}));
-   if(_p.org_id) localStorage.setItem('tenantId',_p.org_id);
+   localStorage.setItem('user',JSON.stringify({username:_name||'usuario',role:_role||'Tenant',tenantName:_p.org_name||''}));
+   if(_p.org_id&&_p.org_id!=='00000000-0000-0000-0000-000000000000') localStorage.setItem('tenantId',_p.org_id);
+   else localStorage.removeItem('tenantId');
    history.replaceState(null,'',location.pathname+location.search);
  }
 }catch(_e){console.warn('HIVE token handoff failed',_e)}
@@ -191,7 +194,7 @@ async function initRealtime(){
 function showLogin(){document.getElementById('login-screen').classList.remove('hidden');document.getElementById('app').classList.add('hidden');}
 async function refreshIdentity(){
 try{
-const o={method:'GET',headers:{'Content-Type':'application/json'},credentials:'include'};
+const o={method:'GET',headers:{'Content-Type':'application/json','Authorization':'Bearer '+s.token},credentials:'include'};
 const r=await fetch(API+'/auth/me',o);
 if(!r.ok)return;
 const d=await r.json();
@@ -199,6 +202,7 @@ if(!d||d.authenticated!==true)return;
 s.user={username:d.displayName||(s.user&&s.user.username)||'',role:d.role||(s.user&&s.user.role),tenantName:d.tenantName||(s.user&&s.user.tenantName)};
 localStorage.setItem('user',JSON.stringify(s.user));
 if(d.tenantId){s.tenantId=d.tenantId;localStorage.setItem('tenantId',d.tenantId);}
+else if(s.tenantId==='00000000-0000-0000-0000-000000000000'){s.tenantId=null;localStorage.removeItem('tenantId');}
 }catch{}
 }
 async function loadDeploymentInfo(){
