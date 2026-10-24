@@ -178,6 +178,11 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             var incidentDb = incidentScope.ServiceProvider.GetRequiredService<AppDbContext>();
             var incidentTenantContext = incidentScope.ServiceProvider.GetRequiredService<ITenantContext>();
 
+            // Ambient tenant propagates to every child scope created during
+            // processing (history, RCA engine, playbooks) so their RLS-scoped
+            // connections see the same tenant.
+            var previousAmbient = AmbientTenantContext.CurrentTenantId;
+            AmbientTenantContext.CurrentTenantId = incident.TenantId;
             try
             {
                 // Set tenant context for this incident
@@ -192,6 +197,10 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing incident {IncidentId}", incident.Id);
+            }
+            finally
+            {
+                AmbientTenantContext.CurrentTenantId = previousAmbient;
             }
         }
     }

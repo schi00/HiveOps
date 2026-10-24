@@ -8,6 +8,17 @@ public sealed class TenantContext : ITenantContext
     private Guid _tenantId;
     private bool _isResolved;
 
+    public TenantContext()
+    {
+        // Scopes created inside a worker unit of work inherit the ambient tenant
+        // so Postgres RLS sees the right app.tenant_id on their connections.
+        if (AmbientTenantContext.CurrentTenantId is { } ambient && ambient != Guid.Empty)
+        {
+            _tenantId = ambient;
+            _isResolved = true;
+        }
+    }
+
     public Guid TenantId
     {
         get
@@ -32,9 +43,16 @@ public sealed class TenantContext : ITenantContext
         lock (_lock)
         {
             if (_isResolved)
+            {
+                // Idempotent when the ambient/caller tenant matches; still throws
+                // on a genuine cross-tenant switch to prevent leakage.
+                if (_tenantId == tenantId)
+                    return;
+
                 throw new InvalidOperationException(
                     $"Tenant context is already resolved to TenantId={_tenantId}. " +
                     "Resetting the tenant within the same scope is not allowed to prevent cross-tenant leakage.");
+            }
 
             _tenantId = tenantId;
             _isResolved = true;
