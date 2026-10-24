@@ -58,6 +58,13 @@ services:
       # agent LLM paths (planner, root-cause, policy interpreter) actually run.
       SemanticKernel__Profiles__Production__Enabled: "${SK_PROD_PROFILE_ENABLED:-true}"
       SemanticKernel__Profiles__Production__ModelId: "${SK_PROD_MODEL_ID:-meta-llama/llama-3.3-70b-instruct:free}"
+      # Chat provider failover chain — the deployed key is a Groq key, so route
+      # through Groq's OpenAI-compatible endpoint instead of OpenRouter.
+      SemanticKernel__Providers__0__Enabled: "${SK_GROQ_ENABLED:-true}"
+      SemanticKernel__Providers__0__Name: "groq"
+      SemanticKernel__Providers__0__Endpoint: "https://api.groq.com/openai/v1"
+      SemanticKernel__Providers__0__ModelId: "${SK_GROQ_MODEL_ID:-openai/gpt-oss-120b}"
+      SemanticKernel__Providers__0__ApiKey: "${GROQ_API_KEY:-}"
     volumes:
       - hiveops_dataprotection:/app/data/dataprotection
       - hiveops_gitwork:/tmp/hiveops-git-work
