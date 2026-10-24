@@ -865,8 +865,8 @@ public sealed class SupportDashboardController : ControllerBase
             query = query.Where(a => a.TenantId == effectiveTenantId.Value);
         }
         
-        query = query.Where(a => a.IsPublished);
-
+        // Drafts are shown too: the dashboard badges them and review/publish
+        // happens here. Agent-facing KB search filters IsPublished separately.
         if (!string.IsNullOrWhiteSpace(q))
         {
             var term = q.ToLowerInvariant();
