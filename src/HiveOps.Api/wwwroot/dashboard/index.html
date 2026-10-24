@@ -1053,7 +1053,7 @@ html.light .by-hive-badge {
     <!-- KB View -->
     <div id="v-kb" class="view-section space-y-6">
       <div class="flex flex-wrap justify-between items-center gap-4">
-        <h2 class="text-2xl font-bold">Knowledge Base</h2>
+        <h2 class="text-2xl font-bold">Base de conocimiento</h2>
         <div class="flex gap-3">
           <div class="relative">
             <input type="text" id="kq" placeholder="Buscar artículos..." class="input-field w-64 px-4 py-2.5 rounded-xl text-sm pl-10" onkeyup="if(event.key==='Enter')sk()" aria-label="Buscar artículos"/>
@@ -1151,7 +1151,7 @@ html.light .by-hive-badge {
 
           <div class="flex justify-end gap-3 pt-2">
             <button type="button" onclick="togglePlaybookForm(false)" class="btn-secondary px-5 py-2 rounded-xl text-sm">Cancelar</button>
-            <button type="submit" class="btn-primary px-6 py-2 rounded-xl text-sm">Guardar Playbook</button>
+            <button type="submit" class="btn-primary px-6 py-2 rounded-xl text-sm">Guardar acción</button>
           </div>
         </form>
       </div>
@@ -1274,7 +1274,7 @@ html.light .by-hive-badge {
               <button type="button" id="ctx-export-btn" onclick="ctxExport()" class="btn-secondary px-4 py-2 rounded-xl text-sm">Exportar contexto (.md)</button>
             </div>
           </div>
-          <p class="text-xs mb-4" style="color: var(--text-secondary)">El agente recuerda qué fixes funcionaron y cuáles fallaron.</p>
+          <p class="text-xs mb-4" style="color: var(--text-secondary)">El agente recuerda qué soluciones funcionaron y cuáles fallaron.</p>
           <div id="ctx-memory-list" class="space-y-2"></div>
           <details class="mt-5 rounded-xl border p-4" style="background:var(--bg-tertiary);border-color:var(--border-color)">
             <summary class="cursor-pointer text-sm font-semibold" style="color:var(--text-primary)">Lo que el agente ve (PromptDigest)</summary>
@@ -2148,7 +2148,7 @@ initTheme();
         card.id = 'usage-card';
         card.className = 'hive-card p-5';
         card.innerHTML = '<div class="flex items-center justify-between mb-2">\
-          <h3 class="font-semibold text-lg">Deploys exitosos (30 días)</h3>\
+          <h3 class="font-semibold text-lg">Despliegues exitosos (30 días)</h3>\
           <button id="usage-refresh" class="btn-secondary px-3 py-1.5 rounded-lg text-xs">Refrescar</button>\
         </div>\
         <div class="text-sm mb-2" id="usage-total" style="color:var(--text-secondary)">Cargando...</div>\
