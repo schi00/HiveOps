@@ -624,7 +624,7 @@ diagBlockedTables=Array.isArray(dg.blockedTables)?[...dg.blockedTables]:[];
 renderDiagBlockedChips();
 el('cfg-diag-sensitive').checked=!!dg.allowSensitiveTables;
 renderPolicies(cfg.policies||[]);
-await Promise.allSettled([loadAdminSettings(),loadDeployGit(cfg),loadChatOpsWebhookConfig()]);
+await Promise.allSettled([loadAdminSettings(),loadDeployGit(cfg),loadTargetDatabase(),loadChatOpsWebhookConfig()]);
 }catch(e){toast(e.message,'error');}
 }
 function toggleAdvancedConfig(){
@@ -782,6 +782,44 @@ const res=await api('POST','/tenants/'+s.tenantId+'/config/deploy-git/test');
 if(res&&res.ok===false)toast(res.message||'La conexión con el repositorio falló','error');
 else toast((res&&res.message)||'Conexión con el repositorio verificada','success');
 }catch(e){toast(e.message||'No se pudo probar la conexión','error');}
+}
+// ---- Base de datos del negocio ----
+async function loadTargetDatabase(){
+if(!s.tenantId)return;
+const st=document.getElementById('cfg-db-status');
+if(!st)return;
+try{
+const d=await api('GET','/tenants/'+s.tenantId+'/config/target-database');
+if(d&&d.configured){
+const parts=[d.host,d.database?('base "'+d.database+'"'):null,d.username?('usuario '+d.username):null].filter(Boolean).join(' · ');
+st.innerHTML='<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald-500/30 text-emerald-300"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Configurada — '+esc(parts||'detalles no disponibles')+'</span>';
+}else{
+st.innerHTML='<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber-500/30 text-amber-300"><span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>Sin configurar — el asistente solo ve la base de la plataforma</span>';
+}
+}catch(e){st.innerHTML='';}
+}
+async function saveTargetDatabase(){
+if(!s.tenantId)return;
+const inp=document.getElementById('cfg-db-conn');
+const cs=(inp&&inp.value||'').trim();
+if(!cs){toast('Ingresá la cadena de conexión','warning');return;}
+try{
+await api('PUT','/tenants/'+s.tenantId+'/config/target-database',{connectionString:cs});
+inp.value='';
+await loadTargetDatabase();
+toast('Base de datos configurada y verificada','success');
+}catch(e){toast(e.message||'No se pudo conectar a la base','error');}
+}
+async function clearTargetDatabase(){
+if(!s.tenantId)return;
+const ok=await askConfirm({title:'Quitar base de datos',detail:'El asistente dejará de diagnosticar y corregir sobre la base del negocio.',confirmLabel:'Quitar',danger:true});
+if(!ok)return;
+try{
+await api('PUT','/tenants/'+s.tenantId+'/config/target-database',{connectionString:''});
+const inp=document.getElementById('cfg-db-conn');if(inp)inp.value='';
+await loadTargetDatabase();
+toast('Base de datos desvinculada','success');
+}catch(e){toast(e.message,'error');}
 }
 // ---- Diagnósticos ----
 async function saveDiagnosticsSection(){
@@ -2212,6 +2250,9 @@ function renderCtxProfiles(){
       dbEl.innerHTML='<div class="text-xs py-6 text-center rounded-xl border border-dashed" style="border-color:var(--border-color);color:var(--text-secondary)">Sin perfil — escaneá tu esquema</div>';
     }else{
       let html='';
+      if(p.usesPlatformDatabase===true||p.usesPlatformDatabase==='true'){
+        html+='<div class="flex items-start gap-2 p-2.5 mb-3 rounded-lg border border-amber-500/30" style="background:rgba(245,158,11,0.08)"><span class="text-amber-400 flex-shrink-0 mt-0.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg></span><span class="text-[11px]" style="color:var(--text-secondary)">Este perfil corresponde a la base interna de la plataforma, no a tu base de datos. Configurá la <strong>Base de datos del negocio</strong> en Configuración y re-escaneá.</span></div>';
+      }
       if(tables.length){
         html+='<div class="text-[11px] uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Tablas críticas</div><div class="space-y-1.5 mb-4">'+tables.map(t=>{
           const name=(t&&typeof t==='object')?(t.name||t.table||t.tableName||''):String(t);

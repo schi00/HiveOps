@@ -1,7 +1,10 @@
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
+using Npgsql;
 using Microsoft.EntityFrameworkCore;
 using HiveOps.Api.Authentication;
 using HiveOps.Api.Services;
@@ -26,12 +29,22 @@ public sealed class TenantsController : ControllerBase
     private readonly AppDbContext _db;
     private readonly TenantContext _tenantContext;
     private readonly ITenantConfigService _configService;
+    private readonly IDynamicConnectionStringResolver _connResolver;
+    private readonly IDataProtector _connProtector;
 
-    public TenantsController(AppDbContext db, TenantContext tenantContext, ITenantConfigService configService)
+    public TenantsController(
+        AppDbContext db,
+        TenantContext tenantContext,
+        ITenantConfigService configService,
+        IDynamicConnectionStringResolver connResolver,
+        IDataProtectionProvider dataProtectionProvider)
     {
         _db = db;
         _tenantContext = tenantContext;
         _configService = configService;
+        _connResolver = connResolver;
+        _connProtector = dataProtectionProvider.CreateProtector(
+            DynamicConnectionStringResolver.TenantConnectionStringDataProtectionPurpose);
     }
 
     private bool IsAdminOrSuperAdmin => User.IsInRole(AppRoles.SuperAdmin) || User.IsInRole(AppRoles.Admin);
@@ -168,6 +181,86 @@ public sealed class TenantsController : ControllerBase
 
         var (ok, message) = await tenantGit.TestRepositoryAccessAsync(id, ct);
         return ok ? Ok(new { ok, message }) : BadRequest(new { ok, message });
+    }
+
+    // ── Target business database (the tenant's own DB the agent diagnoses/fixes) ──
+
+    /// <summary>
+    /// Returns masked details of the tenant's dedicated database (host/database/user).
+    /// The password and the full connection string are never returned.
+    /// </summary>
+    [HttpGet("{id:guid}/config/target-database")]
+    public async Task<IActionResult> GetTargetDatabase(Guid id, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        if (!_tenantContext.IsResolved) _tenantContext.SetTenant(id);
+
+        var encrypted = await _db.Tenants.AsNoTracking()
+            .Where(t => t.Id == id)
+            .Select(t => t.EncryptedConnectionString)
+            .FirstOrDefaultAsync(ct);
+        if (encrypted is null) return NotFound();
+
+        if (string.IsNullOrWhiteSpace(encrypted))
+            return Ok(new TargetDatabaseStatusDto(false, null, null, null));
+
+        try
+        {
+            var plain = Encoding.UTF8.GetString(_connProtector.Unprotect(Convert.FromBase64String(encrypted.Trim())));
+            var b = new NpgsqlConnectionStringBuilder(plain);
+            return Ok(new TargetDatabaseStatusDto(true, b.Host, b.Database, b.Username));
+        }
+        catch
+        {
+            return Ok(new TargetDatabaseStatusDto(true, null, null, null));
+        }
+    }
+
+    /// <summary>
+    /// Sets (or clears with an empty body) the tenant's dedicated database.
+    /// The connection string is probed before saving and stored encrypted; it is
+    /// never returned by any endpoint.
+    /// </summary>
+    [HttpPut("{id:guid}/config/target-database")]
+    public async Task<IActionResult> PutTargetDatabase(Guid id, [FromBody] TargetDatabaseRequest? request, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        if (!_tenantContext.IsResolved) _tenantContext.SetTenant(id);
+
+        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (tenant is null) return NotFound();
+
+        var cs = request?.ConnectionString?.Trim();
+        if (string.IsNullOrWhiteSpace(cs))
+        {
+            if (tenant.EncryptedConnectionString is null)
+                return Ok(new { ok = true, configured = false });
+            tenant.EncryptedConnectionString = null;
+            await _db.SaveChangesAsync(ct);
+            _connResolver.Invalidate(id);
+            await _configService.InvalidateAsync(id, ct);
+            return Ok(new { ok = true, configured = false });
+        }
+
+        try
+        {
+            var builder = new NpgsqlConnectionStringBuilder(cs) { Timeout = 5 };
+            await using var probe = new NpgsqlConnection(builder.ConnectionString);
+            await probe.OpenAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { errors = new[] { "No se pudo conectar a la base de datos. Revisá host, puerto, usuario y que sea accesible desde HiveOps." }, detail = ex.Message });
+        }
+
+        tenant.EncryptedConnectionString = Convert.ToBase64String(
+            _connProtector.Protect(Encoding.UTF8.GetBytes(cs)));
+        await _db.SaveChangesAsync(ct);
+        _connResolver.Invalidate(id);
+        await _configService.InvalidateAsync(id, ct);
+
+        var parsed = new NpgsqlConnectionStringBuilder(cs);
+        return Ok(new TargetDatabaseStatusDto(true, parsed.Host, parsed.Database, parsed.Username));
     }
 
     [HttpPatch("{id:guid}/config/policies")]
@@ -675,3 +768,6 @@ public sealed class AdminHandoffDto
     public int? MaxRetriesBeforeHandoff { get; set; }
     public int? SlaMinutes { get; set; }
 }
+
+public sealed record TargetDatabaseStatusDto(bool Configured, string? Host, string? Database, string? Username);
+public sealed record TargetDatabaseRequest(string? ConnectionString);

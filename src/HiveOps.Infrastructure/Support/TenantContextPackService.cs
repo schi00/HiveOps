@@ -205,6 +205,14 @@ public sealed class TenantContextPackService : ITenantContextPackService
     {
         var pack = await GetOrCreateAsync(tenantId, ct);
 
+        // Without a dedicated target database the resolver falls back to the
+        // platform's own schema — the profile must say so instead of silently
+        // presenting platform tables as the tenant's business data.
+        var hasDedicatedDb = await _db.Tenants.AsNoTracking()
+            .Where(t => t.Id == tenantId)
+            .Select(t => t.EncryptedConnectionString != null && t.EncryptedConnectionString != "")
+            .FirstOrDefaultAsync(ct);
+
         var schemaDdl = string.Empty;
         IReadOnlyList<string> candidateTables = [];
         try
@@ -274,6 +282,7 @@ public sealed class TenantContextPackService : ITenantContextPackService
         if (existingNotes is { Count: > 0 })
             profile["notes"] = existingNotes.DeepClone();
 
+        profile["usesPlatformDatabase"] = !hasDedicatedDb;
         profile["refreshedAtUtc"] = DateTimeOffset.UtcNow.ToString("O");
         pack.DatabaseProfileJson = profile.ToJsonString();
 

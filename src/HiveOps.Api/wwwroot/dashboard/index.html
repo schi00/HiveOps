@@ -1552,6 +1552,28 @@ html.light .by-hive-badge {
         </div>
       </div>
 
+      <!-- Card G0: Base de datos del negocio -->
+      <div class="hive-card p-6">
+        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+          <div>
+            <h3 class="font-semibold text-lg">Base de datos del negocio</h3>
+            <p class="text-xs mt-0.5" style="color:var(--text-tertiary)">La base de datos de tu sistema (donde están tus clientes, facturas, productos…). El asistente la usa para diagnosticar y corregir incidentes. Sin esto, no puede ver tu información.</p>
+          </div>
+          <button type="button" onclick="saveTargetDatabase()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar y probar</button>
+        </div>
+        <div class="space-y-4">
+          <div id="cfg-db-status" class="text-xs"></div>
+          <div>
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Cadena de conexión (PostgreSQL)</label>
+            <input id="cfg-db-conn" type="password" autocomplete="off" class="input-field w-full px-3 py-2 rounded-xl text-sm font-mono" placeholder="Host=servidor;Port=5432;Database=tu_base;Username=usuario;Password=••••"/>
+            <p class="text-xs mt-1" style="color:var(--text-tertiary)">Se guarda cifrada y nunca se vuelve a mostrar. Al guardar se prueba la conexión; si falla, no se guarda.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <button type="button" onclick="clearTargetDatabase()" class="btn-secondary px-3.5 py-2 rounded-xl text-xs" style="color:#f87171">Quitar base configurada</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Card G: Repositorio Git y deploys -->
       <div class="hive-card p-6">
         <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
