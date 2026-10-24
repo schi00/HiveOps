@@ -146,6 +146,7 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             .ToListAsync(cancellationToken);
 
         var incidents = new List<Incident>();
+        var parkedWithoutDraft = new List<(Guid IncidentId, Guid TenantId)>();
         foreach (var tenantId in tenantIds)
         {
             using var pollScope = _scopeFactory.CreateScope();
@@ -155,15 +156,45 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
 
             var pollDb = pollScope.ServiceProvider.GetRequiredService<AppDbContext>();
             var remaining = _options.MaxConcurrentIncidents - incidents.Count;
-            if (remaining <= 0)
-                break;
+            if (remaining > 0)
+            {
+                var tenantIncidents = await pollDb.Incidents
+                    .Where(i => i.Status == IncidentStatus.Open && i.AssignedTo == "bot")
+                    .OrderBy(i => i.CreatedAt)
+                    .Take(remaining)
+                    .ToListAsync(cancellationToken);
+                incidents.AddRange(tenantIncidents);
+            }
 
-            var tenantIncidents = await pollDb.Incidents
-                .Where(i => i.Status == IncidentStatus.Open && i.AssignedTo == "bot")
+            // KB pre-save: incidents parked at AwaitingApproval already carry a
+            // diagnosis + proposal — capture them as draft articles now so the
+            // knowledge survives even if the incident never reaches Resolved.
+            var parked = await pollDb.Incidents
+                .Where(i => i.Status == IncidentStatus.AwaitingApproval
+                    && !pollDb.KbArticles.Any(k => k.SourceIncidentId == i.Id))
                 .OrderBy(i => i.CreatedAt)
-                .Take(remaining)
+                .Select(i => i.Id)
+                .Take(5)
                 .ToListAsync(cancellationToken);
-            incidents.AddRange(tenantIncidents);
+            parkedWithoutDraft.AddRange(parked.Select(id => (id, tenantId)));
+        }
+
+        foreach (var (parkedId, parkedTenantId) in parkedWithoutDraft)
+        {
+            var previousAmbient = AmbientTenantContext.CurrentTenantId;
+            AmbientTenantContext.CurrentTenantId = parkedTenantId;
+            try
+            {
+                await _kbGenerator.GenerateDraftFromIncidentAsync(parkedId, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "KB draft generation failed for incident {IncidentId}", parkedId);
+            }
+            finally
+            {
+                AmbientTenantContext.CurrentTenantId = previousAmbient;
+            }
         }
 
         if (incidents.Count == 0)
