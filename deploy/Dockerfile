@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends git openssh-cli
     && rm -rf /var/lib/apt/lists/*
 # aspnet:9.0 base image already ships the non-root `app` user (uid 1654)
 COPY --from=build /app/publish .
-RUN mkdir -p /app/data/dataprotection /tmp/hiveops-git-work && chown -R app:app /app/data /tmp/hiveops-git-work
+RUN mkdir -p /app/data/dataprotection /tmp/hiveops-git-work /tmp/hiveops-git-workspaces \
+    && chown -R app:app /app/data /tmp/hiveops-git-work /tmp/hiveops-git-workspaces
 USER app
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
