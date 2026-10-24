@@ -5,5 +5,6 @@ public enum ApiProvider
     MercadoLibre,
     Shopify,
     TiendaNube,
-    Custom
+    Custom,
+    MercadoPago
 }

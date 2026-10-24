@@ -13,6 +13,7 @@ public sealed class TenantAdminSettings
     public WhatsAppChannelSettings WhatsApp { get; set; } = new();
     public OutboundWebhookSettings OutboundWebhook { get; set; } = new();
     public List<CustomMetricDefinition> CustomMetrics { get; set; } = [];
+    public BillingSettings Billing { get; set; } = new();
 
     /// <summary>
     /// DataProtection-encrypted git access token for the tenant's deploy repository.
@@ -22,6 +23,20 @@ public sealed class TenantAdminSettings
     public string? GitAccessTokenProtected { get; set; }
 
     public TenantConfiguration RuntimeConfiguration { get; set; } = TenantConfiguration.CreateDefault();
+}
+
+/// <summary>Per-tenant billing state mirrored from the payment provider webhooks.</summary>
+public sealed class BillingSettings
+{
+    /// <summary>"mercadopago" | "stripe" | null.</summary>
+    public string? Provider { get; set; }
+    public string? LastPaymentId { get; set; }
+    /// <summary>Plan selected at checkout, applied when the payment is approved.</summary>
+    public string? PendingPlanKey { get; set; }
+    public string? PendingBillingInterval { get; set; }
+    public string? PayerEmail { get; set; }
+    public string? LastStatusDetail { get; set; }
+    public DateTimeOffset? LastWebhookAtUtc { get; set; }
 }
 
 public sealed class CustomMetricDefinition

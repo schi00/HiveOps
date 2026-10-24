@@ -65,6 +65,12 @@ services:
       SemanticKernel__Providers__0__Endpoint: "https://api.groq.com/openai/v1"
       SemanticKernel__Providers__0__ModelId: "${SK_GROQ_MODEL_ID:-openai/gpt-oss-120b}"
       SemanticKernel__Providers__0__ApiKey: "${GROQ_API_KEY:-}"
+      # Mercado Pago — shared HiveCorp account; webhook routing is per-preference.
+      MercadoPago__AccessToken: "${MERCADOPAGO_ACCESS_TOKEN:-}"
+      MercadoPago__NotificationBaseUrl: "${MP_NOTIFICATION_BASE:-https://api.ops.hivecorp.com.ar}"
+      MercadoPago__BackUrl: "${MP_BACK_URL:-https://ops.hivecorp.com.ar/dashboard/}"
+      Billing__UsdToArsRate: "${USD_TO_ARS_RATE:-1500}"
+      Billing__ChargeCurrency: "${CHARGE_CURRENCY:-ARS}"
     volumes:
       - hiveops_dataprotection:/app/data/dataprotection
       - hiveops_gitwork:/tmp/hiveops-git-work

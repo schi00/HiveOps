@@ -154,6 +154,8 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IStripeService, StripeService>();
         else
             services.AddScoped<IStripeService, DisabledStripeService>();
+        services.Configure<MercadoPagoOptions>(configuration.GetSection(MercadoPagoOptions.SectionName));
+        services.AddHttpClient<IMercadoPagoService, MercadoPagoService>();
 
         // ── API Drift Detection ───────────────────────────────────────────────
         services.AddSingleton<JsonSchemaHasher>();

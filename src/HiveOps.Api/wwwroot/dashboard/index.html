@@ -2038,6 +2038,61 @@ initTheme();
       });
     }catch(e){ console.warn('portal enhancer failed', e); }
   }
+  // Mercado Pago checkout: plan + interval + "Generar link de pago"
+  function enhanceMp(){
+    try{
+      var card = document.getElementById('billing-card');
+      if(!card || card.querySelector('#bill-mp')) return;
+      var ensureBtn = card.querySelector('#bill-ensure');
+      if(!ensureBtn || !ensureBtn.parentElement) return;
+      var host = ensureBtn.parentElement;
+
+      var planSel = document.createElement('select');
+      planSel.id = 'bill-mp-plan';
+      planSel.className = 'input-field px-3 py-2 rounded-xl text-xs';
+      planSel.innerHTML = '<option value="starter">Starter</option><option value="pro">Pro</option><option value="enterprise">Enterprise</option>';
+      var intSel = document.createElement('select');
+      intSel.id = 'bill-mp-interval';
+      intSel.className = 'input-field px-3 py-2 rounded-xl text-xs';
+      intSel.innerHTML = '<option value="monthly">Mensual</option><option value="annual">Anual</option>';
+      var mpBtn = document.createElement('button');
+      mpBtn.id = 'bill-mp';
+      mpBtn.className = 'px-5 py-2.5 rounded-xl text-sm';
+      mpBtn.style.background = '#009EE3';
+      mpBtn.style.color = '#fff';
+      mpBtn.style.border = '1px solid var(--border-color)';
+      mpBtn.textContent = 'Link de pago Mercado Pago';
+      mpBtn.title = 'Genera un link de pago de Mercado Pago para el plan elegido';
+      host.appendChild(planSel);
+      host.appendChild(intSel);
+      host.appendChild(mpBtn);
+
+      mpBtn.addEventListener('click', async function(){
+        try{
+          var selEl = document.getElementById('bill-tenant');
+          var tid = selEl && selEl.value;
+          if(!tid){ if(window.toast) toast('Selecciona una cuenta','error'); return; }
+          var original = mpBtn.textContent;
+          mpBtn.textContent = 'Generando…';
+          mpBtn.disabled = true;
+          var token = localStorage.getItem('token')||'';
+          var res = await fetch('/api/billing/mercadopago/checkout', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
+            body: JSON.stringify({ tenantId: tid, planKey: planSel.value, interval: intSel.value })
+          });
+          if(!res.ok){ if(window.toast) toast('No se pudo crear el link de pago','error'); return; }
+          var data = await res.json();
+          if(data && data.initPoint){
+            window.open(data.initPoint, '_blank', 'noopener');
+            try{ await navigator.clipboard.writeText(data.initPoint); if(window.toast) toast('Link de pago copiado al portapapeles','success'); }
+            catch(e){ if(window.toast) toast('Link de pago generado','success'); }
+          } else if(window.toast) toast('Mercado Pago no devolvió un link','error');
+        }catch(e){ if(window.toast) toast((e&&e.message)||'Error al generar el link','error'); }
+        finally{ mpBtn.disabled=false; mpBtn.textContent='Link de pago Mercado Pago'; }
+      });
+    }catch(e){ console.warn('mp enhancer failed', e); }
+  }
   // Run once after load and when user enters Admin view.
   window.addEventListener('load', function(){ setTimeout(enhance, 800); });
   var originalNavigate = window.n;
@@ -2045,7 +2100,7 @@ initTheme();
     window.n = function(view){
       var result = originalNavigate.apply(this, arguments);
       if (view === 'admin') {
-        setTimeout(enhance, 150);
+        setTimeout(function(){ enhance(); enhanceMp(); }, 150);
       }
       return result;
     };

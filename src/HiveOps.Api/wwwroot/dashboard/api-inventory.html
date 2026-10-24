@@ -95,6 +95,7 @@ h1, h2, h3, h4 { font-family: 'Sora', 'Inter', system-ui, sans-serif; letter-spa
       <option value="MercadoLibre">MercadoLibre</option>
       <option value="Shopify">Shopify</option>
       <option value="TiendaNube">TiendaNube</option>
+      <option value="MercadoPago">MercadoPago</option>
       <option value="Custom">Custom</option>
     </select>
     <select id="filter-status" class="input-field px-4 py-2 rounded-xl text-sm" onchange="loadApis()">
@@ -167,6 +168,7 @@ function getProviderIcon(provider) {
     'MercadoLibre': '🛒',
     'Shopify': '🛍️',
     'TiendaNube': '🌐',
+    'MercadoPago': '💳',
     'Custom': '🔌'
   };
   return icons[provider] || '🔌';
@@ -177,6 +179,7 @@ function getProviderColor(provider) {
     'MercadoLibre': 'bg-yellow-500/20 text-yellow-500',
     'Shopify': 'bg-green-500/20 text-green-500',
     'TiendaNube': 'bg-blue-500/20 text-blue-500',
+    'MercadoPago': 'bg-sky-400/20 text-sky-400',
     'Custom': 'bg-gray-500/20 text-gray-500'
   };
   return colors[provider] || 'bg-gray-500/20 text-gray-500';
