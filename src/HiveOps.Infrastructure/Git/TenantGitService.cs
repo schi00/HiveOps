@@ -281,7 +281,9 @@ public sealed class TenantGitService : IGitService
 
     private async Task<string> ResolveRepositoryPathAsync(Guid tenantId, CancellationToken ct)
     {
-        if (_deploymentOptions.Value.Mode != HiveOpsDeploymentMode.SelfHosted || tenantId == Guid.Empty)
+        // A tenant-configured repository always wins, in every deployment mode:
+        // without it, SaaS tenants silently shared the platform fallback repo.
+        if (tenantId == Guid.Empty)
         {
             if (string.IsNullOrWhiteSpace(_fallbackRepoPath))
                 throw new InvalidOperationException("Configuration 'Git:RepoPath' is required for this deployment mode.");
@@ -297,14 +299,14 @@ public sealed class TenantGitService : IGitService
         {
             if (string.IsNullOrWhiteSpace(_fallbackRepoPath))
                 throw new InvalidOperationException(
-                    "Configure Git:RepoPath or set DeployGit.GitRepositoryUrl for this tenant in self-hosted mode.");
+                    "Configuration 'Git:RepoPath' is required for tenants without a configured GitRepositoryUrl.");
             return _fallbackRepoPath;
         }
 
         var workspacesRoot = _configuration["Git:WorkspacesRoot"];
         if (string.IsNullOrWhiteSpace(workspacesRoot))
             throw new InvalidOperationException(
-                "Configuration 'Git:WorkspacesRoot' is required when using per-tenant GitRepositoryUrl in self-hosted mode.");
+                "Configuration 'Git:WorkspacesRoot' is required when using per-tenant GitRepositoryUrl.");
 
         var branch = string.IsNullOrWhiteSpace(cfg.DeployGit.GitDefaultBranch)
             ? "main"
