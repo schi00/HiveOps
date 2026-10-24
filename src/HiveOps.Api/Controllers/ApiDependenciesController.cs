@@ -31,13 +31,16 @@ public sealed class ApiDependenciesController : ControllerBase
     private Guid? GetEffectiveTenantId()
     {
         if (_tenantContext.IsResolved) return _tenantContext.TenantId;
-        
-        if (IsPrivileged && Request.Headers.TryGetValue("X-Tenant-Id", out var headerValue) && 
+
+        if (IsPrivileged && Request.Headers.TryGetValue("X-Tenant-Id", out var headerValue) &&
             Guid.TryParse(headerValue.ToString(), out var tenantId))
         {
+            // Privileged users bypass tenant resolution in middleware; resolve here so
+            // RLS (app.tenant_id) lets ApiDependencies reads/writes through.
+            _tenantContext.SetTenant(tenantId);
             return tenantId;
         }
-        
+
         return null;
     }
 
