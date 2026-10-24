@@ -419,6 +419,9 @@ public sealed class TenantsController : ControllerBase
     public async Task<ActionResult<TenantAdminSettingsDto>> GetAdminSettings(Guid id, CancellationToken ct)
     {
         if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        // Privileged users bypass tenant resolution in middleware; resolve explicitly
+        // so RLS (app.tenant_id) sees this tenant for BusinessConfigs reads/writes.
+        if (!_tenantContext.IsResolved) _tenantContext.SetTenant(id);
         var tenantExists = await _db.Tenants.AsNoTracking().AnyAsync(t => t.Id == id, ct);
         if (!tenantExists) return NotFound();
 
@@ -436,6 +439,7 @@ public sealed class TenantsController : ControllerBase
     {
         if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
         if (body is null) return BadRequest(new { errors = new[] { "Payload requerido." } });
+        if (!_tenantContext.IsResolved) _tenantContext.SetTenant(id);
 
         var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == id, ct);
         if (tenant is null) return NotFound();
