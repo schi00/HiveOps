@@ -75,15 +75,15 @@ h1, h2, h3, h4 { font-family: 'Sora', 'Inter', system-ui, sans-serif; letter-spa
       <div class="text-2xl font-bold" id="stat-total">0</div>
     </div>
     <div class="hive-card p-4 border-green-500/30">
-      <div class="text-sm opacity-70 mb-1">Healthy</div>
+      <div class="text-sm opacity-70 mb-1">Saludables</div>
       <div class="text-2xl font-bold text-green-500" id="stat-healthy">0</div>
     </div>
     <div class="hive-card p-4 border-yellow-500/30">
-      <div class="text-sm opacity-70 mb-1">Learning</div>
+      <div class="text-sm opacity-70 mb-1">Aprendiendo</div>
       <div class="text-2xl font-bold text-yellow-500" id="stat-learning">0</div>
     </div>
     <div class="hive-card p-4 border-red-500/30">
-      <div class="text-sm opacity-70 mb-1">Drift Detected</div>
+      <div class="text-sm opacity-70 mb-1">Con cambios</div>
       <div class="text-2xl font-bold text-red-500" id="stat-drift">0</div>
     </div>
   </div>
@@ -100,9 +100,9 @@ h1, h2, h3, h4 { font-family: 'Sora', 'Inter', system-ui, sans-serif; letter-spa
     </select>
     <select id="filter-status" class="input-field px-4 py-2 rounded-xl text-sm" onchange="loadApis()">
       <option value="">Todos los estados</option>
-      <option value="Healthy">Healthy</option>
-      <option value="Learning">Learning</option>
-      <option value="DriftDetected">Drift Detected</option>
+      <option value="Healthy">Saludable</option>
+      <option value="Learning">Aprendiendo</option>
+      <option value="DriftDetected">Con cambios</option>
       <option value="Error">Error</option>
     </select>
     <button onclick="loadApis()" class="input-field px-4 py-2 rounded-xl text-sm hover:border-amber-500">🔄 Actualizar</button>
@@ -144,8 +144,8 @@ h1, h2, h3, h4 { font-family: 'Sora', 'Inter', system-ui, sans-serif; letter-spa
         </div>
         <div>
           <label class="block text-sm mb-1 opacity-70">Schema Hash Esperado (opcional)</label>
-          <input id="form-hash" type="text" class="input-field w-full px-4 py-3 rounded-xl" placeholder="Dejar vacío para modo Learning">
-          <p class="text-xs mt-1 opacity-50">Si se deja vacío, la API se registrará en modo Learning</p>
+          <input id="form-hash" type="text" class="input-field w-full px-4 py-3 rounded-xl" placeholder="Dejar vacío para modo aprendizaje">
+          <p class="text-xs mt-1 opacity-50">Si se deja vacío, la API queda en modo aprendizaje hasta confirmar su estructura</p>
         </div>
       </div>
       <div class="flex gap-3 mt-6">
@@ -193,9 +193,9 @@ function getStatusBadge(status) {
     'Error': 'status-error'
   };
   const labels = {
-    'Healthy': 'Healthy',
-    'Learning': 'Learning',
-    'DriftDetected': 'Drift',
+    'Healthy': 'Saludable',
+    'Learning': 'Aprendiendo',
+    'DriftDetected': 'Con cambios',
     'Error': 'Error'
   };
   return `<span class="status-badge ${classes[status] || 'status-error'}">${labels[status] || status}</span>`;

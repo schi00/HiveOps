@@ -623,10 +623,10 @@ html.light .by-hive-badge {
     <nav class="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-1" aria-label="Navegación principal">
       <button onclick="n('dashboard')" id="n-dash" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Resumen</button>
       <button onclick="n('incidents')" id="n-inc" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Incidentes</button>
-      <button onclick="n('kb')" id="n-kb" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Knowledge Base</button>
-      <button onclick="n('playbooks')" id="n-pb" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Playbooks</button>
+      <button onclick="n('kb')" id="n-kb" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Base de conocimiento</button>
+      <button onclick="n('playbooks')" id="n-pb" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Acciones automáticas</button>
       <button onclick="n('ctx')" id="n-ctx" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Contexto</button>
-      <button onclick="window.location.href='/dashboard/api-inventory.html'" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">API Inventory</button>
+      <button onclick="window.location.href='/dashboard/api-inventory.html'" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">APIs conectadas</button>
       <button onclick="n('config')" id="n-cfg" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Configuración</button>
       <div class="my-2 border-t" style="border-color: var(--border-color)"></div>
       <button onclick="n('admin')" id="n-adm" class="nav-item w-full text-left px-4 py-2.5 rounded-xl text-sm font-semibold hidden" style="color: #fbbf24">Plataforma</button>
@@ -640,6 +640,7 @@ html.light .by-hive-badge {
           </select>
         </div>
         <div id="account-name" class="hidden px-3 py-2 rounded-xl text-sm border" style="border-color: var(--border-color); color: var(--text-primary)"></div>
+        <span id="scope-label" class="text-[10px] mt-1.5 block" style="color: var(--text-tertiary)"></span>
       </div>
       <span id="role-badge" class="self-start px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-widest border" style="border-color: var(--border-color); color: var(--text-tertiary)">…</span>
     </div>
@@ -771,8 +772,8 @@ html.light .by-hive-badge {
       <nav class="flex flex-col gap-1" aria-label="Navegación principal">
         <button type="button" onclick="mobileNav('dashboard')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Resumen</button>
         <button type="button" onclick="mobileNav('incidents')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Incidentes</button>
-        <button type="button" onclick="mobileNav('kb')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Knowledge Base</button>
-        <button type="button" onclick="mobileNav('playbooks')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Playbooks</button>
+        <button type="button" onclick="mobileNav('kb')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Base de conocimiento</button>
+        <button type="button" onclick="mobileNav('playbooks')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Acciones automáticas</button>
         <button type="button" onclick="mobileNav('ctx')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Contexto</button>
         <button type="button" onclick="mobileNav('config')" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-medium" style="color: var(--text-secondary)">Configuración</button>
         <button type="button" onclick="mobileNav('admin')" id="n-adm-mobile" class="nav-item text-left px-4 py-3 rounded-xl text-sm font-semibold hidden" style="color: #fbbf24">Plataforma</button>
@@ -874,10 +875,10 @@ html.light .by-hive-badge {
           <div>
             <div class="flex flex-wrap items-center justify-between gap-2 mb-5">
               <div>
-                <h3 class="font-semibold text-base" style="color: var(--text-primary)">ROI &amp; Autonomous Outcomes (Últimos 30 días)</h3>
-                <p class="text-xs mt-0.5" style="color: var(--text-tertiary)">Métricas verificadas del AI Support Engineer v1.2</p>
+                <h3 class="font-semibold text-base" style="color: var(--text-primary)">Resultados y ahorro (últimos 30 días)</h3>
+                <p class="text-xs mt-0.5" style="color: var(--text-tertiary)">Métricas verificadas del agente de soporte</p>
               </div>
-              <span id="roi-audit-badge" class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-medium">Audit Chain SHA-256: Intacta</span>
+              <span id="roi-audit-badge" class="text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 font-medium">Registro de auditoría: verificado</span>
             </div>
 
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
@@ -886,11 +887,11 @@ html.light .by-hive-badge {
                 <div id="roi-verified" class="text-2xl font-bold text-emerald-400">0</div>
               </div>
               <div class="p-3 rounded-xl border" style="background: var(--bg-tertiary); border-color: var(--border-color)">
-                <div class="text-xs mb-1" style="color: var(--text-secondary)">Simuladas en Modo Shadow</div>
+                <div class="text-xs mb-1" style="color: var(--text-secondary)">Simuladas en modo observador</div>
                 <div id="roi-shadow" class="text-2xl font-bold text-cyan-400">0</div>
               </div>
               <div class="p-3 rounded-xl border" style="background: var(--bg-tertiary); border-color: var(--border-color)">
-                <div class="text-xs mb-1" style="color: var(--text-secondary)">Horas de Ingeniería Ahorradas</div>
+                <div class="text-xs mb-1" style="color: var(--text-secondary)">Horas de trabajo ahorradas</div>
                 <div id="roi-hours" class="text-2xl font-bold" style="color: var(--text-primary)">0.0 h</div>
               </div>
               <div class="p-3 rounded-xl border" style="background: var(--bg-tertiary); border-color: var(--border-color)">
@@ -903,9 +904,9 @@ html.light .by-hive-badge {
           <div class="pt-4 border-t flex flex-wrap items-center justify-between gap-3" style="border-color: var(--border-color)">
             <span class="text-xs font-medium" style="color: var(--text-secondary)">Modo Operativo:</span>
             <div class="inline-flex rounded-xl p-1 border gap-1" style="background: var(--bg-tertiary); border-color: var(--border-color)">
-              <button type="button" id="mode-btn-Shadow" onclick="setOperatingMode('Shadow')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all">Shadow (POC 14d)</button>
-              <button type="button" id="mode-btn-Assisted" onclick="setOperatingMode('Assisted')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all">Assisted</button>
-              <button type="button" id="mode-btn-Autonomous" onclick="setOperatingMode('Autonomous')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all">Autonomous</button>
+              <button type="button" id="mode-btn-Shadow" onclick="setOperatingMode('Shadow')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all">Observador</button>
+              <button type="button" id="mode-btn-Assisted" onclick="setOperatingMode('Assisted')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all">Asistido</button>
+              <button type="button" id="mode-btn-Autonomous" onclick="setOperatingMode('Autonomous')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all">Autónomo</button>
             </div>
           </div>
         </div>
@@ -1019,7 +1020,7 @@ html.light .by-hive-badge {
         </div>
       </div>
       <div class="hive-card p-6">
-        <h3 class="font-semibold text-lg mb-4">Cola de Merge</h3>
+        <h3 class="font-semibold text-lg mb-4">Incidentes duplicados por unir</h3>
         <div id="l-mer" class="space-y-3">
           <div class="text-center py-8" style="color: var(--text-secondary)">Cargando...</div>
         </div>
@@ -1074,8 +1075,8 @@ html.light .by-hive-badge {
     <div id="v-playbooks" class="view-section hidden space-y-6">
       <div class="flex flex-wrap justify-between items-center gap-4">
         <div>
-          <h2 class="text-2xl font-bold">Playbooks L1/L2</h2>
-          <p class="text-sm mt-1" style="color: var(--text-secondary)">Acciones determinísticas de resolución y auto-remediación con guardia de filas y verificación SQL.</p>
+          <h2 class="text-2xl font-bold">Acciones automáticas</h2>
+          <p class="text-sm mt-1" style="color: var(--text-secondary)">Acciones predefinidas de resolución con límite de filas afectadas y verificación posterior.</p>
         </div>
         <div class="flex gap-3">
           <button type="button" onclick="loadPlaybooks()" class="btn-secondary px-4 py-2.5 rounded-xl text-sm">Actualizar</button>
@@ -1087,7 +1088,7 @@ html.light .by-hive-badge {
       <div id="pb-form-card" class="hive-card p-6 hidden">
         <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
           <div>
-            <h3 class="font-semibold text-lg">Crear Playbook L1/L2</h3>
+            <h3 class="font-semibold text-lg">Crear acción automática</h3>
             <p class="text-xs mt-0.5" style="color: var(--text-tertiary)">Escribí <code class="text-cyan-400">@Parametro</code> en tu consulta SQL y los parámetros se detectarán automáticamente.</p>
           </div>
           <div class="flex items-center gap-2">
@@ -1108,9 +1109,9 @@ html.light .by-hive-badge {
             <div>
               <label class="text-xs block mb-1" style="color: var(--text-secondary)">Tipo de Acción</label>
               <select id="pb-type" class="input-field w-full px-3 py-2 rounded-xl text-sm">
-                <option value="SqlTemplate">SqlTemplate (SQL parametrizado)</option>
-                <option value="HttpWebhook">HttpWebhook (POST externo)</option>
-                <option value="StoredProcedure">StoredProcedure</option>
+                <option value="SqlTemplate">Consulta SQL parametrizada</option>
+                <option value="HttpWebhook">Llamada a un servicio externo (HTTP)</option>
+                <option value="StoredProcedure">Procedimiento almacenado</option>
               </select>
             </div>
           </div>
@@ -1122,22 +1123,22 @@ html.light .by-hive-badge {
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Action Payload Template (SQL / Webhook / SP)</label>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Acción a ejecutar (consulta SQL o llamada HTTP)</label>
               <textarea id="pb-payload" rows="3" oninput="autoDetectPlaybookParams()" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder='UPDATE "Orders" SET "Status" = &apos;Ready&apos; WHERE "Id" = @OrderId AND "Status" = &apos;Locked&apos;;' required></textarea>
             </div>
             <div>
-              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Verification SQL Query (0 filas anómalas = verificado)</label>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Consulta de verificación (0 filas anómalas = correcto)</label>
               <textarea id="pb-verify" rows="3" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder='SELECT "Id" FROM "Orders" WHERE "Id" = @OrderId AND "Status" = &apos;Locked&apos;;'></textarea>
             </div>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
             <div>
-              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Parámetros requeridos (separados por coma o JSON)</label>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Parámetros requeridos (separados por coma)</label>
               <input id="pb-params" type="text" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder="OrderId" value='["OrderId"]'/>
             </div>
             <div>
-              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Máx. filas afectadas (Guardrail)</label>
+              <label class="text-xs block mb-1" style="color: var(--text-secondary)">Máx. filas afectadas (límite de seguridad)</label>
               <input id="pb-maxrows" type="number" min="1" max="1000" value="5" class="input-field w-full px-3 py-2 rounded-xl text-sm"/>
             </div>
             <div class="pt-4">
@@ -1159,15 +1160,15 @@ html.light .by-hive-badge {
       <div id="pb-dryrun-card" class="hive-card p-6 hidden border border-cyan-500/40">
         <div class="flex justify-between items-center mb-3">
           <div>
-            <h3 class="font-semibold text-base text-cyan-400" id="pb-dryrun-title">Probar Playbook (Dry-Run en transacción revertida)</h3>
-            <p class="text-xs" style="color: var(--text-tertiary)">Ejecuta la validación de seguridad y el SQL dentro de un ROLLBACK automático sin modificar datos reales.</p>
+            <h3 class="font-semibold text-base text-cyan-400" id="pb-dryrun-title">Probar playbook (simulación con reversa automática)</h3>
+            <p class="text-xs" style="color: var(--text-tertiary)">Ejecuta la validación de seguridad y la consulta sin modificar datos reales — todo se revierte al terminar.</p>
           </div>
           <button type="button" onclick="closePlaybookDryRun()" class="text-xs px-2.5 py-1 rounded-lg btn-secondary">Cerrar</button>
         </div>
         <div id="pb-dryrun-fields" class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4"></div>
         <div class="flex items-center justify-between gap-3">
           <div id="pb-dryrun-result" class="text-xs font-mono"></div>
-          <button type="button" id="pb-dryrun-exec-btn" class="btn-primary px-5 py-2 rounded-xl text-xs">Ejecutar Simulación Dry-Run</button>
+          <button type="button" id="pb-dryrun-exec-btn" class="btn-primary px-5 py-2 rounded-xl text-xs">Ejecutar simulación</button>
         </div>
       </div>
 
@@ -1312,7 +1313,7 @@ html.light .by-hive-badge {
             </div>
             <button type="button" onclick="llt()" class="btn-secondary px-4 py-2 rounded-xl text-sm">Actualizar</button>
           </div>
-          <p class="text-xs mb-4" style="color: var(--text-secondary)">Trabajo de IA que no pudo terminar (caída de providers) — el sistema lo reintenta solo cuando el servicio vuelve. Nada se pierde en silencio.</p>
+          <p class="text-xs mb-4" style="color: var(--text-secondary)">Trabajo de IA que no pudo terminar por una interrupción del servicio — el sistema lo reintenta solo cuando vuelve. Nada se pierde en silencio.</p>
           <div id="ctx-llmtasks-list" class="space-y-2"></div>
         </div>
       </div>
@@ -1324,7 +1325,6 @@ html.light .by-hive-badge {
         <h2 class="text-2xl font-bold">Configuración de la Cuenta</h2>
         <div class="flex items-center gap-2">
           <button id="cfg-adv-toggle" type="button" onclick="toggleAdvancedConfig()" class="btn-secondary px-3 py-1.5 rounded-xl text-xs">Mostrar avanzado</button>
-          <span id="cfg-schema-banner" class="text-xs px-3 py-1 rounded-full hive-card border" style="color:var(--text-tertiary)">Schema —</span>
         </div>
       </div>
       <p class="text-sm" style="color:var(--text-secondary)">Cada tarjeta se guarda por separado — tocá lo que necesites y presioná su botón Guardar.</p>
@@ -1503,10 +1503,10 @@ html.light .by-hive-badge {
         <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
           <div>
             <div class="flex items-center gap-2">
-              <h3 class="font-semibold text-lg">Notificaciones y aprobaciones (ChatOps)</h3>
+              <h3 class="font-semibold text-lg">Notificaciones y aprobaciones</h3>
               <span id="cfg-wh-provider-badge" class="text-[11px] px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-mono">Auto-detect</span>
             </div>
-            <p class="text-xs mt-1" style="color:var(--text-secondary)">Pegá la URL de tu Incoming Webhook de Slack o Microsoft Teams. HiveOps detecta el formato automáticamente y envía tarjetas con botones <strong>[Aprobar Fix]</strong> y <strong>[Rechazar]</strong> en 1 clic.</p>
+            <p class="text-xs mt-1" style="color:var(--text-secondary)">Pegá la URL de notificación de tu Slack o Microsoft Teams. HiveOps detecta el formato automáticamente y envía tarjetas con botones para aprobar o rechazar en 1 clic.</p>
           </div>
           <div class="flex items-center gap-2">
             <button type="button" onclick="testChatOpsWebhook()" class="btn-secondary px-3.5 py-2 rounded-xl text-xs">Enviar tarjeta de prueba</button>
@@ -1516,11 +1516,11 @@ html.light .by-hive-badge {
         <div class="space-y-4">
           <label class="flex items-center gap-2 text-sm cursor-pointer">
             <input id="cfg-wh-enabled" type="checkbox" class="accent-cyan-500"/>
-            <span>Habilitar notificaciones y aprobaciones salientes por Webhook / ChatOps</span>
+            <span>Habilitar notificaciones y aprobaciones por Slack o Teams</span>
           </label>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="md:col-span-2">
-              <label class="text-xs block mb-1" style="color:var(--text-secondary)">Webhook URL (Slack <code class="text-cyan-400">hooks.slack.com/...</code>, Teams <code class="text-cyan-400">webhook.office.com/...</code> o endpoint HTTP propio)</label>
+              <label class="text-xs block mb-1" style="color:var(--text-secondary)">URL de notificación (Slack <code class="text-cyan-400">hooks.slack.com/...</code>, Teams <code class="text-cyan-400">webhook.office.com/...</code> o dirección propia)</label>
               <input id="cfg-wh-url" type="url" oninput="updateWebhookProviderBadge()" class="input-field w-full px-3 py-2 rounded-xl text-sm font-mono" placeholder="https://hooks.slack.com/services/T000/B000/XXXX"/>
             </div>
             <div>
@@ -1708,7 +1708,7 @@ html.light .by-hive-badge {
 <div id="mk" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.7); backdrop-filter: blur(8px)" role="dialog" aria-modal="true" aria-label="Nuevo artículo KB">
   <div class="modal-content hive-card w-full max-w-2xl p-6">
     <div class="flex justify-between items-center mb-6">
-      <h3 class="text-xl font-bold">Nuevo Artículo KB</h3>
+      <h3 class="text-xl font-bold">Nuevo artículo</h3>
       <button onclick="cm('mk')" class="p-2 rounded-lg hover:bg-white/5 transition-colors" style="color: var(--text-secondary)" aria-label="Cerrar">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>

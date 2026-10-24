@@ -164,6 +164,37 @@ public sealed class AuthController : ControllerBase
         return Ok(new { updated = true });
     }
 
+    [HttpPost("change-password")]
+    [Microsoft.AspNetCore.Authorization.Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken ct)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.CurrentPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
+            return BadRequest(new { message = "La contraseña actual y la nueva son obligatorias." });
+
+        if (request.NewPassword.Length < 6)
+            return BadRequest(new { message = "La nueva contraseña debe tener al menos 6 caracteres." });
+
+        var userIdRaw = User.FindFirstValue(AppClaimTypes.UserId);
+        var username = User.FindFirstValue(AppClaimTypes.Username) ?? User.Identity?.Name;
+
+        AppUser? user = null;
+        if (Guid.TryParse(userIdRaw, out var userId))
+            user = await _db.AppUsers.FirstOrDefaultAsync(u => u.Id == userId && u.IsActive, ct);
+        if (user is null && !string.IsNullOrWhiteSpace(username))
+            user = await _db.AppUsers.FirstOrDefaultAsync(u => u.Username == username && u.IsActive, ct);
+        if (user is null)
+            return Unauthorized(new { message = "Sesión inválida." });
+
+        if (!PasswordSecurity.VerifyPassword(request.CurrentPassword, user.PasswordHash))
+            return BadRequest(new { message = "La contraseña actual no es correcta." });
+
+        user.PasswordHash = PasswordSecurity.HashPassword(request.NewPassword);
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        return Ok(new { updated = true });
+    }
+
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
@@ -220,4 +251,5 @@ public sealed record LoginRequest(string Username, string Password);
 public sealed record LoginResponse(bool Authenticated, string? Role, Guid? TenantId, string? TenantName, string? DisplayName, string Token);
 public sealed record ForgotPasswordRequest(string UsernameOrEmail);
 public sealed record ResetPasswordRequest(string Token, string NewPassword);
+public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public sealed record AuthMeResponse(bool Authenticated, string? Role, Guid? TenantId, string? TenantName, string? DisplayName);

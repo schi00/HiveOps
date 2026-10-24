@@ -355,6 +355,56 @@ public sealed class SupportDashboardController : ControllerBase
             incident.ArenaValidationStatus));
     }
 
+    [HttpPut("incidents/{id:guid}")]
+    public async Task<ActionResult> UpdateIncidentStatus(
+        Guid id,
+        [FromBody] UpdateIncidentStatusRequest request,
+        CancellationToken ct)
+    {
+        var effectiveTenantId = GetEffectiveTenantId();
+        if (!effectiveTenantId.HasValue && !IsPrivileged) return Unauthorized();
+
+        if (request is null || string.IsNullOrWhiteSpace(request.Status)
+            || !Enum.TryParse<IncidentStatus>(request.Status, ignoreCase: true, out var newStatus))
+            return BadRequest(new { message = "Estado inválido." });
+
+        var query = _db.Incidents.Where(i => i.Id == id);
+        if (!IsPrivileged)
+            query = query.Where(i => i.TenantId == effectiveTenantId!.Value);
+        else if (effectiveTenantId.HasValue)
+            query = query.Where(i => i.TenantId == effectiveTenantId.Value);
+
+        var incident = await query.FirstOrDefaultAsync(ct);
+        if (incident is null) return NotFound();
+
+        var previous = incident.Status;
+        if (previous == newStatus) return Ok(new { incident.Id, status = newStatus.ToString() });
+
+        incident.Status = newStatus;
+        incident.UpdatedAt = DateTimeOffset.UtcNow;
+        if (newStatus is IncidentStatus.Resolved or IncidentStatus.Closed)
+            incident.ResolvedAt ??= DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            var actor = User.FindFirstValue(AppClaimTypes.Username) ?? User.Identity?.Name ?? "dashboard";
+            await _auditLedger.AppendAsync(
+                incident.TenantId,
+                incident.Id,
+                "StatusChanged",
+                actor,
+                new { from = previous.ToString(), to = newStatus.ToString() },
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Audit append (StatusChanged) failed for incident {IncidentId}.", id);
+        }
+
+        return Ok(new { incident.Id, status = newStatus.ToString() });
+    }
+
     [HttpGet("incidents/{id:guid}/messages")]
     public async Task<ActionResult<IReadOnlyList<MessageDto>>> GetIncidentMessages(Guid id, CancellationToken ct)
     {
@@ -836,7 +886,6 @@ public sealed class SupportDashboardController : ControllerBase
     }
 
     [HttpPost("kb")]
-    [Authorize(Roles = AppRoles.SuperAdmin)]
     public async Task<ActionResult> CreateKbArticle([FromBody] CreateKbRequest request, CancellationToken ct)
     {
         // GetEffectiveTenantId resolves either the JWT tenant claim or, for privileged
@@ -1224,6 +1273,7 @@ public sealed record IncidentDetailDto(
 public sealed record MergeRequestDto(Guid IncidentId, string Title, string Branch, string CommitHash, Guid TenantId, DateTimeOffset CreatedAt);
 public sealed record IncidentSnapshotDto(Guid Id, string TargetTable, int AffectedRowCount, bool IsReverted, string BeforeRowsJson, string AfterRowsJson, string InverseSqlScript, DateTimeOffset CreatedAt, DateTimeOffset? RevertedAt, string? RevertedBy);
 public sealed record AuditEntryDto(int SequenceNumber, string EventType, string Actor, string PayloadJson, string EntryHash, string PreviousHash, DateTimeOffset CreatedAt);
+public sealed record UpdateIncidentStatusRequest(string? Status);
 public sealed record SystemHealthDto(bool DbHealthy, bool PipelineHealthy, string LastTestRun);
 public sealed record KbArticleDto(Guid Id, string Title, string Category, string Tags, DateTimeOffset CreatedAt);
 

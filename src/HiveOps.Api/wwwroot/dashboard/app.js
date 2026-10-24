@@ -413,13 +413,14 @@ el.innerHTML=(d||[]).length?d.map(m=>`<div class="hive-card p-4 flex items-cente
 async function lh(){
 try{
 const d=await api('GET','/support/system-health');
-const db=d?.isDatabaseHealthy,pl=d?.isPipelineHealthy;
+const db=d?.dbHealthy,pl=d?.pipelineHealthy;
 const hd=document.getElementById('hd'),hp=document.getElementById('hp');
 hd.className='w-3 h-3 rounded-full '+(db?'bg-emerald-500':'bg-rose-500');
 hp.className='w-3 h-3 rounded-full '+(pl?'bg-emerald-500':'bg-rose-500');
 document.getElementById('td').textContent=db?'Healthy':'Unhealthy';
 document.getElementById('tp').textContent=pl?'Healthy':'Unhealthy';
-document.getElementById('tt').textContent=d?.testsPassedLastRun!=null?(d.testsPassedLastRun?'Passed':'Failed'):'Pendiente';
+const lastRun=d?.lastTestRun;
+document.getElementById('tt').textContent=(!lastRun||lastRun==='unknown')?'Pendiente':lastRun;
 }catch(e){toast(e.message,'error');}
 }
 async function approveMerge(id){try{await api('POST',`/support/merge-queue/${id}/approve`);toast('Merge aprobado','success');lm();}catch(e){toast(e.message,'error');}}
@@ -496,12 +497,12 @@ if(d.status==='Open'||d.status==='InProgress'){
 actions+=`<div class="flex gap-3 mt-5"><button onclick="upd('${id}','InProgress')" class="btn-primary px-4 py-2 rounded-lg text-xs flex-1">Marcar En Progreso</button><button onclick="upd('${id}','Resolved')" class="btn-secondary px-4 py-2 rounded-lg text-xs flex-1" style="background:var(--bg-tertiary);color:#10b981;border-color:#10b981">Resolver</button></div>`;
 }
 if(d.suggestedFixSql){
-actions+=`<div class="mt-5 p-4 rounded-xl hive-card" style="background:rgba(34,211,238,0.05)"><div class="text-xs mb-2" style="color:var(--text-tertiary)">Fix sugerido (SQL)</div><pre class="text-xs text-cyan-300 overflow-x-auto font-mono">${esc(d.suggestedFixSql)}</pre><div class="flex flex-wrap gap-2 mt-3"><button onclick="appr('${id}')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs">Aprobar</button><button onclick="rej('${id}')" class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs">Rechazar</button><button onclick="showChatOpsLinks('${id}')" class="btn-secondary px-3 py-1.5 rounded-lg text-xs">Links 1-Click ChatOps (Slack/Teams)</button></div><div id="chatops-links-box" class="hidden mt-3"></div></div>`;
+actions+=`<div class="mt-5 p-4 rounded-xl hive-card" style="background:rgba(34,211,238,0.05)"><div class="text-xs mb-2" style="color:var(--text-tertiary)">Fix sugerido (SQL)</div><pre class="text-xs text-cyan-300 overflow-x-auto font-mono">${esc(d.suggestedFixSql)}</pre><div class="flex flex-wrap gap-2 mt-3"><button onclick="appr('${id}')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs">Aprobar</button><button onclick="rej('${id}')" class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs">Rechazar</button><button onclick="showChatOpsLinks('${id}')" class="btn-secondary px-3 py-1.5 rounded-lg text-xs">Links de aprobación en 1 clic (Slack/Teams)</button></div><div id="chatops-links-box" class="hidden mt-3"></div></div>`;
 } else if(d.status==='AwaitingApproval'){
-actions+=`<div class="mt-4 flex flex-wrap gap-2"><button onclick="showChatOpsLinks('${id}')" class="btn-secondary px-3 py-1.5 rounded-lg text-xs">Obtener Links 1-Click ChatOps (Slack/Teams)</button></div><div id="chatops-links-box" class="hidden mt-3"></div>`;
+actions+=`<div class="mt-4 flex flex-wrap gap-2"><button onclick="showChatOpsLinks('${id}')" class="btn-secondary px-3 py-1.5 rounded-lg text-xs">Obtener links de aprobación (Slack/Teams)</button></div><div id="chatops-links-box" class="hidden mt-3"></div>`;
 }
 const rcaPanelHtml = renderRootCausePanel(d);
-const evidencePackHtml = `${rcaPanelHtml}<div id="inc-snapshots-panel" class="hive-card p-4 mt-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Snapshots de Datos (Before / After Diff &amp; 1-Click Undo)</div><div class="text-xs" style="color:var(--text-secondary)">Cargando snapshots...</div></div><div id="inc-audit-panel" class="hive-card p-4 mt-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Cadena de Auditoría Criptográfica (SHA-256)</div><div class="text-xs" style="color:var(--text-secondary)">Verificando bloques SHA-256...</div></div>`;
+const evidencePackHtml = `${rcaPanelHtml}<div id="inc-snapshots-panel" class="hive-card p-4 mt-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Copias de seguridad de datos (comparación antes/después y deshacer en 1 clic)</div><div class="text-xs" style="color:var(--text-secondary)">Cargando copias de seguridad...</div></div><div id="inc-audit-panel" class="hive-card p-4 mt-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Registro de auditoría verificable</div><div class="text-xs" style="color:var(--text-secondary)">Verificando integridad del registro...</div></div>`;
 document.getElementById('db').innerHTML=`<div class="flex items-center gap-3 mb-5"><div class="w-3 h-3 rounded-full ${sev} status-pulse"></div><div class="text-2xl font-bold" style="color:var(--text-primary)">${esc(d.title)}</div></div><div class="text-sm mb-1" style="color:var(--text-secondary)">Estado: <span class="${st} font-medium">${d.status}</span></div><div class="text-sm mb-5" style="color:var(--text-tertiary)">Creado: ${new Date(d.createdAt).toLocaleString()}</div><div class="hive-card p-4 mb-4"><div class="text-xs uppercase tracking-wider mb-2" style="color:var(--text-tertiary)">Descripción</div><div class="text-sm leading-relaxed whitespace-pre-wrap" style="color:var(--text-secondary)">${esc(d.description)}</div></div>${d.resolutionNotes?`<div class=\"hive-card p-4 mb-4\"><div class=\"text-xs uppercase tracking-wider mb-2\" style=\"color:var(--text-tertiary)\">Notas de resolución</div><div class=\"text-sm whitespace-pre-wrap\" style=\"color:var(--text-secondary)\">${esc(d.resolutionNotes)}</div></div>`:''}${d.reasoning?`<div class=\"hive-card p-4 mb-4 border-l-2 border-cyan-500\" style=\"background:rgba(34,211,238,0.03)\"><div class=\"text-xs text-cyan-400 uppercase tracking-wider mb-2\">Análisis IA</div><div class=\"text-sm italic\" style=\"color:var(--text-secondary)\">${esc(d.reasoning)}</div></div>`:''}${d.gitBranch?`<div class=\"text-xs\" style=\"color:var(--text-tertiary)\">Branch: <code class=\"text-cyan-400 font-mono\">${esc(d.gitBranch)}</code> · Commit: <code class=\"font-mono\" style=\"color:var(--text-secondary)\">${esc((d.gitCommitHash||'').substring(0,8))}</code></div>`:''}${actions}${evidencePackHtml}<div id=\"msgs\" class=\"hive-card p-4 mt-4\"><div class=\"text-xs uppercase tracking-wider mb-2\" style=\"color:var(--text-tertiary)\">Mensajes</div><div id=\"ml\"><div class=\"text-sm\" style=\"color:var(--text-secondary)\">Cargando mensajes...</div></div></div>`;
 
  // Load Snapshots & Audit Chain asynchronously
@@ -653,10 +654,11 @@ card.style.boxShadow=sel?'0 0 0 2px rgba(34,211,238,0.22)':'';
 async function saveOpMode(){
 if(!s.tenantId)return;
 try{
-const payload=Object.assign({},cfgAgentFull||{},{enabled:document.getElementById('cfg-agent-enabled').checked,operatingMode:selectedOpMode()});
+const modeMap={Shadow:0,Assisted:1,Autonomous:2};
+const payload=Object.assign({},cfgAgentFull||{},{enabled:document.getElementById('cfg-agent-enabled').checked,operatingMode:modeMap[selectedOpMode()]??2});
 await patchTenantPath('/config/agent',payload);
 cfgAgentFull=payload;
-updateOperatingModePills(payload.operatingMode);
+updateOperatingModePills(selectedOpMode());
 toast('Modo de operación guardado','success');
 }catch(e){toast(e.message,'error');}
 }
@@ -1009,7 +1011,9 @@ async function loadNotifications(){
 try{
 if(!s.tenantId&&!s.isAdmin){document.getElementById('notif-list').innerHTML='<div class="p-4 text-center text-sm" style="color:var(--text-secondary)">Selecciona una cuenta</div>';return;}
 const d=await api('GET','/support/notifications');
-notifications=d||[];
+const readMarker=localStorage.getItem('notifReadAt:'+(s.tenantId||'platform'));
+const readBefore=readMarker?new Date(readMarker):null;
+notifications=(d||[]).map(n=>Object.assign({},n,{read:!!(readBefore&&new Date(n.createdAt)<=readBefore)}));
 const nl=document.getElementById('notif-list');
 if(!notifications.length){nl.innerHTML='<div class="p-4 text-center text-sm" style="color:var(--text-secondary)">Sin notificaciones nuevas</div>';}
 else{nl.innerHTML=notifications.map(n=>`<div class="p-3 hover:bg-white/5 cursor-pointer transition-colors border-b" style="border-color:var(--border-color)" onclick="${n.type==='incident'?`od('${n.incidentId}');toggleNotifications();`:`n('incidents');toggleNotifications();`}"><div class="flex items-center gap-2 mb-1"><div class="w-1.5 h-1.5 rounded-full ${n.severity==='Critical'?'bg-red-500':n.severity==='High'?'bg-amber-500':'bg-amber-500/60'}"></div><span class="text-xs font-medium" style="color:var(--text-primary)">${n.title||'Notificación'}</span></div><div class="text-xs" style="color:var(--text-tertiary)">${timeAgo(n.createdAt)}</div></div>`).join('');}
@@ -1018,7 +1022,7 @@ if(notifications.filter(n=>!n.read).length>0){badge.classList.remove('hidden');b
 else{badge.classList.add('hidden');badge.classList.remove('status-pulse');}
 }catch(e){showWidgetError('notif-list','Error cargando notificaciones','loadNotifications()');}
 }
-function markAllRead(){notifications.forEach(n=>n.read=true);document.getElementById('notif-badge').classList.add('hidden');document.getElementById('notif-badge').classList.remove('status-pulse');}
+function markAllRead(){localStorage.setItem('notifReadAt:'+(s.tenantId||'platform'),new Date().toISOString());notifications.forEach(n=>n.read=true);document.getElementById('notif-badge').classList.add('hidden');document.getElementById('notif-badge').classList.remove('status-pulse');}
 
 // ==========================================
 // AI Support Engineer v1.2 — Readiness, ROI, Operating Mode, Playbooks, Evidence Pack
@@ -1027,13 +1031,11 @@ function markAllRead(){notifications.forEach(n=>n.read=true);document.getElement
 function updateOperatingModePills(activeMode) {
   const mode = activeMode || 'Assisted';
   s.operatingMode = mode;
-  const sel = document.getElementById('cfg-operating-mode');
-  if (sel) sel.value = mode;
   setOpModeRadio(mode);
   const modeTips = {
-    Shadow: 'Modo Shadow (POC 14d): el agente diagnostica, propone fixes y simula playbooks sin ejecutar escrituras en producción.',
-    Assisted: 'Modo Assisted: el agente diagnostica con evidencia multi-fuente y solicita aprobación humana antes de aplicar cambios.',
-    Autonomous: 'Modo Autonomous: auto-remediación L1/L2 habilitada bajo guardrails de filas, snapshot previo y verificación SQL.'
+    Shadow: 'Modo observador: el agente diagnostica y propone soluciones, pero nunca modifica datos.',
+    Assisted: 'Modo asistido: el agente diagnostica y pide aprobación humana antes de aplicar cualquier cambio.',
+    Autonomous: 'Modo autónomo: el agente resuelve solo, siempre con copias de seguridad previas y límites de seguridad.'
   };
   ['Shadow', 'Assisted', 'Autonomous'].forEach(m => {
     const btn = document.getElementById('mode-btn-' + m);
@@ -1051,20 +1053,12 @@ function updateOperatingModePills(activeMode) {
 async function setOperatingMode(mode) {
   updateOperatingModePills(mode);
   const modeDescriptions = {
-    Shadow: 'Modo Shadow (POC 14d): el agente diagnostica, propone fixes y simula playbooks sin ejecutar escrituras en producción.',
-    Assisted: 'Modo Assisted: el agente diagnostica con evidencia multi-fuente y solicita aprobación humana antes de aplicar cambios.',
-    Autonomous: 'Modo Autonomous: auto-remediación L1/L2 habilitada bajo guardrails de filas, snapshot previo y verificación SQL.'
+    Shadow: 'Modo observador: el agente diagnostica y propone soluciones, pero nunca modifica datos.',
+    Assisted: 'Modo asistido: el agente diagnostica y pide aprobación humana antes de aplicar cualquier cambio.',
+    Autonomous: 'Modo autónomo: el agente resuelve solo, siempre con copias de seguridad previas y límites de seguridad.'
   };
   try {
-    try {
-      await api('PUT', '/support/readiness/operating-mode', { operatingMode: mode });
-    } catch {
-      if (s.tenantId) {
-        await api('PATCH', `/tenants/${s.tenantId}/config`, { operatingMode: mode });
-      } else {
-        await api('PATCH', '/tenant/config', { operatingMode: mode });
-      }
-    }
+    await api('PUT', '/support/readiness/operating-mode', { operatingMode: mode });
     toast(modeDescriptions[mode] || ('Modo operativo cambiado a ' + mode), 'success');
     loadReadinessAndOutcomes();
   } catch (e) {
@@ -1154,11 +1148,11 @@ async function loadReadinessAndOutcomes() {
     }
 
     const labels = {
-      targetDatabase: 'Target Database (SQL Introspección & Snapshots)',
-      gitWorkspace: 'Git Workspace (Commits & PRs L3)',
-      knowledgeBase: 'Knowledge Base (Artículos publicados)',
-      playbooks: 'Playbooks L1/L2 (Remediación determinística)',
-      channels: 'Canales de Notificación & ChatOps (Slack/Teams/WA)'
+      targetDatabase: 'Base de datos del negocio',
+      gitWorkspace: 'Repositorio y despliegues',
+      knowledgeBase: 'Base de conocimiento (artículos publicados)',
+      playbooks: 'Acciones automáticas configuradas',
+      channels: 'Canales de notificación (Slack/Teams/WhatsApp)'
     };
 
     const actionLabels = {
@@ -1166,7 +1160,7 @@ async function loadReadinessAndOutcomes() {
       gitWorkspace: 'Configurar Git →',
       knowledgeBase: 'Ir a KB →',
       playbooks: 'Crear Playbook →',
-      channels: 'Configurar ChatOps →'
+      channels: 'Configurar notificaciones →'
     };
 
     const checks = Array.isArray(r.checks) ? r.checks : [];
@@ -1509,7 +1503,7 @@ async function saveChatOpsWebhook(silent) {
   try {
     await api('PUT', `/tenants/${s.tenantId}/config/outbound-webhook`, payload);
     if (!silent) {
-      toast('Configuración ChatOps / Webhook guardada', 'success');
+      toast('Configuración de notificaciones guardada', 'success');
       loadReadinessAndOutcomes();
     }
   } catch (e) {
@@ -1690,17 +1684,17 @@ async function loadIncidentSnapshots(incidentId) {
     const snaps = await api('GET', `/support/incidents/${encodeURIComponent(incidentId)}/snapshots`);
     const list = Array.isArray(snaps) ? snaps : [];
     if (!list.length) {
-      panel.innerHTML = `<div class="text-xs uppercase tracking-wider mb-1" style="color:var(--text-tertiary)">Snapshots de Datos (Before / After Diff &amp; 1-Click Undo)</div>
-        <div class="text-xs" style="color:var(--text-secondary)">Sin snapshots de filas registrados para este incidente.</div>`;
+      panel.innerHTML = `<div class="text-xs uppercase tracking-wider mb-1" style="color:var(--text-tertiary)">Copias de seguridad de datos</div>
+        <div class="text-xs" style="color:var(--text-secondary)">Sin copias de seguridad registradas para este incidente.</div>`;
       return;
     }
 
-    panel.innerHTML = `<div class="text-xs uppercase tracking-wider mb-3 font-semibold" style="color:var(--text-tertiary)">Snapshots de Datos (${list.length}) &amp; 1-Click Undo</div>
+    panel.innerHTML = `<div class="text-xs uppercase tracking-wider mb-3 font-semibold" style="color:var(--text-tertiary)">Copias de seguridad de datos (${list.length}) — deshacer en 1 clic</div>
       <div class="space-y-4">
         ${list.map(snap => {
           const revertedBadge = snap.isReverted
             ? `<span class="text-[11px] px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">Revertido el ${snap.revertedAt ? new Date(snap.revertedAt).toLocaleString() : '—'}</span>`
-            : `<button type="button" onclick="revertSnapshot('${esc(incidentId)}','${esc(snap.id)}')" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs transition-all">Revertir cambio (1-Click Undo)</button>`;
+            : `<button type="button" onclick="revertSnapshot('${esc(incidentId)}','${esc(snap.id)}')" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs transition-all">Deshacer cambio</button>`;
 
           return `<div class="p-3 rounded-xl border space-y-2.5" style="background:var(--bg-tertiary);border-color:var(--border-color)">
             <div class="flex flex-wrap items-center justify-between gap-2">
@@ -1737,9 +1731,9 @@ async function loadIncidentSnapshots(incidentId) {
 
 async function revertSnapshot(incidentId, snapshotId) {
   const ok = await askConfirm({
-    title: 'Revertir snapshot (1-Click Undo)',
-    detail: 'Se ejecutará el SQL inverso del snapshot sobre la base de la cuenta.',
-    preview: 'Se restaurarán las filas al estado Before capturado',
+    title: 'Deshacer cambio',
+    detail: 'Se restaurarán los datos a la copia de seguridad previa al cambio.',
+    preview: 'Las filas vuelven al estado capturado antes de la acción',
     confirmLabel: 'Revertir',
     danger: true
   });
@@ -1766,15 +1760,15 @@ async function loadIncidentAuditChain(incidentId) {
     const total = chain.totalEntries ?? (Array.isArray(chain.entries) ? chain.entries.length : 0);
     const valid = chain.isValid !== false;
     const badge = valid
-      ? `<span class="text-[11px] px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium" data-tip="Cadena de eventos firmada SHA-256, verificable como evidencia">Cadena SHA-256 Verificada (${total} bloques)</span>`
-      : `<span class="text-[11px] px-2.5 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 font-medium" data-tip="Cadena de eventos firmada SHA-256, verificable como evidencia">Cadena Rota en bloque ${esc(String(chain.brokenAtEntryId || '?'))}</span>`;
+      ? `<span class="text-[11px] px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium" data-tip="Registro de eventos firmado y verificable como evidencia">Registro verificado (${total} eventos)</span>`
+      : `<span class="text-[11px] px-2.5 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 font-medium" data-tip="Registro de eventos firmado y verificable como evidencia">Registro con inconsistencia en el evento ${esc(String(chain.brokenAtEntryId || '?'))}</span>`;
 
     const entries = Array.isArray(chain.entries) ? chain.entries : [];
     panel.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <div class="text-xs uppercase tracking-wider font-semibold" style="color:var(--text-tertiary)">Cadena de Auditoría Criptográfica (SHA-256)</div>
+        <div class="text-xs uppercase tracking-wider font-semibold" style="color:var(--text-tertiary)">Registro de auditoría verificable</div>
         <div class="flex flex-wrap items-center gap-2">
           ${badge}
-          <button type="button" onclick="downloadAuditPack('${esc(incidentId)}')" class="btn-secondary px-2.5 py-1 rounded-lg text-[11px]">Descargar Evidencia JSON</button>
+          <button type="button" onclick="downloadAuditPack('${esc(incidentId)}')" class="btn-secondary px-2.5 py-1 rounded-lg text-[11px]">Descargar evidencia</button>
         </div>
       </div>
       ${entries.length ? `<div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
@@ -1795,7 +1789,7 @@ async function loadIncidentAuditChain(incidentId) {
         }).join('')}
       </div>` : `<div class="text-xs" style="color:var(--text-secondary)">Sin bloques de auditoría registrados.</div>`}`;
   } catch (e) {
-    panel.innerHTML = `<div class="text-xs uppercase tracking-wider mb-1" style="color:var(--text-tertiary)">Cadena de Auditoría Criptográfica (SHA-256)</div>`;
+    panel.innerHTML = `<div class="text-xs uppercase tracking-wider mb-1" style="color:var(--text-tertiary)">Registro de auditoría verificable</div>`;
     const errId = 'inc-audit-err';
     panel.innerHTML += `<div id="${errId}"></div>`;
     showWidgetError(errId, 'No se pudo verificar la cadena de auditoría', `loadIncidentAuditChain('${incidentId}')`);
@@ -1887,18 +1881,18 @@ function renderSetupWizard() {
     },
     {
       key: 'channels',
-      title: 'Activar canal ChatOps (Slack/Teams) o WhatsApp',
-      desc: 'Recibí alertas y aprobá fixes con 1 clic desde tu canal de chat.',
+      title: 'Activar notificaciones (Slack/Teams) o WhatsApp',
+      desc: 'Recibí alertas y aprobá soluciones con 1 clic desde tu canal de chat.',
       ok: checkOk('channels'),
-      cta: 'Configurar ChatOps →',
+      cta: 'Configurar notificaciones →',
       action: "jumpToReadinessFix('channels')"
     },
     {
       key: 'playbooks',
-      title: 'Crear el primer playbook L1/L2',
-      desc: 'Remediación determinística con dry-run seguro y verificación SQL post-fix.',
+      title: 'Crear la primera acción automática',
+      desc: 'Acción lista para ejecutar con simulación previa segura y verificación posterior.',
       ok: playbooksOk,
-      cta: 'Crear Playbook →',
+      cta: 'Crear acción →',
       action: "jumpToReadinessFix('playbooks')"
     },
     {
