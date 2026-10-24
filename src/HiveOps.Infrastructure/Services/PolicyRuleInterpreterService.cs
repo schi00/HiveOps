@@ -126,6 +126,11 @@ public sealed class PolicyRuleInterpreterService : IPolicyRuleInterpreter
           "scope_aliases" with plausible English/table synonyms so the matcher can find real objects.
         - deletion/removal verbs (eliminar, borrar, quitar) => action_type "data_delete".
         - modify/update/insert => "data_modify". read-only queries/diagnostics => "diagnostic".
+        - Rules about CHANGES ("nunca modifiques", "no hagas cambios", "no elimines") should
+          carry action_type "data_modify,data_delete" — a scope-only block also stops
+          diagnostics and analysis, and leaves no room for narrower exceptions below it.
+          Omit action_type only when the rule truly forbids ANY interaction
+          ("no toques nada de X", "jamás accedas a X").
         - code changes/patches => "code_fix". deployments => "deploy". restarts => "restart_service".
         - "pedir/exigir aprobación" => action "require_approval". "nunca/prohibido/no tocar" => "block".
         - "podés/puedes/permitido" => "allow". "avisame/notificá" => "notify". "escalar/derivar a humano" => "escalate".
