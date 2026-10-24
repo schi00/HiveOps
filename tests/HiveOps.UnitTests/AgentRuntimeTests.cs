@@ -245,6 +245,21 @@ public sealed class AgentRuntimeTests
         public Task<TenantConfiguration> PatchEscalationConfigAsync(Guid tenantId, EscalationConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default)
             => PatchEscalationConfigAsync(tenantId, patch, ct);
 
+        public Task<TenantAdminSettings> GetAdminSettingsAsync(Guid tenantId, CancellationToken ct = default)
+            => Task.FromResult(new TenantAdminSettings());
+
+        public Task<TenantAdminSettings> SaveAdminSettingsAsync(Guid tenantId, TenantAdminSettings settings, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+            => Task.FromResult(settings);
+
+        public Task<bool> HasDeployGitTokenAsync(Guid tenantId, CancellationToken ct = default)
+            => Task.FromResult(false);
+
+        public Task SetDeployGitTokenAsync(Guid tenantId, string? plaintextToken, CancellationToken ct = default)
+            => Task.CompletedTask;
+
+        public Task<string?> GetDeployGitTokenAsync(Guid tenantId, CancellationToken ct = default)
+            => Task.FromResult<string?>(null);
+
         public Task InvalidateAsync(Guid tenantId, CancellationToken ct = default)
             => Task.CompletedTask;
     }

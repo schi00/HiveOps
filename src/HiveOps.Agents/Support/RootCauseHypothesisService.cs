@@ -291,6 +291,10 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
                 "Tenant plan lookup failed for incident {IncidentId}; using fallback query cap.", incident.Id);
         }
 
+        // Optional tenant override can only tighten the plan cap, never raise it.
+        if (diagnostics.MaxDiagnosticQueriesPerIncident is { } tenantCap && tenantCap > 0)
+            maxDiagnosticQueries = Math.Min(maxDiagnosticQueries, tenantCap);
+
         var schemaForPrompt = Truncate(schemaDdl, MaxSchemaCharsForPrompt);
         if (string.IsNullOrWhiteSpace(schemaForPrompt))
             schemaForPrompt = "-- schema unavailable";

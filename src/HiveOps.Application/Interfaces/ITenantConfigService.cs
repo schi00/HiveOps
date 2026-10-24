@@ -47,5 +47,23 @@ public interface ITenantConfigService
 
     Task<TenantConfiguration> PatchDiagnosticsConfigAsync(Guid tenantId, DiagnosticsConfig patch, TenantConfigAuditInfo? audit, CancellationToken ct = default);
 
+    /// <summary>Loads the full <see cref="TenantAdminSettings"/> envelope (migrated), not just the runtime section.</summary>
+    Task<TenantAdminSettings> GetAdminSettingsAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Persists admin-editable sections of the envelope. <see cref="TenantAdminSettings.RuntimeConfiguration"/>
+    /// is always preserved from the currently stored envelope — admin-settings saves never touch runtime config.
+    /// </summary>
+    Task<TenantAdminSettings> SaveAdminSettingsAsync(Guid tenantId, TenantAdminSettings settings, TenantConfigAuditInfo? audit, CancellationToken ct = default);
+
+    /// <summary>True when a (protected) deploy git access token is stored for the tenant.</summary>
+    Task<bool> HasDeployGitTokenAsync(Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>Stores the deploy git access token encrypted; null/empty clears it.</summary>
+    Task SetDeployGitTokenAsync(Guid tenantId, string? plaintextToken, CancellationToken ct = default);
+
+    /// <summary>Returns the decrypted deploy git access token for internal use (never expose via API).</summary>
+    Task<string?> GetDeployGitTokenAsync(Guid tenantId, CancellationToken ct = default);
+
     Task InvalidateAsync(Guid tenantId, CancellationToken ct = default);
 }

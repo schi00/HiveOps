@@ -584,101 +584,220 @@ if(r.status===401){logout();throw new Error('Sesión expirada');}
 const t=await r.text();
 if(!r.ok){throw new Error(t||r.statusText);}
 return t?JSON.parse(t):null;}
+// ==== Config de tenant — estado cargado en memoria ====
+// cfgAgentFull conserva TODOS los campos del agente tal como los devolvió el
+// servidor, para reenviarlos intactos al guardar solo enabled/operatingMode.
+let cfgAgentFull=null;
+let cfgDeployGitFull=null;
+let handoffKeywords=[];
+let diagBlockedTables=[];
+
 async function lc(){
 try{
 if(!s.tenantId){toast('Selecciona una cuenta primero','warning');return;}
 const cfg=await api('GET','/tenants/'+s.tenantId+'/config');
 const el=id=>document.getElementById(id);
-const llmHint=el('cfg-llm-selfhosted-hint');
-if(llmHint){ if(s.deploymentMode==='SelfHosted') llmHint.classList.remove('hidden'); else llmHint.classList.add('hidden'); }
 el('cfg-schema-banner').textContent='Schema v'+(cfg.configurationSchemaVersion ?? '?');
 const a=cfg.agent||{};
+cfgAgentFull=a;
 el('cfg-agent-enabled').checked=a.enabled!==false;
-el('cfg-planner').checked=a.enableLlmPlanner!==false;
-if(el('cfg-operating-mode')){
-  const om=typeof a.operatingMode==='number'?(['Shadow','Assisted','Autonomous'][a.operatingMode]||'Autonomous'):(a.operatingMode||'Autonomous');
-  el('cfg-operating-mode').value=om;
-  updateOperatingModePills(om);
-}
-el('cfg-planner-version').value=a.plannerVersion||'v1';
-el('cfg-tone').value=a.tone||'sales';
-el('cfg-max-steps').value=a.maxSteps??3;
+const om=typeof a.operatingMode==='number'?(['Shadow','Assisted','Autonomous'][a.operatingMode]||'Autonomous'):(a.operatingMode||'Autonomous');
+setOpModeRadio(om);
+updateOperatingModePills(om);
 const L=cfg.llm||{};
+const isSH=s.deploymentMode==='SelfHosted';
+const llmFields=el('cfg-llm-fields');
+const llmNote=el('cfg-llm-saas-note');
+const llmSave=el('cfg-llm-save-btn');
+if(llmFields)llmFields.classList.toggle('hidden',!isSH);
+if(llmNote)llmNote.classList.toggle('hidden',isSH);
+if(llmSave)llmSave.classList.toggle('hidden',!isSH);
 el('cfg-llm-provider').value=L.provider||'openai';
 el('cfg-llm-model').value=L.model||'gpt-4';
 const temp=L.temperature??0.7;
 el('cfg-llm-temp').value=String(temp);
 el('cfg-llm-temp-val').textContent=String(temp);
 el('cfg-llm-max-out').value=L.maxOutputTokens??2000;
-const D=cfg.deployGit||{};
-el('cfg-auto-deploy').checked=D.autoDeployEnabled!==false;
-el('cfg-manual-deploy').checked=D.manualDeployAllowed!==false;
-el('cfg-git-url').value=D.gitRepositoryUrl||'';
-el('cfg-git-branch').value=D.gitDefaultBranch||'main';
-el('cfg-git-subpath').value=D.workingDirectoryRelativePath||'';
-const E=cfg.escalation||{};
-el('cfg-esc-enable').checked=E.enableEscalation!==false;
-el('cfg-esc-frust').checked=E.enableFrustrationEscalation!==false;
-el('cfg-esc-max-failures').value=E.maxPlannerFailuresBeforeEscalation??3;
-el('cfg-esc-keywords').value=(E.triggerKeywords||[]).join(', ');
+const dg=cfg.diagnostics||{};
+el('cfg-diag-budget').value=dg.maxDiagnosticQueriesPerIncident??'';
+diagBlockedTables=Array.isArray(dg.blockedTables)?[...dg.blockedTables]:[];
+renderDiagBlockedChips();
+el('cfg-diag-sensitive').checked=!!dg.allowSensitiveTables;
 renderPolicies(cfg.policies||[]);
-const w=(cfg.channel&&cfg.channel.whatsApp)||{};
-el('cfg-wa-buttons').checked=w.enableInteractiveButtons!==false;
-el('cfg-wa-menu').checked=w.enableInteractiveMenu!==false;
-el('cfg-wa-list-long').checked=w.preferListForLongChoices!==false;
-el('cfg-wa-max-qr').value=w.maxQuickReplyButtons??3;
-await loadChatOpsWebhookConfig();
+await Promise.allSettled([loadAdminSettings(),loadDeployGit(cfg),loadChatOpsWebhookConfig()]);
 }catch(e){toast(e.message,'error');}
-}
-function applyPreset(preset){
-if(!s.tenantId){toast('Selecciona una cuenta primero','warning');return;}
-const presets={
-basic:{model:'gpt-3.5-turbo',temperature:0.5,maxTokens:1600},
-standard:{model:'gpt-4',temperature:0.7,maxTokens:2000},
-advanced:{model:'gpt-4',temperature:0.85,maxTokens:4000}
-};
-const p=presets[preset];
-document.getElementById('cfg-llm-model').value=p.model;
-document.getElementById('cfg-llm-temp').value=String(p.temperature);
-document.getElementById('cfg-llm-temp-val').textContent=String(p.temperature);
-document.getElementById('cfg-llm-max-out').value=p.maxTokens;
-['basic','standard','advanced'].forEach(k=>{
-const el=document.getElementById('preset-'+k);
-if(el){if(k===preset)el.classList.add('preset-selected');else el.classList.remove('preset-selected');}
-});
-saveLlmSection();
 }
 function toggleAdvancedConfig(){
 const els=document.querySelectorAll('.cfg-adv');
 const btn=document.getElementById('cfg-adv-toggle');
 const hidden=[...els].some(el=>el.classList.contains('hidden'));
 els.forEach(el=>el.classList.toggle('hidden',!hidden));
-if(btn)btn.textContent=hidden?'Ocultar avanzado':'Mostrar avanzado (LLM · Deploy)';
+if(btn)btn.textContent=hidden?'Ocultar avanzado':'Mostrar avanzado';
 }
-function buildAgentPayload(){
-const opModeEl=document.getElementById('cfg-operating-mode');
-const operatingMode=(opModeEl&&opModeEl.value)||s.operatingMode||'Autonomous';
-return{enabled:document.getElementById('cfg-agent-enabled').checked,enableLlmPlanner:document.getElementById('cfg-planner').checked,operatingMode,plannerVersion:document.getElementById('cfg-planner-version').value||'v1',maxSteps:parseInt(document.getElementById('cfg-max-steps').value,10)||3,tone:document.getElementById('cfg-tone').value||'sales',systemPromptOverride:null,promptVariables:{},allowedTools:[]};}
-function buildLlmPayload(){return{provider:document.getElementById('cfg-llm-provider').value||'openai',model:document.getElementById('cfg-llm-model').value||'gpt-4',temperature:parseFloat(document.getElementById('cfg-llm-temp').value)||0.7,topP:null,maxOutputTokens:parseInt(document.getElementById('cfg-llm-max-out').value,10)||2000};}
-function buildDeployPayload(){return{autoDeployEnabled:document.getElementById('cfg-auto-deploy').checked,manualDeployAllowed:document.getElementById('cfg-manual-deploy').checked,gitRepositoryUrl:(document.getElementById('cfg-git-url').value||'').trim()||null,gitDefaultBranch:document.getElementById('cfg-git-branch').value||'main',workingDirectoryRelativePath:(document.getElementById('cfg-git-subpath').value||'').trim()||null};}
-function buildEscalationPayload(){const raw=(document.getElementById('cfg-esc-keywords').value||'').split(',').map(x=>x.trim()).filter(Boolean);return{enableEscalation:document.getElementById('cfg-esc-enable').checked,enableFrustrationEscalation:document.getElementById('cfg-esc-frust').checked,maxPlannerFailuresBeforeEscalation:parseInt(document.getElementById('cfg-esc-max-failures').value,10)||3,triggerKeywords:raw};}
-function buildChannelPayload(){return{whatsApp:{enableInteractiveButtons:document.getElementById('cfg-wa-buttons').checked,enableInteractiveMenu:document.getElementById('cfg-wa-menu').checked,preferListForLongChoices:document.getElementById('cfg-wa-list-long').checked,maxQuickReplyButtons:Math.min(3,Math.max(1,parseInt(document.getElementById('cfg-wa-max-qr').value,10)||3))}};}
-async function saveAgentRuntime(){if(!s.tenantId)return;try{const p=buildAgentPayload();await patchTenantPath('/config/agent',p);updateOperatingModePills(p.operatingMode);toast('Runtime y modo operativo guardados','success');}catch(e){toast(e.message,'error');}}
-async function saveLlmSection(){if(!s.tenantId)return;try{await patchTenantPath('/config/llm',buildLlmPayload());toast('LLM guardado','success');}catch(e){toast(e.message,'error');}}
-async function saveDeployGitSection(){if(!s.tenantId)return;try{await patchTenantPath('/config/deploy-git',buildDeployPayload());toast('Deploy/Git guardado','success');}catch(e){toast(e.message,'error');}}
-async function saveEscalationSection(){if(!s.tenantId)return;try{await patchTenantPath('/config/escalation',buildEscalationPayload());toast('Escalación guardada','success');}catch(e){toast(e.message,'error');}}
-async function saveChannelSection(){if(!s.tenantId)return;try{await patchTenantPath('/config/channel',buildChannelPayload());toast('Canal guardado','success');}catch(e){toast(e.message,'error');}}
-async function saveAllConfigSections(){
+// ---- Modo de operación (radio-cards) ----
+function selectedOpMode(){const r=document.querySelector('input[name="cfg-op-mode"]:checked');return r?r.value:'Autonomous';}
+function setOpModeRadio(mode){
+let found=false;
+document.querySelectorAll('input[name="cfg-op-mode"]').forEach(r=>{r.checked=(r.value.toLowerCase()===String(mode).toLowerCase());if(r.checked)found=true;});
+if(!found){const def=document.querySelector('input[name="cfg-op-mode"][value="Autonomous"]');if(def)def.checked=true;}
+syncOpModeCards();
+}
+function syncOpModeCards(){
+document.querySelectorAll('.cfg-op-card').forEach(card=>{
+const r=card.querySelector('input[type="radio"]');
+const sel=!!(r&&r.checked);
+card.style.borderColor=sel?'rgba(34,211,238,0.65)':'var(--border-color)';
+card.style.boxShadow=sel?'0 0 0 2px rgba(34,211,238,0.22)':'';
+});
+}
+async function saveOpMode(){
 if(!s.tenantId)return;
 try{
-await patchTenantPath('/config/agent',buildAgentPayload());
-await patchTenantPath('/config/llm',buildLlmPayload());
-await patchTenantPath('/config/deploy-git',buildDeployPayload());
-await patchTenantPath('/config/escalation',buildEscalationPayload());
-await patchTenantPath('/config/channel',buildChannelPayload());
-await saveChatOpsWebhook(true);
-toast('Todas las secciones guardadas','success');
-}catch(e){toast(e.message||'Error al guardar','error');}}
+const payload=Object.assign({},cfgAgentFull||{},{enabled:document.getElementById('cfg-agent-enabled').checked,operatingMode:selectedOpMode()});
+await patchTenantPath('/config/agent',payload);
+cfgAgentFull=payload;
+updateOperatingModePills(payload.operatingMode);
+toast('Modo de operación guardado','success');
+}catch(e){toast(e.message,'error');}
+}
+// ---- Admin settings (asistente / WhatsApp / derivación) ----
+async function loadAdminSettings(){
+if(!s.tenantId)return;
+try{
+const d=await api('GET','/tenants/'+s.tenantId+'/admin-settings');
+if(!d)return;
+const el=id=>document.getElementById(id);
+const as=d.assistant||{};
+if(el('cfg-assistant-name'))el('cfg-assistant-name').value=as.name||'';
+if(el('cfg-tone')&&as.tone)el('cfg-tone').value=as.tone;
+if(el('cfg-language')&&as.language)el('cfg-language').value=as.language;
+const m=d.messages||{};
+if(el('cfg-msg-welcome'))el('cfg-msg-welcome').value=m.welcome||'';
+if(el('cfg-msg-fallback'))el('cfg-msg-fallback').value=m.fallback||'';
+if(el('cfg-msg-handoff'))el('cfg-msg-handoff').value=m.handoff||'';
+const w=d.whatsApp||{};
+if(el('cfg-wa-enabled'))el('cfg-wa-enabled').checked=!!w.enabled;
+if(el('cfg-wa-phone'))el('cfg-wa-phone').value=w.phoneNumber||'';
+if(el('cfg-wa-phoneid'))el('cfg-wa-phoneid').value=w.phoneNumberId||'';
+if(el('cfg-wa-buttons'))el('cfg-wa-buttons').checked=w.interactiveButtons!==false;
+if(el('cfg-wa-menu'))el('cfg-wa-menu').checked=w.interactiveMenu!==false;
+const wth=el('cfg-wa-token-state');
+if(wth)wth.textContent=w.hasAccessToken?'Token de acceso (guardado, dejar vacío para no cambiar)':'Token de acceso';
+const h=d.handoff||{};
+if(el('cfg-ho-frust'))el('cfg-ho-frust').checked=!!h.frustrationEscalation;
+if(el('cfg-ho-retries'))el('cfg-ho-retries').value=String(h.maxRetriesBeforeHandoff??3);
+if(el('cfg-ho-sla'))el('cfg-ho-sla').value=String(h.slaMinutes??30);
+handoffKeywords=Array.isArray(h.triggerKeywords)?[...h.triggerKeywords]:[];
+renderHandoffKeywordChips();
+}catch(e){console.warn('admin-settings no disponible:',e);}
+}
+async function saveAssistantSection(){
+if(!s.tenantId)return;
+try{
+const el=id=>document.getElementById(id);
+await patchTenantPath('/admin-settings',{assistant:{name:(el('cfg-assistant-name').value||'').trim()||null,tone:el('cfg-tone').value,language:el('cfg-language').value},messages:{welcome:el('cfg-msg-welcome').value||'',fallback:el('cfg-msg-fallback').value||'',handoff:el('cfg-msg-handoff').value||''}});
+toast('Asistente guardado','success');
+}catch(e){toast(e.message,'error');}
+}
+async function saveWhatsAppSection(){
+if(!s.tenantId)return;
+try{
+const el=id=>document.getElementById(id);
+const w={enabled:el('cfg-wa-enabled').checked,phoneNumber:(el('cfg-wa-phone').value||'').trim()||null,phoneNumberId:(el('cfg-wa-phoneid').value||'').trim()||null,interactiveButtons:el('cfg-wa-buttons').checked,interactiveMenu:el('cfg-wa-menu').checked};
+const tok=(el('cfg-wa-token').value||'').trim();
+if(tok)w.accessToken=tok;
+await patchTenantPath('/admin-settings',{whatsApp:w});
+el('cfg-wa-token').value='';
+const th=el('cfg-wa-token-state');
+if(tok&&th)th.textContent='Token de acceso (guardado, dejar vacío para no cambiar)';
+toast('Canal WhatsApp guardado','success');
+}catch(e){toast(e.message,'error');}
+}
+async function saveHandoffSection(){
+if(!s.tenantId)return;
+try{
+const el=id=>document.getElementById(id);
+await patchTenantPath('/admin-settings',{handoff:{frustrationEscalation:el('cfg-ho-frust').checked,triggerKeywords:[...handoffKeywords],maxRetriesBeforeHandoff:parseInt(el('cfg-ho-retries').value,10)||3,slaMinutes:parseInt(el('cfg-ho-sla').value,10)||30}});
+toast('Derivación a humanos guardada','success');
+}catch(e){toast(e.message,'error');}
+}
+// ---- Chips (keywords de derivación / tablas bloqueadas) ----
+function renderChips(containerId,arr,removeFn){
+const c=document.getElementById(containerId);if(!c)return;
+c.innerHTML=arr.map((k,i)=>`<span class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/25">${esc(k)}<button type="button" onclick="${removeFn}(${i})" class="font-bold leading-none hover:text-red-400" title="Quitar">×</button></span>`).join('');
+}
+function addChipFromInput(inputId,arr,containerId,removeFn){
+const inp=document.getElementById(inputId);if(!inp)return;
+const v=(inp.value||'').trim();
+if(!v)return;
+if(!arr.includes(v))arr.push(v);
+inp.value='';
+renderChips(containerId,arr,removeFn);
+}
+function renderHandoffKeywordChips(){renderChips('cfg-ho-keywords-chips',handoffKeywords,'removeHandoffKeyword');}
+function addHandoffKeyword(){addChipFromInput('cfg-ho-keywords',handoffKeywords,'cfg-ho-keywords-chips','removeHandoffKeyword');}
+function removeHandoffKeyword(i){handoffKeywords.splice(i,1);renderHandoffKeywordChips();}
+function renderDiagBlockedChips(){renderChips('cfg-diag-blocked-chips',diagBlockedTables,'removeDiagBlocked');}
+function addDiagBlocked(){addChipFromInput('cfg-diag-blocked',diagBlockedTables,'cfg-diag-blocked-chips','removeDiagBlocked');}
+function removeDiagBlocked(i){diagBlockedTables.splice(i,1);renderDiagBlockedChips();}
+// ---- Repositorio Git y deploys ----
+async function loadDeployGit(cfg){
+const el=id=>document.getElementById(id);
+let d=null;let endpointOk=false;
+try{d=await api('GET','/tenants/'+s.tenantId+'/config/deploy-git');endpointOk=!!d;}
+catch(e){d=(cfg&&cfg.deployGit)||null;}
+d=d||{};
+// El GET dedicado no devuelve workingDirectoryRelativePath — lo preservamos desde /config.
+if(d.workingDirectoryRelativePath==null&&cfg&&cfg.deployGit&&cfg.deployGit.workingDirectoryRelativePath)d.workingDirectoryRelativePath=cfg.deployGit.workingDirectoryRelativePath;
+cfgDeployGitFull=d;
+el('cfg-auto-deploy').checked=d.autoDeployEnabled!==false;
+el('cfg-manual-deploy').checked=d.manualDeployAllowed!==false;
+el('cfg-git-url').value=d.gitRepositoryUrl||'';
+el('cfg-git-branch').value=d.gitDefaultBranch||'main';
+const th=el('cfg-git-token-state');
+if(th){
+if(!endpointOk){th.classList.add('hidden');}
+else{th.classList.remove('hidden');th.textContent=d.hasAccessToken?'Token de acceso — guardado (dejar vacío para no cambiar)':'Opcional, para repositorios privados';}
+}
+}
+async function saveDeployGitSection(){
+if(!s.tenantId)return;
+try{
+const el=id=>document.getElementById(id);
+const p={autoDeployEnabled:el('cfg-auto-deploy').checked,manualDeployAllowed:el('cfg-manual-deploy').checked,gitRepositoryUrl:(el('cfg-git-url').value||'').trim()||null,gitDefaultBranch:(el('cfg-git-branch').value||'').trim()||'main',clearGitAccessToken:false};
+if(cfgDeployGitFull&&cfgDeployGitFull.workingDirectoryRelativePath)p.workingDirectoryRelativePath=cfgDeployGitFull.workingDirectoryRelativePath;
+const tok=(el('cfg-git-token').value||'').trim();
+if(tok)p.gitAccessToken=tok;
+await patchTenantPath('/config/deploy-git',p);
+el('cfg-git-token').value='';
+const th=el('cfg-git-token-state');
+if(tok&&th){th.textContent='Token de acceso — guardado';th.classList.remove('hidden');}
+toast('Repositorio y deploys guardados','success');
+}catch(e){toast(e.message,'error');}
+}
+async function testDeployGit(){
+if(!s.tenantId){toast('Selecciona una cuenta primero','warning');return;}
+try{
+const res=await api('POST','/tenants/'+s.tenantId+'/config/deploy-git/test');
+if(res&&res.ok===false)toast(res.message||'La conexión con el repositorio falló','error');
+else toast((res&&res.message)||'Conexión con el repositorio verificada','success');
+}catch(e){toast(e.message||'No se pudo probar la conexión','error');}
+}
+// ---- Diagnósticos ----
+async function saveDiagnosticsSection(){
+if(!s.tenantId)return;
+try{
+const el=id=>document.getElementById(id);
+const raw=(el('cfg-diag-budget').value||'').trim();
+const parsed=parseInt(raw,10);
+const budget=raw&&!isNaN(parsed)?Math.min(500,Math.max(1,parsed)):null;
+await patchTenantPath('/config/diagnostics',{blockedTables:[...diagBlockedTables],allowSensitiveTables:el('cfg-diag-sensitive').checked,maxDiagnosticQueriesPerIncident:budget});
+toast('Diagnósticos guardados','success');
+}catch(e){toast(e.message,'error');}
+}
+// ---- LLM (solo SelfHosted) ----
+function buildLlmPayload(){return{provider:document.getElementById('cfg-llm-provider').value||'openai',model:document.getElementById('cfg-llm-model').value||'gpt-4',temperature:parseFloat(document.getElementById('cfg-llm-temp').value)||0.7,topP:null,maxOutputTokens:parseInt(document.getElementById('cfg-llm-max-out').value,10)||2000};}
+async function saveLlmSection(){if(!s.tenantId)return;try{await patchTenantPath('/config/llm',buildLlmPayload());toast('LLM guardado','success');}catch(e){toast(e.message,'error');}}
 function resetConfig(){
 lc();
 toast('Datos recargados desde servidor','info');
@@ -872,6 +991,7 @@ function updateOperatingModePills(activeMode) {
   s.operatingMode = mode;
   const sel = document.getElementById('cfg-operating-mode');
   if (sel) sel.value = mode;
+  setOpModeRadio(mode);
   const modeTips = {
     Shadow: 'Modo Shadow (POC 14d): el agente diagnostica, propone fixes y simula playbooks sin ejecutar escrituras en producción.',
     Assisted: 'Modo Assisted: el agente diagnostica con evidencia multi-fuente y solicita aprobación humana antes de aplicar cambios.',

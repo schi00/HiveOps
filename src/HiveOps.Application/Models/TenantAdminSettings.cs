@@ -13,6 +13,14 @@ public sealed class TenantAdminSettings
     public WhatsAppChannelSettings WhatsApp { get; set; } = new();
     public OutboundWebhookSettings OutboundWebhook { get; set; } = new();
     public List<CustomMetricDefinition> CustomMetrics { get; set; } = [];
+
+    /// <summary>
+    /// DataProtection-encrypted git access token for the tenant's deploy repository.
+    /// Lives outside <see cref="RuntimeConfiguration"/> so GET /config never returns it;
+    /// only the ciphertext is ever persisted/exposed, never the plaintext token.
+    /// </summary>
+    public string? GitAccessTokenProtected { get; set; }
+
     public TenantConfiguration RuntimeConfiguration { get; set; } = TenantConfiguration.CreateDefault();
 }
 

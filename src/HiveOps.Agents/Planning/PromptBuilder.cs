@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+using HiveOps.Application.Configuration;
 using HiveOps.Application.Interfaces;
 
 namespace HiveOps.Agents.Planning;
@@ -10,10 +12,12 @@ public interface IPromptBuilder
 public sealed class PromptBuilder : IPromptBuilder
 {
     private readonly ITenantConfigService _tenantConfigService;
+    private readonly IOptions<HiveOpsDeploymentOptions> _deploymentOptions;
 
-    public PromptBuilder(ITenantConfigService tenantConfigService)
+    public PromptBuilder(ITenantConfigService tenantConfigService, IOptions<HiveOpsDeploymentOptions> deploymentOptions)
     {
         _tenantConfigService = tenantConfigService;
+        _deploymentOptions = deploymentOptions;
     }
 
     public async Task<string> BuildPlannerPromptAsync(AgentPlannerContext context, CancellationToken ct = default)
@@ -30,13 +34,19 @@ public sealed class PromptBuilder : IPromptBuilder
         var businessDescription = config.Business.Description ?? "";
         var toneProfile = config.Business.ToneProfile ?? "friendly";
 
+        // In SaaS mode the tenant's configured model is ignored (platform LLM is used),
+        // so only advertise the preferred LLM hint for self-hosted deployments.
+        var llmHint = _deploymentOptions.Value.Mode == HiveOpsDeploymentMode.SelfHosted
+                      && !string.IsNullOrWhiteSpace(llmModel)
+            ? $"Preferred LLM: {llmProvider} / {llmModel}\n"
+            : "";
+
         var header = string.IsNullOrWhiteSpace(customPrompt)
             ? $"""
             You are a conversational agent for {businessName}.
             {(string.IsNullOrWhiteSpace(businessDescription) ? "" : $"Business context: {businessDescription}\n")}Conversational tone: {toneProfile} (natural, not robotic)
             Company tone preference: {tone}
-            {(string.IsNullOrWhiteSpace(llmModel) ? "" : $"Preferred LLM: {llmProvider} / {llmModel}\n")}
-            Goal: Help users report and resolve technical incidents and support requests naturally.
+            {llmHint}Goal: Help users report and resolve technical incidents and support requests naturally.
             IMPORTANT: this is a SUPPORT agent. If the user reports a problem, error, wrong data,
             or something "not working", you MUST call the analyze_incident tool instead of
             answering conversationally. Never claim you took an action you did not take.
@@ -49,8 +59,7 @@ public sealed class PromptBuilder : IPromptBuilder
             Business name: {businessName}
             {(string.IsNullOrWhiteSpace(businessDescription) ? "" : $"Business context: {businessDescription}\n")}Conversational tone: {toneProfile}
             Tenant tone: {tone}
-            {(string.IsNullOrWhiteSpace(llmModel) ? "" : $"Preferred LLM: {llmProvider} / {llmModel}\n")}
-
+            {llmHint}
             """;
 
         // Tenant policy rules: tell the agent the tenant's operating limits up

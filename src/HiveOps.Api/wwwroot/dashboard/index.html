@@ -1323,66 +1323,187 @@ html.light .by-hive-badge {
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-2xl font-bold">Configuración de la Cuenta</h2>
         <div class="flex items-center gap-2">
-          <button id="cfg-adv-toggle" type="button" onclick="toggleAdvancedConfig()" class="btn-secondary px-3 py-1.5 rounded-xl text-xs">Mostrar avanzado (LLM · Deploy)</button>
+          <button id="cfg-adv-toggle" type="button" onclick="toggleAdvancedConfig()" class="btn-secondary px-3 py-1.5 rounded-xl text-xs">Mostrar avanzado</button>
           <span id="cfg-schema-banner" class="text-xs px-3 py-1 rounded-full hive-card border" style="color:var(--text-tertiary)">Schema —</span>
         </div>
       </div>
-      <p class="text-sm" style="color:var(--text-secondary)">Opciones esenciales primero. Cada tarjeta se guarda de forma independiente; la configuración técnica avanzada queda plegada.</p>
+      <p class="text-sm" style="color:var(--text-secondary)">Cada tarjeta se guarda por separado — tocá lo que necesites y presioná su botón Guardar.</p>
 
-      <!-- Presets -->
+      <!-- Card A: Asistente (personalidad y mensajes) -->
       <div class="hive-card p-6">
-        <h3 class="font-semibold text-lg mb-4">Preconfiguración rápida (LLM)</h3>
+        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+          <div>
+            <h3 class="font-semibold text-lg">Asistente</h3>
+            <p class="text-xs mt-0.5" style="color:var(--text-tertiary)">Cómo se presenta y cómo habla tu asistente con los clientes.</p>
+          </div>
+          <button type="button" onclick="saveAssistantSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar</button>
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button id="preset-basic" type="button" onclick="applyPreset('basic')" class="hive-card p-4 text-left hover:border-cyan-500/50 transition-all">
-            <div class="font-semibold mb-2" style="color:var(--text-primary)">Básico</div>
-            <div class="text-sm" style="color:var(--text-secondary)">Modelo rápido, menor costo</div>
-          </button>
-          <button id="preset-standard" type="button" onclick="applyPreset('standard')" class="hive-card p-4 text-left hover:border-cyan-500/50 transition-all">
-            <div class="font-semibold mb-2" style="color:var(--text-primary)">Estándar</div>
-            <div class="text-sm" style="color:var(--text-secondary)">Equilibrio recomendado</div>
-          </button>
-          <button id="preset-advanced" type="button" onclick="applyPreset('advanced')" class="hive-card p-4 text-left hover:border-cyan-500/50 transition-all">
-            <div class="font-semibold mb-2" style="color:var(--text-primary)">Avanzado</div>
-            <div class="text-sm" style="color:var(--text-secondary)">Más temperatura/tokens</div>
-          </button>
+          <div>
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Nombre del asistente</label>
+            <input id="cfg-assistant-name" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="Ej: Sofía"/>
+          </div>
+          <div>
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Tono</label>
+            <select id="cfg-tone" class="input-field w-full px-3 py-2.5 rounded-xl text-sm">
+              <option value="Profesional">Profesional</option>
+              <option value="Amigable">Amigable</option>
+              <option value="Directo">Directo</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Idioma</label>
+            <select id="cfg-language" class="input-field w-full px-3 py-2.5 rounded-xl text-sm">
+              <option value="es-AR">Español (Argentina)</option>
+              <option value="es-ES">Español</option>
+              <option value="en">English</option>
+              <option value="pt-BR">Português</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Mensaje de bienvenida</label>
+            <textarea id="cfg-msg-welcome" rows="3" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="¡Hola! Soy el asistente de…"></textarea>
+          </div>
+          <div>
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Cuando no entiende</label>
+            <textarea id="cfg-msg-fallback" rows="3" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="Perdón, no entendí. ¿Podés reformular?"></textarea>
+          </div>
+          <div>
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Al derivar a humano</label>
+            <textarea id="cfg-msg-handoff" rows="3" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="Te comunico con una persona del equipo…"></textarea>
+          </div>
         </div>
       </div>
 
-      <!-- Agent runtime -->
+      <!-- Card B: Modo de operación -->
       <div id="cfg-runtime-card" class="hive-card p-6">
         <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
           <div>
-            <h3 class="font-semibold text-lg">Runtime del agente &amp; Modo de Autonomía</h3>
-            <p class="text-xs mt-0.5" style="color:var(--text-tertiary)">Controlá si el AI Support Engineer opera en modo piloto sin escritura (Shadow), asistido por humano o autónomo.</p>
+            <h3 class="font-semibold text-lg">Modo de operación</h3>
+            <p class="text-xs mt-0.5" style="color:var(--text-tertiary)">Decidí cuánta libertad tiene el asistente para actuar sobre tus sistemas.</p>
           </div>
-          <button type="button" onclick="saveAgentRuntime()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar runtime</button>
+          <button type="button" onclick="saveOpMode()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar</button>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-agent-enabled" type="checkbox" class="accent-cyan-500"/> Agente habilitado</label>
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-planner" type="checkbox" class="accent-cyan-500"/> Planner LLM</label>
-          <div class="md:col-span-2">
-            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Modo Operativo (AI Support Engineer)</label>
-            <select id="cfg-operating-mode" class="input-field w-full px-3 py-2.5 rounded-xl text-sm">
-              <option value="Shadow">Shadow (POC 14 días — Solo lectura: investiga y calcula ROI sin tocar datos ni abrir PRs)</option>
-              <option value="Assisted">Assisted (Copiloto — Propone fixes de DB/código y pide siempre aprobación humana 1-Click)</option>
-              <option value="Autonomous">Autonomous (Autónomo — Ejecuta playbooks y fixes seguros dentro de los umbrales)</option>
-            </select>
+        <label class="flex items-center gap-2 text-sm cursor-pointer mb-4"><input id="cfg-agent-enabled" type="checkbox" class="accent-cyan-500"/> Asistente activado</label>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <label class="cfg-op-card p-4 rounded-xl border cursor-pointer transition-all" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+            <input type="radio" name="cfg-op-mode" value="Shadow" class="hidden" onchange="syncOpModeCards()"/>
+            <div class="font-semibold text-sm mb-1" style="color:var(--text-primary)">Observador</div>
+            <div class="text-xs" style="color:var(--text-secondary)">Analiza y propone, nunca ejecuta</div>
+          </label>
+          <label class="cfg-op-card p-4 rounded-xl border cursor-pointer transition-all" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+            <input type="radio" name="cfg-op-mode" value="Assisted" class="hidden" onchange="syncOpModeCards()"/>
+            <div class="font-semibold text-sm mb-1" style="color:var(--text-primary)">Asistido</div>
+            <div class="text-xs" style="color:var(--text-secondary)">Propone y ejecuta solo con aprobación humana</div>
+          </label>
+          <label class="cfg-op-card p-4 rounded-xl border cursor-pointer transition-all" style="background:var(--bg-tertiary);border-color:var(--border-color)">
+            <input type="radio" name="cfg-op-mode" value="Autonomous" class="hidden" onchange="syncOpModeCards()"/>
+            <div class="font-semibold text-sm mb-1" style="color:var(--text-primary)">Autónomo</div>
+            <div class="text-xs" style="color:var(--text-secondary)">Ejecuta remedios permitidos solo</div>
+          </label>
+        </div>
+        <p class="text-xs mt-3" style="color:var(--text-tertiary)">Cambiá el modo desde el panel principal también — ambos lugares escriben lo mismo.</p>
+      </div>
+
+      <!-- Card C: Reglas del agente -->
+      <div id="cfg-policies-card" class="hive-card p-6">
+        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+          <div>
+            <h3 class="font-semibold text-lg">Reglas del agente</h3>
+            <p class="text-xs mt-1" style="color:var(--text-tertiary)">Se aplican en orden — gana la última regla que coincida. Poné las reglas generales arriba y las excepciones abajo.</p>
           </div>
-          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Planner version</label>
-            <input id="cfg-planner-version" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" value="v1"/></div>
-          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Tono conversacional</label>
-            <input id="cfg-tone" type="text" placeholder="sales, soporte..." class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
-          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Pasos máx. planner</label>
-            <input id="cfg-max-steps" type="number" min="1" max="8" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
+        </div>
+        <div id="cfg-policies-list" class="space-y-2 mb-4"></div>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input id="cfg-policy-input" type="text" class="input-field flex-1 px-3 py-2 rounded-xl text-sm" placeholder='Escribí una regla en palabras, ej: "Nunca modifiques las tablas de pagos"' onkeydown="if(event.key==='Enter')interpretPolicy()"/>
+          <button type="button" onclick="interpretPolicy()" class="btn-secondary px-4 py-2 rounded-xl text-xs">Interpretar</button>
+        </div>
+        <div class="flex flex-wrap gap-2 mt-2.5">
+          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Nunca modifiques las tablas de pagos</button>
+          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Los cambios en facturación requieren aprobación</button>
+          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Si hay registros duplicados podés eliminarlos</button>
+          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Los fines de semana solo diagnóstico, nada de cambios</button>
+          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Si el ticket es crítico escalá a un humano</button>
+        </div>
+        <div id="cfg-policy-preview" class="hidden mt-3 p-3 rounded-xl border" style="background:var(--bg-tertiary);border-color:var(--border-color)"></div>
+      </div>
+
+      <!-- Card D: Canal WhatsApp -->
+      <div class="hive-card p-6">
+        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+          <div>
+            <h3 class="font-semibold text-lg">Canal WhatsApp</h3>
+            <p class="text-xs mt-0.5" style="color:var(--text-tertiary)">Conectá el número de WhatsApp Business desde el que responde tu asistente.</p>
+          </div>
+          <button type="button" onclick="saveWhatsAppSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar</button>
+        </div>
+        <div class="space-y-4">
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-wa-enabled" type="checkbox" class="accent-cyan-500"/> Canal WhatsApp habilitado</label>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="text-sm block mb-1" style="color:var(--text-secondary)">Número visible (ej: +54 9 11 …)</label>
+              <input id="cfg-wa-phone" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="+54 9 11 5555-5555"/>
+            </div>
+            <div>
+              <label class="text-sm block mb-1" style="color:var(--text-secondary)">Phone Number ID de Meta</label>
+              <input id="cfg-wa-phoneid" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm font-mono" placeholder="1234567890"/>
+            </div>
+            <div class="md:col-span-2">
+              <label id="cfg-wa-token-state" class="text-sm block mb-1" style="color:var(--text-secondary)">Token de acceso</label>
+              <input id="cfg-wa-token" type="password" autocomplete="off" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="••••••••"/>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-wa-buttons" type="checkbox" class="accent-cyan-500"/> Botones interactivos</label>
+            <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-wa-menu" type="checkbox" class="accent-cyan-500"/> Menú interactivo</label>
+          </div>
         </div>
       </div>
 
-      <!-- ChatOps & Outbound Webhooks (Slack / Teams / HTTP) -->
+      <!-- Card E: Derivación a humanos -->
+      <div class="hive-card p-6">
+        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+          <div>
+            <h3 class="font-semibold text-lg">Derivación a humanos</h3>
+            <p class="text-xs mt-0.5" style="color:var(--text-tertiary)">Cuándo el asistente le pasa la conversación a una persona de tu equipo.</p>
+          </div>
+          <button type="button" onclick="saveHandoffSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-ho-frust" type="checkbox" class="accent-cyan-500"/> Derivar cuando el cliente se frustra</label>
+          <div>
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Intentos fallidos antes de derivar</label>
+            <select id="cfg-ho-retries" class="input-field w-full px-3 py-2.5 rounded-xl text-sm">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3" selected>3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Avisar si un humano no responde en…</label>
+            <select id="cfg-ho-sla" class="input-field w-full px-3 py-2.5 rounded-xl text-sm">
+              <option value="15">15 minutos</option>
+              <option value="30" selected>30 minutos</option>
+              <option value="60">1 hora</option>
+              <option value="120">2 horas</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Palabras que fuerzan la derivación</label>
+            <div id="cfg-ho-keywords-chips" class="flex flex-wrap gap-2 mb-2"></div>
+            <input id="cfg-ho-keywords" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder='Escribí una palabra y presioná Enter (ej: "reembolso")' onkeydown="if(event.key==='Enter'){event.preventDefault();addHandoffKeyword();}"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card F: ChatOps & Outbound Webhooks (Slack / Teams / HTTP) -->
       <div id="cfg-chatops-card" class="hive-card p-6 border border-cyan-500/20">
         <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
           <div>
             <div class="flex items-center gap-2">
-              <h3 class="font-semibold text-lg">Aprobaciones ChatOps 1-Click (Slack · Microsoft Teams · Webhook)</h3>
+              <h3 class="font-semibold text-lg">Notificaciones y aprobaciones (ChatOps)</h3>
               <span id="cfg-wh-provider-badge" class="text-[11px] px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-mono">Auto-detect</span>
             </div>
             <p class="text-xs mt-1" style="color:var(--text-secondary)">Pegá la URL de tu Incoming Webhook de Slack o Microsoft Teams. HiveOps detecta el formato automáticamente y envía tarjetas con botones <strong>[Aprobar Fix]</strong> y <strong>[Rechazar]</strong> en 1 clic.</p>
@@ -1431,100 +1552,91 @@ html.light .by-hive-badge {
         </div>
       </div>
 
-      <!-- LLM (avanzado) -->
-      <div class="hive-card p-6 cfg-adv hidden">
-        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
-          <h3 class="font-semibold text-lg">Modelo LLM (proveedor)</h3>
-          <button type="button" onclick="saveLlmSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar LLM</button>
-        </div>
-        <p id="cfg-llm-selfhosted-hint" class="hidden text-xs mb-4 rounded-lg px-3 py-2" style="color:var(--text-secondary);background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2)">Self-hosted: el campo <strong>Modelo</strong> debe ser un id de OpenRouter (p. ej. <code class="text-cyan-500">meta-llama/llama-3.3-70b-instruct</code>), igual que en appsettings SemanticKernel.</p>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Proveedor</label>
-            <select id="cfg-llm-provider" class="input-field w-full px-3 py-2 rounded-xl text-sm"><option value="openai">openai</option><option value="azure">azure</option><option value="anthropic">anthropic</option></select></div>
-          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Modelo</label>
-            <input id="cfg-llm-model" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="gpt-4"/></div>
-          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Temperatura (0–2)</label>
-            <input id="cfg-llm-temp" type="range" min="0" max="2" step="0.05" value="0.7" class="w-full"/>
-            <div class="text-xs mt-1" style="color:var(--text-tertiary)"><span id="cfg-llm-temp-val">0.7</span></div></div>
-          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Max tokens salida</label>
-            <input id="cfg-llm-max-out" type="number" min="128" max="32000" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
-        </div>
-      </div>
-
-      <!-- Deploy / Git (avanzado) -->
-      <div class="hive-card p-6 cfg-adv hidden">
-        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
-          <h3 class="font-semibold text-lg">Deploy y Git (cuenta)</h3>
-          <button type="button" onclick="saveDeployGitSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar Deploy/Git</button>
-        </div>
-        <div class="space-y-3">
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-auto-deploy" type="checkbox" class="accent-cyan-500"/> Auto-deploy (workflow incidentes)</label>
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-manual-deploy" type="checkbox" class="accent-cyan-500"/> Permitir deploy manual (panel/plugin/aprobaciones)</label>
-          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">URL repo Git (opcional)</label>
-            <input id="cfg-git-url" type="url" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="https://github.com/org/repo"/></div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Rama por defecto</label><input id="cfg-git-branch" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
-            <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Subcarpeta (mono-repo)</label><input id="cfg-git-subpath" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="src/sandpit"/></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Escalation -->
+      <!-- Card G: Repositorio Git y deploys -->
       <div class="hive-card p-6">
-        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
-          <h3 class="font-semibold text-lg">Escalación</h3>
-          <button type="button" onclick="saveEscalationSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar escalación</button>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-esc-enable" type="checkbox" class="accent-cyan-500"/> Escalación habilitada</label>
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-esc-frust" type="checkbox" class="accent-cyan-500"/> Escalación por frustración</label>
-          <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Fallos planner antes de escalar</label>
-            <input id="cfg-esc-max-failures" type="number" min="1" max="10" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
-          <div class="md:col-span-2"><label class="text-sm block mb-1" style="color:var(--text-secondary)">Keywords (coma)</label>
-            <input id="cfg-esc-keywords" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="reembolso, cancelar,..."/></div>
-        </div>
-      </div>
-
-      <!-- Reglas del agente -->
-      <div id="cfg-policies-card" class="hive-card p-6">
         <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
           <div>
-            <h3 class="font-semibold text-lg">Reglas del agente</h3>
-            <p class="text-xs mt-1" style="color:var(--text-tertiary)">Se aplican en orden — gana la última regla que coincida. Poné las reglas generales arriba y las excepciones abajo.</p>
+            <h3 class="font-semibold text-lg">Repositorio Git y deploys</h3>
+            <p class="text-xs mt-0.5" style="color:var(--text-tertiary)">De dónde sale el código que HiveOps despliega cuando corrige un incidente.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="testDeployGit()" class="btn-secondary px-3.5 py-2 rounded-xl text-xs">Probar conexión</button>
+            <button type="button" onclick="saveDeployGitSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar</button>
           </div>
         </div>
-        <div id="cfg-policies-list" class="space-y-2 mb-4"></div>
-        <div class="flex flex-col sm:flex-row gap-2">
-          <input id="cfg-policy-input" type="text" class="input-field flex-1 px-3 py-2 rounded-xl text-sm" placeholder='Escribí una regla en palabras, ej: "Nunca modifiques las tablas de pagos"' onkeydown="if(event.key==='Enter')interpretPolicy()"/>
-          <button type="button" onclick="interpretPolicy()" class="btn-secondary px-4 py-2 rounded-xl text-xs">Interpretar</button>
+        <div class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-auto-deploy" type="checkbox" class="accent-cyan-500"/> Deploy automático cuando un incidente lo requiere</label>
+            <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-manual-deploy" type="checkbox" class="accent-cyan-500"/> Permitir deploy manual (panel / aprobaciones)</label>
+          </div>
+          <div>
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">URL del repositorio Git</label>
+            <input id="cfg-git-url" type="url" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="https://github.com/org/repo"/>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="text-sm block mb-1" style="color:var(--text-secondary)">Rama por defecto</label>
+              <input id="cfg-git-branch" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="main"/>
+            </div>
+            <div>
+              <label class="text-sm block mb-1" style="color:var(--text-secondary)">Token de acceso</label>
+              <input id="cfg-git-token" type="password" autocomplete="off" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="••••••••"/>
+              <p id="cfg-git-token-state" class="text-xs mt-1 hidden" style="color:var(--text-tertiary)"></p>
+            </div>
+          </div>
         </div>
-        <div class="flex flex-wrap gap-2 mt-2.5">
-          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Nunca modifiques las tablas de pagos</button>
-          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Los cambios en facturación requieren aprobación</button>
-          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Si hay registros duplicados podés eliminarlos</button>
-          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Los fines de semana solo diagnóstico, nada de cambios</button>
-          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Si el ticket es crítico escalá a un humano</button>
-        </div>
-        <div id="cfg-policy-preview" class="hidden mt-3 p-3 rounded-xl border" style="background:var(--bg-tertiary);border-color:var(--border-color)"></div>
       </div>
 
-      <!-- Channel -->
+      <!-- Card H: Diagnósticos del sistema -->
       <div class="hive-card p-6">
         <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
-          <h3 class="font-semibold text-lg">Canal WhatsApp (UI)</h3>
-          <button type="button" onclick="saveChannelSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar canal</button>
+          <div>
+            <h3 class="font-semibold text-lg">Diagnósticos del sistema</h3>
+            <p class="text-xs mt-0.5" style="color:var(--text-tertiary)">Qué tan lejos puede llegar el asistente cuando investiga tu base de datos.</p>
+          </div>
+          <button type="button" onclick="saveDiagnosticsSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar</button>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-wa-buttons" type="checkbox" class="accent-cyan-500"/> Botones interactivos</label>
-          <label class="flex items-center gap-2 text-sm cursor-pointer"><input id="cfg-wa-menu" type="checkbox" class="accent-cyan-500"/> Menú interactivo</label>
-          <label class="flex items-center gap-2 text-sm cursor-pointer md:col-span-2"><input id="cfg-wa-list-long" type="checkbox" class="accent-cyan-500"/> Lista larga cuando aplique</label>
-          <div><label class="text-sm block mb-1">Max botones rápidos (1–3)</label>
-            <input id="cfg-wa-max-qr" type="number" min="1" max="3" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
+        <div class="space-y-4">
+          <div class="max-w-xs">
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Máx. consultas de diagnóstico por incidente</label>
+            <input id="cfg-diag-budget" type="number" min="1" max="500" class="input-field w-full px-3 py-2 rounded-xl text-sm"/>
+            <p class="text-xs mt-1" style="color:var(--text-tertiary)">Vacío = límite de tu plan.</p>
+          </div>
+          <div>
+            <label class="text-sm block mb-1" style="color:var(--text-secondary)">Tablas que HiveOps nunca debe consultar</label>
+            <div id="cfg-diag-blocked-chips" class="flex flex-wrap gap-2 mb-2"></div>
+            <input id="cfg-diag-blocked" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm font-mono" placeholder='Fragmento de nombre o regex, ej: "password|token" — Enter para agregar' onkeydown="if(event.key==='Enter'){event.preventDefault();addDiagBlocked();}"/>
+          </div>
+          <label class="flex items-center gap-2 text-sm cursor-pointer p-3 rounded-xl border" style="color:#f87171;border-color:rgba(248,113,113,0.35);background:rgba(248,113,113,0.06)">
+            <input id="cfg-diag-sensitive" type="checkbox" class="accent-red-500"/> Permitir consultar tablas sensibles — desaconsejado
+          </label>
+        </div>
+      </div>
+
+      <!-- Card I: Avanzado (plegado) -->
+      <div class="hive-card p-6 cfg-adv hidden">
+        <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+          <h3 class="font-semibold text-lg">Modelo de IA (avanzado)</h3>
+          <button id="cfg-llm-save-btn" type="button" onclick="saveLlmSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar LLM</button>
+        </div>
+        <p id="cfg-llm-saas-note" class="hidden text-xs rounded-lg px-3 py-2" style="color:var(--text-secondary);background:rgba(34,211,238,0.06);border:1px solid rgba(34,211,238,0.18)">El modelo de IA es gestionado por HiveOps según tu plan.</p>
+        <div id="cfg-llm-fields">
+          <p id="cfg-llm-selfhosted-hint" class="text-xs mb-4 rounded-lg px-3 py-2" style="color:var(--text-secondary);background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2)">Self-hosted: el campo <strong>Modelo</strong> debe ser un id de OpenRouter (p. ej. <code class="text-cyan-500">meta-llama/llama-3.3-70b-instruct</code>), igual que en appsettings SemanticKernel.</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Proveedor</label>
+              <select id="cfg-llm-provider" class="input-field w-full px-3 py-2 rounded-xl text-sm"><option value="openai">openai</option><option value="azure">azure</option><option value="anthropic">anthropic</option></select></div>
+            <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Modelo</label>
+              <input id="cfg-llm-model" type="text" class="input-field w-full px-3 py-2 rounded-xl text-sm" placeholder="gpt-4"/></div>
+            <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Temperatura (0–2)</label>
+              <input id="cfg-llm-temp" type="range" min="0" max="2" step="0.05" value="0.7" class="w-full"/>
+              <div class="text-xs mt-1" style="color:var(--text-tertiary)"><span id="cfg-llm-temp-val">0.7</span></div></div>
+            <div><label class="text-sm block mb-1" style="color:var(--text-secondary)">Max tokens salida</label>
+              <input id="cfg-llm-max-out" type="number" min="128" max="32000" class="input-field w-full px-3 py-2 rounded-xl text-sm"/></div>
+          </div>
         </div>
       </div>
 
       <div class="flex flex-wrap gap-3">
-        <button type="button" onclick="saveAllConfigSections()" class="btn-primary px-6 py-3 rounded-xl text-sm">Guardar todas las secciones</button>
         <button type="button" onclick="resetConfig()" class="btn-secondary px-6 py-3 rounded-xl text-sm">Recargar desde servidor</button>
       </div>
     </div>

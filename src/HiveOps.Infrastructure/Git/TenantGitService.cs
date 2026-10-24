@@ -25,6 +25,11 @@ public sealed class TenantGitService : IGitService
         @"^[a-zA-Z0-9._\-/]+$",
         RegexOptions.Compiled);
 
+    /// <summary>Matches embedded credentials (<c>scheme://userinfo@</c>) so they can be masked in logs/errors.</summary>
+    private static readonly Regex UrlCredentialsPattern = new(
+        @"://[^/\s]+@",
+        RegexOptions.Compiled);
+
     private readonly IConfiguration _configuration;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IOptions<HiveOpsDeploymentOptions> _deploymentOptions;
@@ -115,6 +120,53 @@ public sealed class TenantGitService : IGitService
 
     public Task<string> GetWorkspacePathAsync(Guid tenantId, CancellationToken ct = default) =>
         ResolveRepositoryPathAsync(tenantId, ct);
+
+    /// <summary>
+    /// Connectivity probe for the tenant-facing deploy-git settings screen: runs
+    /// <c>git ls-remote --heads &lt;url&gt; &lt;branch&gt;</c> with the tenant's stored
+    /// access token injected (https URLs only). Never exposes the token in the
+    /// returned message.
+    /// </summary>
+    public async Task<(bool Ok, string Message)> TestRepositoryAccessAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var configs = scope.ServiceProvider.GetRequiredService<ITenantConfigService>();
+            var cfg = await configs.GetConfigurationAsync(tenantId, ct);
+
+            var url = cfg.DeployGit.GitRepositoryUrl?.Trim();
+            if (string.IsNullOrWhiteSpace(url))
+                return (false, "No hay un repositorio Git configurado para este tenant.");
+
+            var branch = string.IsNullOrWhiteSpace(cfg.DeployGit.GitDefaultBranch)
+                ? "main"
+                : cfg.DeployGit.GitDefaultBranch.Trim();
+
+            var remoteUrl = await BuildAuthenticatedRemoteUrlAsync(configs, tenantId, url, ct);
+
+            var workingDir = _configuration["Git:WorkspacesRoot"];
+            if (string.IsNullOrWhiteSpace(workingDir))
+                workingDir = Path.GetTempPath();
+            Directory.CreateDirectory(workingDir);
+
+            await RunGitAsync(workingDir, ["ls-remote", "--heads", remoteUrl, branch], ct);
+            return (true, "Conexión OK — repo accesible");
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "git ls-remote connectivity test failed for tenant {TenantId}", tenantId);
+            var detail = ex.Message.Trim();
+            if (detail.Length > 300)
+                detail = detail[..300] + "...";
+            return (false, $"No se pudo acceder al repositorio: {detail}");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Deploy-git connectivity test failed for tenant {TenantId}", tenantId);
+            return (false, "No se pudo ejecutar la prueba de conexión Git.");
+        }
+    }
 
     public async Task<IReadOnlyList<GitCommitEvidence>> GetRecentCommitsForFilesAsync(
         Guid tenantId, IReadOnlyList<string> relativePaths, int maxCount = 5, CancellationToken ct = default)
@@ -258,6 +310,9 @@ public sealed class TenantGitService : IGitService
             ? "main"
             : cfg.DeployGit.GitDefaultBranch.Trim();
 
+        // Inject the tenant's stored access token (https only; ssh/file URLs pass through).
+        var remoteUrl = await BuildAuthenticatedRemoteUrlAsync(configs, tenantId, url, ct);
+
         Directory.CreateDirectory(workspacesRoot);
         var localPath = Path.Combine(workspacesRoot, tenantId.ToString("N"));
 
@@ -266,10 +321,13 @@ public sealed class TenantGitService : IGitService
             if (Directory.Exists(localPath))
                 Directory.Delete(localPath, recursive: true);
 
-            await RunGitCloneAsync(workspacesRoot, url, tenantId.ToString("N"), branch, ct);
+            await RunGitCloneAsync(workspacesRoot, remoteUrl, tenantId.ToString("N"), branch, ct);
         }
         else
         {
+            // Refresh origin with the current authenticated URL so fetches/pushes keep
+            // working after token rotation (token lives only in .git/config remote URL).
+            await RunGitAsync(localPath, ["remote", "set-url", "origin", remoteUrl], ct);
             await RunGitAsync(localPath, ["fetch", "origin"], ct);
             try
             {
@@ -284,6 +342,42 @@ public sealed class TenantGitService : IGitService
         return localPath;
     }
 
+    /// <summary>
+    /// Builds the remote URL with the tenant's deploy git token injected as
+    /// <c>x-access-token</c> credentials (GitHub convention). Only http(s) URLs get
+    /// the token — ssh and file paths pass through untouched.
+    /// </summary>
+    private static async Task<string> BuildAuthenticatedRemoteUrlAsync(
+        ITenantConfigService configs, Guid tenantId, string url, CancellationToken ct)
+    {
+        if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            return url;
+
+        var token = await configs.GetDeployGitTokenAsync(tenantId, ct);
+        if (string.IsNullOrEmpty(token))
+            return url;
+
+        var schemeEnd = url.IndexOf("://", StringComparison.Ordinal);
+        if (schemeEnd < 0)
+            return url;
+
+        var authorityStart = schemeEnd + 3;
+        var pathStart = url.IndexOf('/', authorityStart);
+        var authority = pathStart < 0 ? url[authorityStart..] : url[authorityStart..pathStart];
+        var rest = pathStart < 0 ? string.Empty : url[pathStart..];
+
+        // Replace any pre-existing userinfo so we never produce a malformed URL.
+        var atIndex = authority.LastIndexOf('@');
+        var hostPort = atIndex >= 0 ? authority[(atIndex + 1)..] : authority;
+
+        return $"{url[..authorityStart]}x-access-token:{Uri.EscapeDataString(token)}@{hostPort}{rest}";
+    }
+
+    /// <summary>Masks <c>scheme://userinfo@</c> credentials so tokens never reach logs or error messages.</summary>
+    private static string MaskUrlCredentials(string text)
+        => UrlCredentialsPattern.Replace(text, "://***@");
+
     private async Task RunGitCloneAsync(string workspacesRoot, string url, string folderName, string branch, CancellationToken ct)
     {
         try
@@ -292,7 +386,7 @@ public sealed class TenantGitService : IGitService
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Branch-aware clone failed; falling back to full clone for {Url}", url);
+            _logger.LogWarning(ex, "Branch-aware clone failed; falling back to full clone for {Url}", MaskUrlCredentials(url));
             if (Directory.Exists(Path.Combine(workspacesRoot, folderName)))
                 Directory.Delete(Path.Combine(workspacesRoot, folderName), recursive: true);
 
@@ -365,7 +459,7 @@ public sealed class TenantGitService : IGitService
         var error = await process.StandardError.ReadToEndAsync(ct);
 
         if (process.ExitCode != 0)
-            throw new InvalidOperationException($"Git command failed: {error.Trim()}");
+            throw new InvalidOperationException($"Git command failed: {MaskUrlCredentials(error.Trim())}");
 
         return output;
     }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -19,21 +20,27 @@ public sealed class TenantConfigService : ITenantConfigService
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 
+    /// <summary>DataProtection purpose isolating tenant deploy-git tokens from other protected payloads.</summary>
+    internal const string DeployGitTokenProtectionPurpose = "HiveOps.TenantGitToken";
+
     private readonly AppDbContext _db;
     private readonly IMemoryCache _cache;
     private readonly ILogger<TenantConfigService> _logger;
     private readonly ITenantConfigurationAuditLogger _auditLogger;
+    private readonly IDataProtector _gitTokenProtector;
 
     public TenantConfigService(
         AppDbContext db,
         IMemoryCache cache,
         ILogger<TenantConfigService> logger,
-        ITenantConfigurationAuditLogger auditLogger)
+        ITenantConfigurationAuditLogger auditLogger,
+        IDataProtectionProvider dataProtectionProvider)
     {
         _db = db;
         _cache = cache;
         _logger = logger;
         _auditLogger = auditLogger;
+        _gitTokenProtector = dataProtectionProvider.CreateProtector(DeployGitTokenProtectionPurpose);
     }
 
     public Task<TenantConfiguration> UpsertConfigurationAsync(Guid tenantId, TenantConfiguration configuration, CancellationToken ct = default)
@@ -201,6 +208,95 @@ public sealed class TenantConfigService : ITenantConfigService
         var current = await LoadEffectiveFromDatabaseAsync(tenantId, ct);
         current.Diagnostics = patch;
         return await UpsertConfigurationAsync(tenantId, current, audit ?? new TenantConfigAuditInfo(null, nameof(DiagnosticsConfig), "Patch diagnostics"), ct);
+    }
+
+    public async Task<TenantAdminSettings> GetAdminSettingsAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        var tenant = await _db.Tenants
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == tenantId && t.IsActive, ct);
+
+        if (tenant is null)
+            return new TenantAdminSettings();
+
+        var settings = ParseSettings(tenant.ConfigJson);
+        TenantConfigurationMigrator.EnsureMigrated(ref settings);
+        return settings;
+    }
+
+    public async Task<TenantAdminSettings> SaveAdminSettingsAsync(Guid tenantId, TenantAdminSettings settings, TenantConfigAuditInfo? audit, CancellationToken ct = default)
+    {
+        await InvalidateAsync(tenantId, ct);
+
+        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId && t.IsActive, ct)
+            ?? throw new InvalidOperationException("Tenant not found or inactive.");
+
+        var current = ParseSettings(tenant.ConfigJson);
+        TenantConfigurationMigrator.EnsureMigrated(ref current);
+
+        // Admin-settings saves must never touch the runtime configuration section:
+        // always restore the stored envelope's RuntimeConfiguration verbatim.
+        settings.RuntimeConfiguration = current.RuntimeConfiguration;
+        settings.SchemaVersion = TenantConfigurationSchema.Current;
+
+        tenant.ConfigJson = JsonSerializer.Serialize(settings, JsonOptions);
+
+        await _db.SaveChangesAsync(ct);
+        await InvalidateAsync(tenantId, ct);
+        _logger.LogInformation("Tenant admin settings updated for tenant {TenantId}", tenantId);
+
+        if (audit is not null)
+        {
+            _auditLogger.Record(new TenantConfigurationAuditPayload(
+                tenantId,
+                audit.Section,
+                audit.Subject,
+                audit.Action ?? "Save admin settings"));
+        }
+
+        return settings;
+    }
+
+    public async Task<bool> HasDeployGitTokenAsync(Guid tenantId, CancellationToken ct = default)
+        => !string.IsNullOrWhiteSpace((await GetAdminSettingsAsync(tenantId, ct)).GitAccessTokenProtected);
+
+    public async Task<string?> GetDeployGitTokenAsync(Guid tenantId, CancellationToken ct = default)
+    {
+        var settings = await GetAdminSettingsAsync(tenantId, ct);
+        if (string.IsNullOrWhiteSpace(settings.GitAccessTokenProtected))
+            return null;
+
+        try
+        {
+            return _gitTokenProtector.Unprotect(settings.GitAccessTokenProtected);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not unprotect deploy git token for tenant {TenantId}", tenantId);
+            return null;
+        }
+    }
+
+    public async Task SetDeployGitTokenAsync(Guid tenantId, string? plaintextToken, CancellationToken ct = default)
+    {
+        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == tenantId && t.IsActive, ct)
+            ?? throw new InvalidOperationException("Tenant not found or inactive.");
+
+        var settings = ParseSettings(tenant.ConfigJson);
+        TenantConfigurationMigrator.EnsureMigrated(ref settings);
+
+        settings.GitAccessTokenProtected = string.IsNullOrWhiteSpace(plaintextToken)
+            ? null
+            : _gitTokenProtector.Protect(plaintextToken.Trim());
+        settings.SchemaVersion = TenantConfigurationSchema.Current;
+
+        tenant.ConfigJson = JsonSerializer.Serialize(settings, JsonOptions);
+
+        await _db.SaveChangesAsync(ct);
+        await InvalidateAsync(tenantId, ct);
+        _logger.LogInformation(
+            "Deploy git token {Action} for tenant {TenantId}",
+            string.IsNullOrWhiteSpace(plaintextToken) ? "cleared" : "updated", tenantId);
     }
 
     public Task InvalidateAsync(Guid tenantId, CancellationToken ct = default)

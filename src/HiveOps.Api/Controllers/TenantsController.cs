@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,8 @@ using HiveOps.Application.Configuration;
 using HiveOps.Application.Interfaces;
 using HiveOps.Application.Models;
 using HiveOps.Application.Policies;
+using HiveOps.Domain.Interfaces;
+using HiveOps.Infrastructure.Git;
 using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
 using HiveOps.Infrastructure.Services;
@@ -108,15 +111,63 @@ public sealed class TenantsController : ControllerBase
         return Ok(await _configService.PatchLlmConfigAsync(id, body, Audit(nameof(LlmConfig)), ct));
     }
 
-    [HttpPatch("{id:guid}/config/deploy-git")]
-    public async Task<ActionResult<TenantConfiguration>> PatchTenantDeployGit(Guid id, [FromBody] DeployGitConfig body, CancellationToken ct)
+    [HttpGet("{id:guid}/config/deploy-git")]
+    public async Task<IActionResult> GetTenantDeployGit(Guid id, CancellationToken ct)
     {
         if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
         var cfg = await _configService.GetConfigurationAsync(id, ct);
-        cfg.DeployGit = body;
+        var hasToken = await _configService.HasDeployGitTokenAsync(id, ct);
+        return Ok(new
+        {
+            autoDeployEnabled = cfg.DeployGit.AutoDeployEnabled,
+            manualDeployAllowed = cfg.DeployGit.ManualDeployAllowed,
+            gitRepositoryUrl = cfg.DeployGit.GitRepositoryUrl,
+            gitDefaultBranch = cfg.DeployGit.GitDefaultBranch,
+            hasAccessToken = hasToken
+        });
+    }
+
+    [HttpPatch("{id:guid}/config/deploy-git")]
+    public async Task<ActionResult<TenantConfiguration>> PatchTenantDeployGit(Guid id, [FromBody] DeployGitPatchRequest body, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        if (body is null) return BadRequest(new { errors = new[] { "Payload requerido." } });
+
+        var patch = new DeployGitConfig
+        {
+            AutoDeployEnabled = body.AutoDeployEnabled,
+            ManualDeployAllowed = body.ManualDeployAllowed,
+            GitRepositoryUrl = body.GitRepositoryUrl,
+            GitDefaultBranch = body.GitDefaultBranch,
+            WorkingDirectoryRelativePath = body.WorkingDirectoryRelativePath
+        };
+
+        var cfg = await _configService.GetConfigurationAsync(id, ct);
+        cfg.DeployGit = patch;
         var errors = TenantConfigurationValidator.Validate(cfg);
         if (errors.Count > 0) return BadRequest(new { errors });
-        return Ok(await _configService.PatchDeployGitConfigAsync(id, body, Audit(nameof(DeployGitConfig)), ct));
+
+        var result = await _configService.PatchDeployGitConfigAsync(id, patch, Audit(nameof(DeployGitConfig)), ct);
+
+        // Git access token is stored encrypted outside RuntimeConfiguration; never echoed back.
+        if (!string.IsNullOrWhiteSpace(body.GitAccessToken))
+            await _configService.SetDeployGitTokenAsync(id, body.GitAccessToken.Trim(), ct);
+        else if (body.ClearGitAccessToken)
+            await _configService.SetDeployGitTokenAsync(id, null, ct);
+
+        return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/config/deploy-git/test")]
+    public async Task<IActionResult> TestTenantDeployGit(Guid id, [FromServices] IGitService gitService, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        if (gitService is not TenantGitService tenantGit)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new { ok = false, message = "La prueba de conexión Git no está disponible en este despliegue." });
+
+        var (ok, message) = await tenantGit.TestRepositoryAccessAsync(id, ct);
+        return ok ? Ok(new { ok, message }) : BadRequest(new { ok, message });
     }
 
     [HttpPatch("{id:guid}/config/policies")]
@@ -362,6 +413,190 @@ public sealed class TenantsController : ControllerBase
         return Ok(new { ok = true, message = "Evento de prueba enviado al webhook configurado." });
     }
 
+    // ── Friendly tenant admin settings (bot persona, messages, WhatsApp, handoff) ──
+
+    [HttpGet("{id:guid}/admin-settings")]
+    public async Task<ActionResult<TenantAdminSettingsDto>> GetAdminSettings(Guid id, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var tenantExists = await _db.Tenants.AsNoTracking().AnyAsync(t => t.Id == id, ct);
+        if (!tenantExists) return NotFound();
+
+        var settings = await _configService.GetAdminSettingsAsync(id, ct);
+        var businessConfig = await _db.BusinessConfigs
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.TenantId == id, ct);
+
+        return Ok(ToAdminSettingsDto(settings, businessConfig?.MaxRetryBeforeHandoff ?? 2));
+    }
+
+    [HttpPatch("{id:guid}/admin-settings")]
+    public async Task<ActionResult<TenantAdminSettingsDto>> PatchAdminSettings(Guid id, [FromBody] TenantAdminSettingsDto body, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        if (body is null) return BadRequest(new { errors = new[] { "Payload requerido." } });
+
+        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (tenant is null) return NotFound();
+
+        var errors = new List<string>();
+        var settings = await _configService.GetAdminSettingsAsync(id, ct);
+
+        if (body.Assistant is { } assistant)
+        {
+            if (assistant.Name is not null)
+            {
+                if (string.IsNullOrWhiteSpace(assistant.Name)) errors.Add("assistant.name no puede estar vacío.");
+                else settings.BotBehavior.AssistantName = assistant.Name.Trim();
+            }
+            if (assistant.Tone is not null)
+            {
+                if (string.IsNullOrWhiteSpace(assistant.Tone)) errors.Add("assistant.tone no puede estar vacío.");
+                else settings.BotBehavior.Tone = assistant.Tone.Trim();
+            }
+            if (assistant.Language is not null)
+            {
+                if (string.IsNullOrWhiteSpace(assistant.Language)) errors.Add("assistant.language no puede estar vacío.");
+                else settings.BotBehavior.ResponseLanguage = assistant.Language.Trim();
+            }
+        }
+
+        if (body.Messages is { } messages)
+        {
+            if (messages.Welcome is not null)
+            {
+                if (string.IsNullOrWhiteSpace(messages.Welcome)) errors.Add("messages.welcome no puede estar vacío.");
+                else settings.Phrases.WelcomeMessage = messages.Welcome.Trim();
+            }
+            if (messages.Fallback is not null)
+            {
+                if (string.IsNullOrWhiteSpace(messages.Fallback)) errors.Add("messages.fallback no puede estar vacío.");
+                else settings.Phrases.FallbackMessage = messages.Fallback.Trim();
+            }
+            if (messages.Handoff is not null)
+            {
+                if (string.IsNullOrWhiteSpace(messages.Handoff)) errors.Add("messages.handoff no puede estar vacío.");
+                else settings.Phrases.HumanHandoffMessage = messages.Handoff.Trim();
+            }
+        }
+
+        if (body.WhatsApp is { } wa)
+        {
+            if (wa.PhoneNumber is not null)
+                settings.WhatsApp.PhoneNumber = wa.PhoneNumber.Trim();
+            if (wa.PhoneNumberId is not null)
+                settings.WhatsApp.PhoneNumberId = wa.PhoneNumberId.Trim();
+            if (wa.Provider is not null && !string.IsNullOrWhiteSpace(wa.Provider))
+                settings.WhatsApp.Provider = wa.Provider.Trim();
+
+            if (!string.IsNullOrWhiteSpace(wa.AccessToken))
+            {
+                // Mirror AdminTenantsController access-token save semantics.
+                settings.WhatsApp.ApiKey = wa.AccessToken.Trim();
+                settings.WhatsApp.ApiKeyUpdatedAtUtc = DateTimeOffset.UtcNow;
+                if (string.IsNullOrWhiteSpace(settings.WhatsApp.Provider))
+                    settings.WhatsApp.Provider = "MetaCloud";
+                settings.WhatsApp.Enabled = !string.IsNullOrWhiteSpace(settings.WhatsApp.PhoneNumber);
+            }
+
+            // Explicit enabled flag wins over the token-side auto-enable above.
+            if (wa.Enabled.HasValue)
+                settings.WhatsApp.Enabled = wa.Enabled.Value;
+            if (wa.InteractiveButtons.HasValue)
+                settings.WhatsApp.EnableInteractiveButtons = wa.InteractiveButtons.Value;
+            if (wa.InteractiveMenu.HasValue)
+                settings.WhatsApp.EnableInteractiveMenu = wa.InteractiveMenu.Value;
+        }
+
+        int? maxRetries = null;
+        if (body.Handoff is { } handoff)
+        {
+            if (handoff.FrustrationEscalation.HasValue)
+                settings.BotBehavior.EnableFrustrationEscalation = handoff.FrustrationEscalation.Value;
+            if (handoff.TriggerKeywords is not null)
+                settings.BotBehavior.EscalationTriggerKeywords = handoff.TriggerKeywords
+                    .Where(k => !string.IsNullOrWhiteSpace(k))
+                    .Select(k => k.Trim())
+                    .Select(k => k.Length > 100 ? k[..100] : k)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Take(50)
+                    .ToList();
+            if (handoff.SlaMinutes.HasValue)
+                settings.BotBehavior.HumanSlaThresholdMinutes = Math.Clamp(handoff.SlaMinutes.Value, 5, 1440);
+            if (handoff.MaxRetriesBeforeHandoff.HasValue)
+                maxRetries = Math.Clamp(handoff.MaxRetriesBeforeHandoff.Value, 1, 10);
+        }
+
+        if (errors.Count > 0) return BadRequest(new { errors });
+
+        // Keep the BusinessConfigs table in sync — IncomingMessageHandler reads
+        // WelcomeMessage/FallbackMessage/MaxRetryBeforeHandoff from there.
+        var businessConfig = await _db.BusinessConfigs
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.TenantId == id, ct);
+
+        if (businessConfig is null)
+        {
+            businessConfig = new HiveOps.Domain.Entities.BusinessConfig
+            {
+                Id = Guid.NewGuid(),
+                TenantId = id,
+                WelcomeMessage = settings.Phrases.WelcomeMessage,
+                FallbackMessage = settings.Phrases.FallbackMessage,
+                MaxRetryBeforeHandoff = maxRetries ?? 2,
+                UpdatedAt = DateTimeOffset.UtcNow
+            };
+            _db.BusinessConfigs.Add(businessConfig);
+        }
+        else
+        {
+            businessConfig.WelcomeMessage = settings.Phrases.WelcomeMessage;
+            businessConfig.FallbackMessage = settings.Phrases.FallbackMessage;
+            if (maxRetries.HasValue)
+                businessConfig.MaxRetryBeforeHandoff = maxRetries.Value;
+            businessConfig.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        await _db.SaveChangesAsync(ct);
+
+        var saved = await _configService.SaveAdminSettingsAsync(id, settings, Audit("AdminSettings"), ct);
+        return Ok(ToAdminSettingsDto(saved, businessConfig.MaxRetryBeforeHandoff));
+    }
+
+    private static TenantAdminSettingsDto ToAdminSettingsDto(TenantAdminSettings s, int maxRetriesBeforeHandoff) => new()
+    {
+        Assistant = new AdminAssistantDto
+        {
+            Name = s.BotBehavior.AssistantName,
+            Tone = s.BotBehavior.Tone,
+            Language = s.BotBehavior.ResponseLanguage
+        },
+        Messages = new AdminMessagesDto
+        {
+            Welcome = s.Phrases.WelcomeMessage,
+            Fallback = s.Phrases.FallbackMessage,
+            Handoff = s.Phrases.HumanHandoffMessage
+        },
+        WhatsApp = new AdminWhatsAppDto
+        {
+            Enabled = s.WhatsApp.Enabled,
+            PhoneNumber = s.WhatsApp.PhoneNumber,
+            PhoneNumberId = s.WhatsApp.PhoneNumberId,
+            Provider = s.WhatsApp.Provider,
+            HasAccessToken = !string.IsNullOrWhiteSpace(s.WhatsApp.ApiKey),
+            AccessTokenUpdatedAtUtc = s.WhatsApp.ApiKeyUpdatedAtUtc,
+            InteractiveButtons = s.WhatsApp.EnableInteractiveButtons,
+            InteractiveMenu = s.WhatsApp.EnableInteractiveMenu
+        },
+        Handoff = new AdminHandoffDto
+        {
+            FrustrationEscalation = s.BotBehavior.EnableFrustrationEscalation,
+            TriggerKeywords = s.BotBehavior.EscalationTriggerKeywords,
+            MaxRetriesBeforeHandoff = maxRetriesBeforeHandoff,
+            SlaMinutes = s.BotBehavior.HumanSlaThresholdMinutes
+        }
+    };
+
     private TenantConfigAuditInfo Audit(string section) =>
         new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name, section);
 }
@@ -372,3 +607,67 @@ public sealed record InterpretPolicyRequest(string? Text);
 public sealed record AddPolicyRequest(string? Text, PolicyRule? Rule, string? InsertBeforeRuleId);
 public sealed record ReorderPoliciesRequest(List<string>? RuleIds);
 public sealed record TogglePolicyRequest(bool Active);
+
+/// <summary>
+/// PATCH body for <c>/config/deploy-git</c>: all <see cref="DeployGitConfig"/> fields plus
+/// write-only token handling. <see cref="GitAccessToken"/> (when non-empty) stores a new
+/// encrypted token; <see cref="ClearGitAccessToken"/> removes it. The token is never returned.
+/// </summary>
+public sealed class DeployGitPatchRequest
+{
+    public bool AutoDeployEnabled { get; set; } = true;
+    public bool ManualDeployAllowed { get; set; } = true;
+    public string? GitRepositoryUrl { get; set; }
+    public string GitDefaultBranch { get; set; } = "main";
+    public string? WorkingDirectoryRelativePath { get; set; }
+    public string? GitAccessToken { get; set; }
+    public bool ClearGitAccessToken { get; set; }
+}
+
+/// <summary>Friendly tenant-facing view of <see cref="TenantAdminSettings"/> (no secrets).</summary>
+public sealed class TenantAdminSettingsDto
+{
+    public AdminAssistantDto? Assistant { get; set; }
+    public AdminMessagesDto? Messages { get; set; }
+    public AdminWhatsAppDto? WhatsApp { get; set; }
+    public AdminHandoffDto? Handoff { get; set; }
+}
+
+public sealed class AdminAssistantDto
+{
+    public string? Name { get; set; }
+    public string? Tone { get; set; }
+    public string? Language { get; set; }
+}
+
+public sealed class AdminMessagesDto
+{
+    public string? Welcome { get; set; }
+    public string? Fallback { get; set; }
+    public string? Handoff { get; set; }
+}
+
+public sealed class AdminWhatsAppDto
+{
+    public bool? Enabled { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? PhoneNumberId { get; set; }
+    public string? Provider { get; set; }
+    /// <summary>GET-only: whether a WhatsApp access token is stored. The token itself is never returned.</summary>
+    public bool HasAccessToken { get; set; }
+    public DateTimeOffset? AccessTokenUpdatedAtUtc { get; set; }
+    public bool? InteractiveButtons { get; set; }
+    public bool? InteractiveMenu { get; set; }
+    /// <summary>PATCH-only: new WhatsApp access token. Applied only when non-empty; never serialized back.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AccessToken { get; set; }
+}
+
+public sealed class AdminHandoffDto
+{
+    public bool? FrustrationEscalation { get; set; }
+    public List<string>? TriggerKeywords { get; set; }
+    /// <summary>Maps to the BusinessConfigs table (real retry threshold used by IncomingMessageHandler).</summary>
+    public int? MaxRetriesBeforeHandoff { get; set; }
+    public int? SlaMinutes { get; set; }
+}
