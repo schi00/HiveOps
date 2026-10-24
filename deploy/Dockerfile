@@ -7,6 +7,9 @@ RUN dotnet publish src/HiveOps.Api/HiveOps.Api.csproj -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
+# git is required by TenantGitService (repo clone/ls-remote/deploy); openssh for ssh remotes
+RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 # aspnet:9.0 base image already ships the non-root `app` user (uid 1654)
 COPY --from=build /app/publish .
 RUN mkdir -p /app/data/dataprotection /tmp/hiveops-git-work && chown -R app:app /app/data /tmp/hiveops-git-work
