@@ -8,8 +8,10 @@ using HiveOps.Api.Utilities;
 using HiveOps.Application.Configuration;
 using HiveOps.Application.Interfaces;
 using HiveOps.Application.Models;
+using HiveOps.Application.Policies;
 using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
+using HiveOps.Infrastructure.Services;
 
 namespace HiveOps.Api.Controllers;
 
@@ -128,6 +130,130 @@ public sealed class TenantsController : ControllerBase
         return Ok(await _configService.PatchPoliciesAsync(id, body ?? [], Audit(nameof(TenantConfiguration.Policies)), ct));
     }
 
+    // ── Tenant policy rules (NL → structured, enforced by TenantPolicyEvaluator) ──
+
+    /// <summary>Interpret a natural-language rule without saving it — preview + overlap warnings.</summary>
+    [HttpPost("{id:guid}/policies/interpret")]
+    public async Task<ActionResult<PolicyInterpretationResult>> InterpretPolicyRule(
+        Guid id,
+        [FromBody] InterpretPolicyRequest body,
+        [FromServices] IPolicyRuleInterpreter interpreter,
+        CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var cfg = await _configService.GetConfigurationAsync(id, ct);
+        var result = await interpreter.InterpretAsync(id, body?.Text ?? string.Empty, cfg.Policies, ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Adds a policy rule. Accepts either a pre-interpreted <c>rule</c> (from /interpret)
+    /// or raw <c>text</c> to interpret inline. Appends at the bottom (exceptions last)
+    /// unless the interpreter flagged an insertion point and the client opts in.
+    /// </summary>
+    [HttpPost("{id:guid}/policies")]
+    public async Task<ActionResult<TenantConfiguration>> AddPolicyRule(
+        Guid id,
+        [FromBody] AddPolicyRequest body,
+        [FromServices] IPolicyRuleInterpreter interpreter,
+        CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var cfg = await _configService.GetConfigurationAsync(id, ct);
+        var rules = cfg.Policies ?? [];
+
+        PolicyRule? rule = body?.Rule;
+        var insertBefore = body?.InsertBeforeRuleId;
+        if (rule is null)
+        {
+            var interpretation = await interpreter.InterpretAsync(id, body?.Text ?? string.Empty, rules, ct);
+            if (!interpretation.Ok || interpretation.Rule is null)
+                return BadRequest(new { errors = new[] { interpretation.Error ?? "No se pudo interpretar la regla." } });
+            rule = interpretation.Rule;
+            insertBefore ??= interpretation.SuggestedInsertBeforeRuleId;
+        }
+
+        if (string.IsNullOrWhiteSpace(rule.Action) || !PolicyActions.All.Contains(rule.Action))
+            return BadRequest(new { errors = new[] { "La regla no tiene acción válida." } });
+
+        // Closed vocabulary: strip parameter keys the evaluator doesn't understand.
+        if (rule.Parameters is not null)
+            rule.Parameters = new Dictionary<string, string>(
+                rule.Parameters.Where(kv => PolicyConditionKeys.All.Contains(kv.Key)),
+                StringComparer.OrdinalIgnoreCase);
+        else
+            rule.Parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(rule.Condition))
+            rule.Condition = PolicyRuleInterpreterService.RenderCondition(rule);
+        if (string.IsNullOrWhiteSpace(rule.Id))
+            rule.Id = Guid.NewGuid().ToString("N")[..8];
+
+        var insertAt = rules.Count;
+        if (!string.IsNullOrWhiteSpace(insertBefore))
+        {
+            var idx = rules.FindIndex(r => r.Id == insertBefore);
+            if (idx >= 0) insertAt = idx;
+        }
+        rules.Insert(insertAt, rule);
+
+        cfg.Policies = rules;
+        var errors = TenantConfigurationValidator.Validate(cfg);
+        if (errors.Count > 0) return BadRequest(new { errors });
+        return Ok(await _configService.PatchPoliciesAsync(id, rules, Audit(nameof(TenantConfiguration.Policies)), ct));
+    }
+
+    /// <summary>Reorder rules — list order is evaluation order (last match wins).</summary>
+    [HttpPatch("{id:guid}/policies/reorder")]
+    public async Task<ActionResult<TenantConfiguration>> ReorderPolicyRules(
+        Guid id,
+        [FromBody] ReorderPoliciesRequest body,
+        CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var cfg = await _configService.GetConfigurationAsync(id, ct);
+        var current = cfg.Policies ?? [];
+
+        if (body?.RuleIds is null || body.RuleIds.Count != current.Count
+            || body.RuleIds.Distinct().Count() != current.Count
+            || body.RuleIds.Any(rid => current.All(r => r.Id != rid)))
+            return BadRequest(new { errors = new[] { "ruleIds debe contener exactamente los ids actuales, sin duplicados." } });
+
+        var reordered = body.RuleIds
+            .Select(rid => current.First(r => r.Id == rid))
+            .ToList();
+
+        return Ok(await _configService.PatchPoliciesAsync(id, reordered, Audit(nameof(TenantConfiguration.Policies) + ".reorder"), ct));
+    }
+
+    /// <summary>Toggle a rule on/off without deleting it.</summary>
+    [HttpPatch("{id:guid}/policies/{ruleId}")]
+    public async Task<ActionResult<TenantConfiguration>> TogglePolicyRule(
+        Guid id,
+        string ruleId,
+        [FromBody] TogglePolicyRequest body,
+        CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var cfg = await _configService.GetConfigurationAsync(id, ct);
+        var rule = cfg.Policies?.FirstOrDefault(r => r.Id == ruleId);
+        if (rule is null) return NotFound();
+
+        rule.Active = body?.Active ?? rule.Active;
+        return Ok(await _configService.PatchPoliciesAsync(id, cfg.Policies!, Audit(nameof(TenantConfiguration.Policies) + ".toggle"), ct));
+    }
+
+    [HttpDelete("{id:guid}/policies/{ruleId}")]
+    public async Task<ActionResult<TenantConfiguration>> DeletePolicyRule(Guid id, string ruleId, CancellationToken ct)
+    {
+        if (!IsAdminOrSuperAdmin && id != _tenantContext.TenantId) return Forbid();
+        var cfg = await _configService.GetConfigurationAsync(id, ct);
+        var rule = cfg.Policies?.FirstOrDefault(r => r.Id == ruleId);
+        if (rule is null) return NotFound();
+
+        var remaining = cfg.Policies!.Where(r => r.Id != ruleId).ToList();
+        return Ok(await _configService.PatchPoliciesAsync(id, remaining, Audit(nameof(TenantConfiguration.Policies) + ".delete"), ct));
+    }
+
     [HttpPatch("{id:guid}/config/channel")]
     public async Task<ActionResult<TenantConfiguration>> PatchTenantChannel(Guid id, [FromBody] ChannelConfig body, CancellationToken ct)
     {
@@ -242,3 +368,7 @@ public sealed class TenantsController : ControllerBase
 
 // DTOs
 public sealed record TenantDto(Guid Id, string Name, string? Industry, bool IsActive);
+public sealed record InterpretPolicyRequest(string? Text);
+public sealed record AddPolicyRequest(string? Text, PolicyRule? Rule, string? InsertBeforeRuleId);
+public sealed record ReorderPoliciesRequest(List<string>? RuleIds);
+public sealed record TogglePolicyRequest(bool Active);

@@ -8,6 +8,7 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using HiveOps.Application.Configuration;
 using HiveOps.Application.Interfaces;
+using HiveOps.Application.Policies;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Interfaces;
 using HiveOps.Domain.Models;
@@ -259,15 +260,19 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
         var evidence = new List<DiagnosticQueryEvidence>();
 
         DiagnosticsConfig diagnostics;
+        IReadOnlyList<PolicyRule> tenantPolicies;
         try
         {
-            diagnostics = (await _tenantConfigService.GetConfigurationAsync(incident.TenantId, ct)).Diagnostics;
+            var cfg = await _tenantConfigService.GetConfigurationAsync(incident.TenantId, ct);
+            diagnostics = cfg.Diagnostics;
+            tenantPolicies = cfg.Policies ?? [];
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex,
                 "Tenant diagnostics config unavailable for incident {IncidentId}; using defaults.", incident.Id);
             diagnostics = new DiagnosticsConfig();
+            tenantPolicies = [];
         }
 
         var maxDiagnosticQueries = FallbackMaxDiagnosticQueries;
@@ -352,6 +357,32 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
                         blockedTable, incident.Id);
                     continue;
                 }
+            }
+
+            // Tenant policy gate: any non-allow decision (block / require_approval /
+            // escalate) skips the query — an investigation cannot pause mid-flow.
+            var policyDecision = TenantPolicyEvaluator.Evaluate(
+                tenantPolicies,
+                new PolicyContext
+                {
+                    ActionType = PolicyActionTypes.Diagnostic,
+                    Channel = incident.SourceChannel,
+                    Targets = HiveOps.Application.SafetyValidator.ExtractTableReferences(sql),
+                    Text = sql,
+                    Severity = incident.Severity.ToString(),
+                    Timestamp = DateTimeOffset.UtcNow
+                });
+            if (!policyDecision.IsAllow && policyDecision.Effect != PolicyActions.Notify)
+            {
+                _logger.LogInformation(
+                    "Tenant policy skipped diagnostic query for incident {IncidentId} (effect {Effect}, rule {Rule}).",
+                    incident.Id, policyDecision.Effect,
+                    policyDecision.MatchedRule?.OriginalText);
+                await PersistDiagnosticLogAsync(
+                    incident, "hypothesis.diagnostic_policy_skip",
+                    $"SQL: {sql}\n\nSkipped by tenant policy ({policyDecision.Effect}): {(policyDecision.MatchedRule is { } pr ? pr.OriginalText : "")}",
+                    isSuccess: true, ct);
+                continue;
             }
 
             TargetQueryResult result;

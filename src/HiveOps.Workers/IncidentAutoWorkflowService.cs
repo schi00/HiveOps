@@ -9,6 +9,7 @@ using HiveOps.Agents.Support;
 using HiveOps.Application.Configuration;
 using HiveOps.Application.HiveArena;
 using HiveOps.Application.Interfaces;
+using HiveOps.Application.Policies;
 using HiveOps.Application.Support;
 using HiveOps.Application.Services;
 using HiveOps.Domain.Entities;
@@ -421,6 +422,17 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             {
                 playbook.RequiresApproval = true;
             }
+
+            // Tenant policy gate: a block/escalate rule stops the playbook, a
+            // require_approval rule forces the runner's approval path.
+            var playbookPolicy = await EvaluateTenantPolicyAsync(
+                incident, PolicyActionTypes.Playbook,
+                $"{playbook.Code} {playbook.Name}", [playbook.Code], cancellationToken);
+            if (await HandleBlockingPolicyAsync(incident, playbookPolicy, PolicyActionTypes.Playbook, db, cancellationToken))
+                return true;
+            if (playbookPolicy.Effect == PolicyActions.RequireApproval)
+                playbook.RequiresApproval = true;
+            await NotifyPolicyActionAsync(incident, playbookPolicy, PolicyActionTypes.Playbook, cancellationToken);
 
             var extractedArgs = ExtractPlaybookArgs(incident);
             result = await playbookRunner.ExecuteAsync(playbook, incident, extractedArgs, cancellationToken);
@@ -836,6 +848,16 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             return;
         }
 
+        // Tenant policy gate before spending LLM tokens on a proposal.
+        var codePolicy = await EvaluateTenantPolicyAsync(
+            incident, PolicyActionTypes.CodeFix,
+            $"{incident.Title} {incident.Description}", [], cancellationToken);
+        if (await HandleBlockingPolicyAsync(incident, codePolicy, PolicyActionTypes.CodeFix, db, cancellationToken))
+            return;
+        if (codePolicy.Effect == PolicyActions.RequireApproval)
+            incident.RequiresHumanApproval = true;
+        await NotifyPolicyActionAsync(incident, codePolicy, PolicyActionTypes.CodeFix, cancellationToken);
+
         if (operatingMode == TenantOperatingMode.Assisted)
         {
             incident.RequiresHumanApproval = true;
@@ -1219,6 +1241,21 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
                 _logger.LogWarning(ex, "Pull request creation failed for incident {IncidentId}; continuing with deploy.", incident.Id);
             }
         }
+
+        // Tenant policy gate on the deployment itself.
+        var deployPolicy = await EvaluateTenantPolicyAsync(
+            incident, PolicyActionTypes.Deploy,
+            $"{incident.Title} {incident.GitBranch}",
+            string.IsNullOrWhiteSpace(incident.GitBranch) ? [] : new[] { incident.GitBranch },
+            cancellationToken);
+        if (await HandleBlockingPolicyAsync(incident, deployPolicy, PolicyActionTypes.Deploy, db, cancellationToken))
+            return;
+        if (deployPolicy.Effect == PolicyActions.RequireApproval)
+        {
+            await RequestPolicyApprovalAsync(incident, deployPolicy, PolicyActionTypes.Deploy, db, cancellationToken);
+            return;
+        }
+        await NotifyPolicyActionAsync(incident, deployPolicy, PolicyActionTypes.Deploy, cancellationToken);
 
         // Auto-deploy if threshold not exceeded
         await DeployFixAsync(incident, db, cancellationToken);
@@ -2061,13 +2098,24 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
                 cancellationToken);
         }
 
-        if (incident.RequiresHumanApproval || affectedRecords > _options.DbRecordThreshold || unevidenced.Count > 0)
+        // Tenant policy gate: scope/keyword rules see the real SQL and tables.
+        var dbActionType = PolicyActionTypes.ForSql(fixProposal);
+        var dbTargets = SafetyValidator.ExtractTableReferences(fixProposal);
+        var dbPolicy = await EvaluateTenantPolicyAsync(incident, dbActionType, fixProposal, dbTargets, cancellationToken);
+        if (await HandleBlockingPolicyAsync(incident, dbPolicy, dbActionType, db, cancellationToken))
+            return;
+        await NotifyPolicyActionAsync(incident, dbPolicy, dbActionType, cancellationToken);
+        var policyRequiresApproval = dbPolicy.Effect == PolicyActions.RequireApproval;
+
+        if (incident.RequiresHumanApproval || affectedRecords > _options.DbRecordThreshold || unevidenced.Count > 0 || policyRequiresApproval)
         {
-            var approvalReason = unevidenced.Count > 0
-                ? $"DB fix introduces unevidenced values ({string.Join(", ", unevidenced)})"
-                : incident.RequiresHumanApproval
-                    ? "DB fix requires approval (triage policy)"
-                    : $"DB fix with {affectedRecords} records affected";
+            var approvalReason = policyRequiresApproval
+                ? $"Tenant policy requires approval: {PolicyRuleLabel(dbPolicy)}"
+                : unevidenced.Count > 0
+                    ? $"DB fix introduces unevidenced values ({string.Join(", ", unevidenced)})"
+                    : incident.RequiresHumanApproval
+                        ? "DB fix requires approval (triage policy)"
+                        : $"DB fix with {affectedRecords} records affected";
 
             incident.RequiresHumanApproval = true;
             incident.Status = IncidentStatus.AwaitingApproval;
@@ -2288,6 +2336,115 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
         {
             _logger.LogWarning(ex, "Dry-run execution failed for DB fix");
             return (false, -1, ex.Message);
+        }
+    }
+
+    // ── Tenant policy evaluation ────────────────────────────────────────────
+    // Ordered rules, last match wins. Effects: block/escalate stop the action,
+    // require_approval routes into the standard approval flow, notify runs + alerts.
+
+    private async Task<PolicyDecision> EvaluateTenantPolicyAsync(
+        Incident incident,
+        string actionType,
+        string? text,
+        IReadOnlyList<string> targets,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var cfg = scope.ServiceProvider.GetRequiredService<ITenantConfigService>();
+            var config = await cfg.GetConfigurationAsync(incident.TenantId, cancellationToken);
+            return TenantPolicyEvaluator.Evaluate(config.Policies, new PolicyContext
+            {
+                ActionType = actionType,
+                Channel = incident.SourceChannel,
+                Targets = targets,
+                Text = text,
+                Severity = incident.Severity.ToString(),
+                Timestamp = DateTimeOffset.UtcNow
+            });
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Policy evaluation must never break remediation — fail open (allow),
+            // consistent with the rest of the pipeline's best-effort guards.
+            _logger.LogWarning(ex, "Policy evaluation failed for incident {IncidentId}; defaulting to allow.", incident.Id);
+            return PolicyDecision.Allowed;
+        }
+    }
+
+    private static string PolicyRuleLabel(PolicyDecision decision) =>
+        decision.MatchedRule is { } r
+            ? (string.IsNullOrWhiteSpace(r.HumanReadable) ? r.OriginalText : r.HumanReadable)
+            : string.Empty;
+
+    /// <summary>Handles block/escalate decisions. Returns true when the action must stop.</summary>
+    private async Task<bool> HandleBlockingPolicyAsync(
+        Incident incident, PolicyDecision decision, string actionType, AppDbContext db, CancellationToken cancellationToken)
+    {
+        if (decision.Effect is not (PolicyActions.Block or PolicyActions.Escalate))
+            return false;
+
+        var label = PolicyRuleLabel(decision);
+        var note = decision.Effect == PolicyActions.Block
+            ? $"Una regla del tenant bloquea esta acción automática ({label}). Se deriva al equipo."
+            : $"Una regla del tenant deriva esta acción al equipo humano ({label}).";
+
+        incident.AssignedTo = "engineer";
+        incident.UpdatedAt = DateTimeOffset.UtcNow;
+        await _messageHistory.AppendMessageToIncidentAsync(
+            incident.Id, MessageRole.Assistant, note, "IncidentAutoWorkflow", cancellationToken);
+        await AppendAuditAsync(incident, "PolicyBlock", new { actionType, effect = decision.Effect, rule = label }, cancellationToken);
+
+        using var scope = _scopeFactory.CreateScope();
+        var notifier = scope.ServiceProvider.GetRequiredService<ISupervisionNotifier>();
+        if (incident.ConversationId.HasValue)
+            await notifier.NotifyHandoffAsync(incident.TenantId, incident.ConversationId.Value, $"Policy {decision.Effect}: {label}", cancellationToken);
+
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    /// <summary>Routes a require_approval decision through the standard approval flow.</summary>
+    private async Task RequestPolicyApprovalAsync(
+        Incident incident, PolicyDecision decision, string actionType, AppDbContext db, CancellationToken cancellationToken)
+    {
+        var label = PolicyRuleLabel(decision);
+        incident.RequiresHumanApproval = true;
+        incident.Status = IncidentStatus.AwaitingApproval;
+        incident.UpdatedAt = DateTimeOffset.UtcNow;
+
+        using var scope = _scopeFactory.CreateScope();
+        var approvalWorkflow = scope.ServiceProvider.GetRequiredService<IApprovalWorkflowService>();
+        var notifier = scope.ServiceProvider.GetRequiredService<ISupervisionNotifier>();
+        await approvalWorkflow.RequestApprovalAsync(
+            incident.Id, $"Regla del tenant ({label}): la acción \"{actionType}\" requiere aprobación", cancellationToken);
+        await notifier.NotifyApprovalRequiredAsync(
+            incident.TenantId, incident.Id, $"Policy requires approval: {label}", cancellationToken);
+        await NotifyChannelProgressAsync(
+            incident, "Tenemos una acción preparada para tu caso, pendiente de aprobación por el equipo.", cancellationToken);
+        await AppendAuditAsync(incident, "PolicyApproval", new { actionType, rule = label }, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task NotifyPolicyActionAsync(
+        Incident incident, PolicyDecision decision, string actionType, CancellationToken cancellationToken)
+    {
+        if (decision.Effect != PolicyActions.Notify)
+            return;
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var notifier = scope.ServiceProvider.GetRequiredService<ISupervisionNotifier>();
+            await notifier.NotifyIncidentCreatedAsync(
+                incident.TenantId, incident.Id,
+                $"Acción \"{actionType}\" ejecutada bajo regla del tenant: {PolicyRuleLabel(decision)}",
+                "Info", cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Policy notify failed for incident {IncidentId}.", incident.Id);
         }
     }
 

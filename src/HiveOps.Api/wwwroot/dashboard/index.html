@@ -1323,7 +1323,7 @@ html.light .by-hive-badge {
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-2xl font-bold">Configuración de la Cuenta</h2>
         <div class="flex items-center gap-2">
-          <button id="cfg-adv-toggle" type="button" onclick="toggleAdvancedConfig()" class="btn-secondary px-3 py-1.5 rounded-xl text-xs">Mostrar avanzado (LLM · Deploy · Políticas)</button>
+          <button id="cfg-adv-toggle" type="button" onclick="toggleAdvancedConfig()" class="btn-secondary px-3 py-1.5 rounded-xl text-xs">Mostrar avanzado (LLM · Deploy)</button>
           <span id="cfg-schema-banner" class="text-xs px-3 py-1 rounded-full hive-card border" style="color:var(--text-tertiary)">Schema —</span>
         </div>
       </div>
@@ -1485,16 +1485,27 @@ html.light .by-hive-badge {
         </div>
       </div>
 
-      <!-- Policies JSON (avanzado) -->
-      <div class="hive-card p-6 cfg-adv hidden">
+      <!-- Reglas del agente -->
+      <div id="cfg-policies-card" class="hive-card p-6">
         <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
           <div>
-            <h3 class="font-semibold text-lg">Políticas (JSON)</h3>
-            <p class="text-xs mt-1" style="color:var(--text-tertiary)">Lista de objetos &#123; condition, action, parameters &#125;</p>
+            <h3 class="font-semibold text-lg">Reglas del agente</h3>
+            <p class="text-xs mt-1" style="color:var(--text-tertiary)">Se aplican en orden — gana la última regla que coincida. Poné las reglas generales arriba y las excepciones abajo.</p>
           </div>
-          <button type="button" onclick="savePoliciesSection()" class="btn-primary px-4 py-2 rounded-xl text-xs">Guardar políticas</button>
         </div>
-        <textarea id="cfg-policies-json" rows="8" class="input-field w-full px-3 py-2 rounded-xl text-xs font-mono" placeholder='[{"condition":"Always","action":"noop","parameters":{}}]'></textarea>
+        <div id="cfg-policies-list" class="space-y-2 mb-4"></div>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input id="cfg-policy-input" type="text" class="input-field flex-1 px-3 py-2 rounded-xl text-sm" placeholder='Escribí una regla en palabras, ej: "Nunca modifiques las tablas de pagos"' onkeydown="if(event.key==='Enter')interpretPolicy()"/>
+          <button type="button" onclick="interpretPolicy()" class="btn-secondary px-4 py-2 rounded-xl text-xs">Interpretar</button>
+        </div>
+        <div class="flex flex-wrap gap-2 mt-2.5">
+          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Nunca modifiques las tablas de pagos</button>
+          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Los cambios en facturación requieren aprobación</button>
+          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Si hay registros duplicados podés eliminarlos</button>
+          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Los fines de semana solo diagnóstico, nada de cambios</button>
+          <button type="button" onclick="policySuggestion(this)" class="text-[11px] px-2.5 py-1 rounded-full border transition-all hover:border-cyan-500/50 hover:text-cyan-300" style="border-color:var(--border-color);color:var(--text-tertiary)">Si el ticket es crítico escalá a un humano</button>
+        </div>
+        <div id="cfg-policy-preview" class="hidden mt-3 p-3 rounded-xl border" style="background:var(--bg-tertiary);border-color:var(--border-color)"></div>
       </div>
 
       <!-- Channel -->

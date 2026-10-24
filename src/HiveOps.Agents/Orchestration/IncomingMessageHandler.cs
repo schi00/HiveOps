@@ -8,9 +8,11 @@ using HiveOps.Agents.Router;
 using HiveOps.Agents.Supervision;
 using HiveOps.Agents.Support;
 using HiveOps.Agents.Planning;
+using HiveOps.Application;
 using HiveOps.Application.Interfaces;
 using HiveOps.Application.Commands;
 using HiveOps.Application.Models;
+using HiveOps.Application.Policies;
 using HiveOps.Domain.Entities;
 using HiveOps.Domain.Enums;
 using HiveOps.Domain.Interfaces;
@@ -18,6 +20,7 @@ using HiveOps.Domain.Models;
 using HiveOps.Infrastructure.AI;
 using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
+using HiveOps.Infrastructure.Services;
 
 // Exposes internal members (e.g. planner tool dispatch, handoff heuristics) to unit tests.
 [assembly: InternalsVisibleTo("HiveOps.UnitTests")]
@@ -51,6 +54,8 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
     private readonly IToolResolver _toolResolver;
     private readonly IAgentRuntime _agentRuntime;
     private readonly ISupervisionNotifier _supervisionNotifier;
+    private readonly ITenantConfigService _tenantConfigService;
+    private readonly IApprovalWorkflowService _approvalWorkflow;
     private readonly ILogger<IncomingMessageHandler> _logger;
 
     public IncomingMessageHandler(
@@ -67,6 +72,8 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
         IToolResolver toolResolver,
         IAgentRuntime agentRuntime,
         ISupervisionNotifier supervisionNotifier,
+        ITenantConfigService tenantConfigService,
+        IApprovalWorkflowService approvalWorkflow,
         ILogger<IncomingMessageHandler> logger)
     {
         _db = db;
@@ -82,6 +89,8 @@ public sealed class IncomingMessageHandler : IRequestHandler<IncomingMessageComm
         _toolResolver = toolResolver;
         _agentRuntime = agentRuntime;
         _supervisionNotifier = supervisionNotifier;
+        _tenantConfigService = tenantConfigService;
+        _approvalWorkflow = approvalWorkflow;
         _logger = logger;
     }
 
@@ -689,7 +698,8 @@ PersistAndSend:
         var runtime = await _agentRuntime.RunAsync(
             kernel,
             plannerContext,
-            (toolName, args, token) => ExecutePlannerToolAsync(kernel, toolName, args, msg, conversation, token),
+            (toolName, args, token) => ExecutePlannerToolWithPolicyAsync(
+                kernel, toolName, args, msg, conversation, tenantId, tenantPhrases, token),
             ct);
 
         if (!runtime.Handled)
@@ -714,6 +724,155 @@ PersistAndSend:
             nextState,
             false);
     }
+
+    // ── Tenant policy gate ─────────────────────────────────────────────────
+    // Evaluates the tenant's ordered policy rules (last match wins) before any
+    // planner tool executes. Effects: block → refuse; require_approval → park
+    // the incident in the approval queue; escalate → human handoff; notify →
+    // run + notify; allow → run.
+
+    private async Task<PlannerToolExecutionResult> ExecutePlannerToolWithPolicyAsync(
+        Kernel kernel,
+        string toolName,
+        Dictionary<string, string> args,
+        IncomingMessage msg,
+        Conversation conversation,
+        Guid tenantId,
+        PhraseSettings phrases,
+        CancellationToken ct)
+    {
+        var actionType = MapToolToPolicyAction(toolName);
+        if (actionType is null)
+            return await ExecutePlannerToolAsync(kernel, toolName, args, msg, conversation, ct);
+
+        var config = await _tenantConfigService.GetConfigurationAsync(tenantId, ct);
+        if (config.Policies is null || config.Policies.Count == 0)
+            return await ExecutePlannerToolAsync(kernel, toolName, args, msg, conversation, ct);
+
+        var targets = ExtractPolicyTargets(toolName, args);
+        var text = $"{msg.Text} {string.Join(' ', args.Values)}";
+
+        // approve_fix executes whatever is pending: a SqlScript attachment means the
+        // real gated action is the data mutation itself (scoped rules must see it).
+        if (actionType == PolicyActionTypes.Deploy)
+        {
+            var pendingIncident = await FindActiveIncidentAsync(conversation.Id, ct);
+            if (pendingIncident is not null)
+            {
+                var sqlScript = await _db.IncidentAttachments.AsNoTracking()
+                    .Where(a => a.IncidentId == pendingIncident.Id && a.Type == IncidentAttachmentType.SqlScript)
+                    .Select(a => a.Content)
+                    .FirstOrDefaultAsync(ct);
+                if (!string.IsNullOrWhiteSpace(sqlScript))
+                {
+                    actionType = PolicyActionTypes.ForSql(sqlScript);
+                    targets = SafetyValidator.ExtractTableReferences(sqlScript);
+                    text = $"{text} {sqlScript}";
+                }
+            }
+        }
+
+        var context = new PolicyContext
+        {
+            ActionType = actionType,
+            Channel = msg.Channel,
+            Targets = targets,
+            Text = text,
+            Timestamp = DateTimeOffset.UtcNow
+        };
+
+        var decision = TenantPolicyEvaluator.Evaluate(config.Policies, context);
+        var ruleLabel = decision.MatchedRule is { } r
+            ? (string.IsNullOrWhiteSpace(r.HumanReadable) ? r.OriginalText : r.HumanReadable)
+            : null;
+
+        switch (decision.Effect)
+        {
+            case PolicyActions.Allow:
+                return await ExecutePlannerToolAsync(kernel, toolName, args, msg, conversation, ct);
+
+            case PolicyActions.Notify:
+            {
+                var notifyResult = await ExecutePlannerToolAsync(kernel, toolName, args, msg, conversation, ct);
+                var incident = await FindActiveIncidentAsync(conversation.Id, ct);
+                if (incident is not null)
+                    await _supervisionNotifier.NotifyIncidentCreatedAsync(
+                        tenantId, incident.Id, $"Acción ejecutada bajo regla del tenant: {ruleLabel}", "Info", ct);
+                return notifyResult;
+            }
+
+            case PolicyActions.Block:
+                _logger.LogInformation(
+                    "Tenant policy blocked tool {Tool} for tenant {TenantId} (rule: {Rule})",
+                    toolName, tenantId, ruleLabel);
+                return new PlannerToolExecutionResult
+                {
+                    Success = false,
+                    Output = $"Una regla configurada por el tenant impide esta acción: {ruleLabel}."
+                };
+
+            case PolicyActions.RequireApproval:
+            {
+                var incident = await FindActiveIncidentAsync(conversation.Id, ct);
+                if (incident is null)
+                {
+                    return new PlannerToolExecutionResult
+                    {
+                        Success = false,
+                        Output = $"Esta acción requiere aprobación según una regla del tenant ({ruleLabel}), pero no hay un incidente activo para aprobarla."
+                    };
+                }
+
+                await _approvalWorkflow.RequestApprovalAsync(
+                    incident.Id,
+                    $"Regla del tenant ({ruleLabel}): la acción \"{toolName}\" requiere aprobación",
+                    ct);
+                return new PlannerToolExecutionResult
+                {
+                    Success = true,
+                    Output = $"La acción quedó pendiente de aprobación por tu equipo (regla: {ruleLabel}). Te avisamos cuando esté habilitada."
+                };
+            }
+
+            case PolicyActions.Escalate:
+                await TriggerEscalationAsync(kernel, conversation, tenantId, $"Tenant policy escalated tool {toolName}: {ruleLabel}", phrases, ct);
+                return new PlannerToolExecutionResult
+                {
+                    Success = true,
+                    Output = "Este pedido lo toma el equipo humano según una regla configurada. Te derivamos.",
+                    StateTransition = ConversationState.AwaitingHuman.ToString()
+                };
+
+            default:
+                return await ExecutePlannerToolAsync(kernel, toolName, args, msg, conversation, ct);
+        }
+    }
+
+    private async Task<Incident?> FindActiveIncidentAsync(Guid conversationId, CancellationToken ct) =>
+        await _db.Incidents.AsNoTracking()
+            .FirstOrDefaultAsync(i => i.ConversationId == conversationId && i.Status != IncidentStatus.Closed, ct);
+
+    /// <summary>Maps a planner tool to the gated policy action type; null = not gated.</summary>
+    private static string? MapToolToPolicyAction(string toolName) =>
+        toolName.ToLowerInvariant() switch
+        {
+            "run_db_diagnostic" => PolicyActionTypes.Diagnostic,
+            "analyze_incident" or "provide_incident_info" or "get_incident_status" => PolicyActionTypes.Diagnostic,
+            "approve_fix" => PolicyActionTypes.Deploy,
+            "search_kb" => PolicyActionTypes.KbSearch,
+            "escalate_to_human" => PolicyActionTypes.Escalate,
+            _ => null
+        };
+
+    private static IReadOnlyList<string> ExtractPolicyTargets(string toolName, Dictionary<string, string> args)
+    {
+        var sql = GetArgValue(args, "sql_query", "sqlquery", "query", "sql");
+        return string.IsNullOrWhiteSpace(sql)
+            ? []
+            : SafetyValidator.ExtractTableReferences(sql);
+    }
+
+
 
     internal static async Task<PlannerToolExecutionResult> ExecutePlannerToolAsync(
         Kernel kernel,

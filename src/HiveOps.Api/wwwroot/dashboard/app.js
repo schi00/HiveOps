@@ -621,7 +621,7 @@ el('cfg-esc-enable').checked=E.enableEscalation!==false;
 el('cfg-esc-frust').checked=E.enableFrustrationEscalation!==false;
 el('cfg-esc-max-failures').value=E.maxPlannerFailuresBeforeEscalation??3;
 el('cfg-esc-keywords').value=(E.triggerKeywords||[]).join(', ');
-el('cfg-policies-json').value=JSON.stringify(cfg.policies||[],null,2);
+renderPolicies(cfg.policies||[]);
 const w=(cfg.channel&&cfg.channel.whatsApp)||{};
 el('cfg-wa-buttons').checked=w.enableInteractiveButtons!==false;
 el('cfg-wa-menu').checked=w.enableInteractiveMenu!==false;
@@ -653,7 +653,7 @@ const els=document.querySelectorAll('.cfg-adv');
 const btn=document.getElementById('cfg-adv-toggle');
 const hidden=[...els].some(el=>el.classList.contains('hidden'));
 els.forEach(el=>el.classList.toggle('hidden',!hidden));
-if(btn)btn.textContent=hidden?'Ocultar avanzado':'Mostrar avanzado (LLM · Deploy · Políticas)';
+if(btn)btn.textContent=hidden?'Ocultar avanzado':'Mostrar avanzado (LLM · Deploy)';
 }
 function buildAgentPayload(){
 const opModeEl=document.getElementById('cfg-operating-mode');
@@ -668,7 +668,6 @@ async function saveLlmSection(){if(!s.tenantId)return;try{await patchTenantPath(
 async function saveDeployGitSection(){if(!s.tenantId)return;try{await patchTenantPath('/config/deploy-git',buildDeployPayload());toast('Deploy/Git guardado','success');}catch(e){toast(e.message,'error');}}
 async function saveEscalationSection(){if(!s.tenantId)return;try{await patchTenantPath('/config/escalation',buildEscalationPayload());toast('Escalación guardada','success');}catch(e){toast(e.message,'error');}}
 async function saveChannelSection(){if(!s.tenantId)return;try{await patchTenantPath('/config/channel',buildChannelPayload());toast('Canal guardado','success');}catch(e){toast(e.message,'error');}}
-async function savePoliciesSection(){if(!s.tenantId)return;try{const txt=document.getElementById('cfg-policies-json').value.trim();let arr=[]; if(txt){arr=JSON.parse(txt); if(!Array.isArray(arr))throw new Error('Políticas: se esperaba un JSON array')} await patchTenantPath('/config/policies',arr);toast('Políticas guardadas','success');}catch(e){toast(e.message||'JSON inválido','error');}}
 async function saveAllConfigSections(){
 if(!s.tenantId)return;
 try{
@@ -677,15 +676,168 @@ await patchTenantPath('/config/llm',buildLlmPayload());
 await patchTenantPath('/config/deploy-git',buildDeployPayload());
 await patchTenantPath('/config/escalation',buildEscalationPayload());
 await patchTenantPath('/config/channel',buildChannelPayload());
-const txt=document.getElementById('cfg-policies-json').value.trim();
-let arr=[]; if(txt){arr=JSON.parse(txt); if(!Array.isArray(arr))throw new Error('Políticas: array JSON requerido');}
-await patchTenantPath('/config/policies',arr);
 await saveChatOpsWebhook(true);
 toast('Todas las secciones guardadas','success');
 }catch(e){toast(e.message||'Error al guardar','error');}}
 function resetConfig(){
 lc();
 toast('Datos recargados desde servidor','info');
+}
+
+// ==========================================
+// Reglas del agente (políticas en lenguaje natural)
+// ==========================================
+const POLICY_ACTIONS={
+allow:{label:'Permite',cls:'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'},
+block:{label:'Bloquea',cls:'bg-red-500/15 text-red-400 border-red-500/30'},
+require_approval:{label:'Exige aprobación',cls:'bg-amber-500/15 text-amber-400 border-amber-500/30'},
+escalate:{label:'Escala a humano',cls:'bg-violet-500/15 text-violet-400 border-violet-500/30'},
+notify:{label:'Notifica',cls:'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'}
+};
+let pendingPolicyRule=null;
+let policyDragId=null;
+function policyBadge(action){
+const b=POLICY_ACTIONS[action]||{label:action||'Regla',cls:'bg-gray-500/15 text-gray-400 border-gray-500/30'};
+return `<span class="text-[10px] px-2 py-0.5 rounded-full border font-semibold flex-shrink-0 ${b.cls}">${esc(b.label)}</span>`;
+}
+function renderPolicies(policies){
+const el=document.getElementById('cfg-policies-list');
+if(!el)return;
+const items=Array.isArray(policies)?policies:[];
+s.policies=items;
+if(!items.length){
+el.innerHTML='<div class="text-xs py-6 text-center rounded-xl border border-dashed" style="border-color:var(--border-color);color:var(--text-secondary)">Sin reglas todavía — escribí una abajo y HiveOps la interpreta</div>';
+return;
+}
+el.innerHTML=items.map(r=>{
+const id=esc(String(r.id||''));
+const active=r.active!==false;
+const main=r.humanReadable||r.originalText||'Regla';
+const orig=(r.originalText&&r.originalText!==r.humanReadable)?`<div class="text-[11px] mt-0.5" style="color:var(--text-tertiary)">“${esc(r.originalText)}”</div>`:'';
+return `<div class="policy-row p-3 rounded-xl border flex items-center gap-3 ${active?'':'opacity-50'}" draggable="true" data-rule-id="${id}" style="background:var(--bg-tertiary);border-color:var(--border-color)" ondragstart="policyDragStart(event)" ondragover="policyDragOver(event)" ondragleave="policyDragLeave(event)" ondrop="policyDrop(event)" ondragend="policyDragEnd()">
+  <span class="cursor-grab select-none flex-shrink-0 text-base leading-none" style="color:var(--text-tertiary)" title="Arrastrá para reordenar">≡</span>
+  ${policyBadge(r.action)}
+  <div class="min-w-0 flex-1">
+    <div class="text-sm" style="color:var(--text-primary)">${esc(main)}</div>
+    ${orig}
+  </div>
+  <label class="flex items-center gap-1.5 text-[11px] cursor-pointer flex-shrink-0" style="color:var(--text-tertiary)" title="Activar / desactivar"><input type="checkbox" class="accent-cyan-500" ${active?'checked':''} onchange="togglePolicy('${id}',this.checked)"/>Activa</label>
+  <button type="button" onclick="deletePolicy('${id}')" class="text-xs px-2 py-1 rounded-lg text-red-400 hover:bg-red-500/10 border border-red-500/25 flex-shrink-0 transition-all" title="Eliminar regla">✕</button>
+</div>`;
+}).join('');
+}
+function policySuggestion(btn){
+const inp=document.getElementById('cfg-policy-input');
+if(!inp)return;
+inp.value=btn.textContent.trim();
+inp.focus();
+}
+async function interpretPolicy(){
+if(!s.tenantId){toast('Selecciona una cuenta primero','warning');return;}
+const inp=document.getElementById('cfg-policy-input');
+const txt=((inp&&inp.value)||'').trim();
+if(!txt){toast('Escribí una regla primero','warning');return;}
+const box=document.getElementById('cfg-policy-preview');
+if(!box)return;
+box.classList.remove('hidden');
+box.innerHTML='<div class="text-xs" style="color:var(--text-secondary)">Interpretando…</div>';
+pendingPolicyRule=null;
+try{
+const d=await api('POST','/tenants/'+s.tenantId+'/policies/interpret',{text:txt});
+if(!d||d.ok===false){
+box.innerHTML=`<div class="text-xs text-red-400">${esc((d&&d.error)||'No se pudo interpretar la regla')}</div>`;
+return;
+}
+pendingPolicyRule={rule:d.rule,insertBeforeRuleId:d.suggestedInsertBeforeRuleId||null};
+const warns=(d.warnings||[]).map(w=>`<li>${esc(w)}</li>`).join('');
+box.innerHTML=`<div class="flex items-start gap-2 flex-wrap">${policyBadge(d.rule&&d.rule.action)}<div class="text-sm flex-1 min-w-0" style="color:var(--text-primary)">${esc((d.rule&&d.rule.humanReadable)||txt)}</div></div>
+${warns?`<ul class="list-disc pl-5 mt-2 space-y-0.5 text-xs text-amber-400">${warns}</ul>`:''}
+<div class="flex gap-2 mt-3">
+<button type="button" onclick="confirmAddPolicy()" class="btn-primary px-4 py-1.5 rounded-xl text-xs">Agregar regla</button>
+<button type="button" onclick="discardPolicyPreview()" class="btn-secondary px-4 py-1.5 rounded-xl text-xs">Descartar</button>
+</div>`;
+}catch(e){
+box.innerHTML=`<div class="text-xs text-red-400">${esc(e.message)}</div>`;
+}
+}
+async function confirmAddPolicy(){
+if(!s.tenantId||!pendingPolicyRule)return;
+try{
+const cfg=await api('POST','/tenants/'+s.tenantId+'/policies',{rule:pendingPolicyRule.rule,insertBeforeRuleId:pendingPolicyRule.insertBeforeRuleId});
+renderPolicies(cfg&&cfg.policies||[]);
+discardPolicyPreview();
+const inp=document.getElementById('cfg-policy-input');
+if(inp)inp.value='';
+toast('Regla agregada','success');
+}catch(e){toast(e.message,'error');}
+}
+function discardPolicyPreview(){
+pendingPolicyRule=null;
+const box=document.getElementById('cfg-policy-preview');
+if(box){box.classList.add('hidden');box.innerHTML='';}
+}
+async function togglePolicy(id,active){
+if(!s.tenantId)return;
+try{
+const cfg=await patchTenantPath('/policies/'+encodeURIComponent(id),{active:!!active});
+renderPolicies(cfg&&cfg.policies||[]);
+toast(active?'Regla activada':'Regla desactivada','success');
+}catch(e){toast(e.message,'error');renderPolicies(s.policies||[]);}
+}
+async function deletePolicy(id){
+if(!s.tenantId)return;
+if(!confirm('¿Eliminar esta regla?'))return;
+try{
+const cfg=await api('DELETE','/tenants/'+s.tenantId+'/policies/'+encodeURIComponent(id));
+renderPolicies(cfg&&cfg.policies||[]);
+toast('Regla eliminada','success');
+}catch(e){toast(e.message,'error');}
+}
+function policyRowOf(e){return e.target&&e.target.closest?e.target.closest('.policy-row'):null;}
+function policyDragStart(e){
+const row=policyRowOf(e);if(!row)return;
+policyDragId=row.dataset.ruleId;
+e.dataTransfer.effectAllowed='move';
+try{e.dataTransfer.setData('text/plain',policyDragId);}catch(_){}
+row.classList.add('opacity-40');
+}
+function policyDragOver(e){
+const row=policyRowOf(e);
+if(!row||row.dataset.ruleId===policyDragId)return;
+e.preventDefault();
+e.dataTransfer.dropEffect='move';
+row.classList.add('border-cyan-500/60');
+}
+function policyDragLeave(e){
+const row=policyRowOf(e);
+if(row)row.classList.remove('border-cyan-500/60');
+}
+async function policyDrop(e){
+const row=policyRowOf(e);
+if(!row)return;
+e.preventDefault();
+document.querySelectorAll('#cfg-policies-list .policy-row').forEach(r=>r.classList.remove('border-cyan-500/60'));
+if(!policyDragId||row.dataset.ruleId===policyDragId)return;
+const list=document.getElementById('cfg-policies-list');
+const dragRow=[...list.querySelectorAll('.policy-row')].find(r=>r.dataset.ruleId===policyDragId);
+if(!dragRow)return;
+const rect=row.getBoundingClientRect();
+const before=(e.clientY-rect.top)<rect.height/2;
+list.insertBefore(dragRow,before?row:row.nextSibling);
+const ids=[...list.querySelectorAll('.policy-row')].map(r=>r.dataset.ruleId);
+await savePolicyOrder(ids);
+}
+function policyDragEnd(){
+policyDragId=null;
+document.querySelectorAll('#cfg-policies-list .policy-row').forEach(r=>r.classList.remove('border-cyan-500/60','opacity-40'));
+}
+async function savePolicyOrder(ids){
+if(!s.tenantId)return;
+try{
+const cfg=await patchTenantPath('/policies/reorder',{ruleIds:ids});
+renderPolicies(cfg&&cfg.policies||[]);
+toast('Orden de reglas guardado','success');
+}catch(e){toast(e.message,'error');renderPolicies(s.policies||[]);}
 }
 try{document.getElementById('cfg-llm-temp')?.addEventListener('input',e=>{document.getElementById('cfg-llm-temp-val').textContent=e.target.value});}catch{}
 

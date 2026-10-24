@@ -53,6 +53,24 @@ public sealed class PromptBuilder : IPromptBuilder
 
             """;
 
+        // Tenant policy rules: tell the agent the tenant's operating limits up
+        // front so it never proposes what the evaluator would block anyway.
+        var activeRules = config.Policies?
+            .Where(r => r.Active)
+            .Select(r => string.IsNullOrWhiteSpace(r.HumanReadable) ? r.OriginalText : r.HumanReadable)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .ToList() ?? [];
+        if (activeRules.Count > 0)
+        {
+            var ruleLines = string.Join("\n", activeRules.Select(r => $"- {r}"));
+            header += $"""
+
+                TENANT POLICY RULES (mandatory — the runtime enforces them; do not propose what they forbid):
+                {ruleLines}
+
+                """;
+        }
+
         if (variables.Count == 0)
             return header + "\n" + basePrompt;
 

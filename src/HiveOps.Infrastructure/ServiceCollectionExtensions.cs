@@ -131,6 +131,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITargetDatabaseDiagnosticService, TargetDatabaseDiagnosticService>();
         services.AddScoped<ITargetLogCollector, TargetDatabaseLogCollector>();
 
+        // ── Tenant policy interpreter (NL rule → structured PolicyRule) ─────
+        services.AddScoped<IPolicyRuleInterpreter, PolicyRuleInterpreterService>();
+
         // ── AI Support Engineer remediation building blocks (WP-1..WP-5) ────
         // Scoped: PlaybookRunner consumes the scoped AppDbContext.
         services.AddScoped<IPlaybookRunner, PlaybookRunner>();

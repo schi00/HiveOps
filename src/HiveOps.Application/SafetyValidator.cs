@@ -134,6 +134,23 @@ public static class SafetyValidator
         @"^(__)?(user_?)?(credentials?|secrets?|passwords?|passwd|api_?keys?|access_?tokens?|refresh_?tokens?|auth_?tokens?|tokens?|sessions?|oauth_?\w*|mfa_?\w*|totp_?\w*|private_?keys?|ssh_?keys?|encryption_?keys?)(__)?$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    /// <summary>Returns every table referenced by FROM/JOIN/UPDATE/INTO in the SQL.</summary>
+    public static IReadOnlyList<string> ExtractTableReferences(string? sql)
+    {
+        var tables = new List<string>();
+        if (string.IsNullOrWhiteSpace(sql))
+            return tables;
+
+        var cleaned = StripSqlComments(sql);
+        foreach (Match m in TableReferencePattern.Matches(cleaned))
+        {
+            var table = m.Groups[2].Success ? m.Groups[2].Value : m.Groups[1].Value;
+            if (!tables.Contains(table, StringComparer.OrdinalIgnoreCase))
+                tables.Add(table);
+        }
+        return tables;
+    }
+
     /// <summary>
     /// Returns the name of the first sensitive/blocked table the SQL touches, or null.
     /// <paramref name="extraBlockedPatterns"/> are tenant-configured regex fragments

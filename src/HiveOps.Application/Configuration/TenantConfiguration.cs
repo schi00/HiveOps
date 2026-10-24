@@ -104,11 +104,34 @@ public sealed class PromptVariant
     public int TrafficPercent { get; set; } = 100;
 }
 
+/// <summary>
+/// A tenant-authored operating rule for the agent. Written in natural language in
+/// the dashboard, translated to a structured rule by the policy interpreter and
+/// enforced deterministically by <see cref="Policies.TenantPolicyEvaluator"/>.
+/// List order matters: rules are evaluated top-to-bottom and the LAST matching
+/// rule wins — general rules on top, exceptions below.
+/// </summary>
 public sealed class PolicyRule
 {
+    /// <summary>Stable identifier for reorder / toggle / delete operations.</summary>
+    public string Id { get; set; } = Guid.NewGuid().ToString("N")[..8];
+
+    /// <summary>Canonical machine-readable summary, e.g. "scope:facturacion AND action_type:data_modify".</summary>
     public string Condition { get; set; } = string.Empty;
+
+    /// <summary>Decision effect: allow | block | require_approval | escalate | notify.</summary>
     public string Action { get; set; } = string.Empty;
+
+    /// <summary>Structured match criteria (closed vocabulary — see PolicyConditionKeys).</summary>
     public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The natural-language sentence the tenant typed.</summary>
+    public string OriginalText { get; set; } = string.Empty;
+
+    /// <summary>Human-readable interpretation shown in the dashboard.</summary>
+    public string HumanReadable { get; set; } = string.Empty;
+
+    public bool Active { get; set; } = true;
 }
 
 public sealed class LlmConfig
