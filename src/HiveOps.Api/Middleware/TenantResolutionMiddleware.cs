@@ -33,6 +33,10 @@ public sealed class TenantResolutionMiddleware
         "/api/admin",
         "/dashboard",
         "/api/support",
+        // Payment provider webhooks carry no tenant credentials; the controller
+        // re-fetches the payment/preapproval from the provider before applying it.
+        "/api/billing/mercadopago/webhook",
+        "/api/billing/stripe/webhook",
         // HiveArena validation callbacks authenticate with X-HiveArena-Key in the controller.
         "/api/internal/hivearena"
     ];
