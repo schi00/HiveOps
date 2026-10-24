@@ -54,6 +54,10 @@ services:
       Secrets__UseAws: "false"
       SemanticKernel__ActiveProfile: "${SK_ACTIVE_PROFILE:-Production}"
       SemanticKernel__OpenRouter__ApiKey: "${SK_OPENROUTER_API_KEY:-}"
+      # The Production profile ships disabled in appsettings; enable it here so
+      # agent LLM paths (planner, root-cause, policy interpreter) actually run.
+      SemanticKernel__Profiles__Production__Enabled: "${SK_PROD_PROFILE_ENABLED:-true}"
+      SemanticKernel__Profiles__Production__ModelId: "${SK_PROD_MODEL_ID:-meta-llama/llama-3.3-70b-instruct:free}"
     volumes:
       - hiveops_dataprotection:/app/data/dataprotection
       - hiveops_gitwork:/tmp/hiveops-git-work
