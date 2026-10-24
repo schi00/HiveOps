@@ -44,11 +44,6 @@ public sealed class TenantContext : ITenantContext
         {
             if (_isResolved)
             {
-                // Idempotent when the ambient/caller tenant matches; still throws
-                // on a genuine cross-tenant switch to prevent leakage.
-                if (_tenantId == tenantId)
-                    return;
-
                 throw new InvalidOperationException(
                     $"Tenant context is already resolved to TenantId={_tenantId}. " +
                     "Resetting the tenant within the same scope is not allowed to prevent cross-tenant leakage.");
