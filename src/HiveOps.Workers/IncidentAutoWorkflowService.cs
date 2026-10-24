@@ -133,18 +133,38 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
 
     private async Task ProcessIncidentsAsync(CancellationToken cancellationToken)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
-
-        // Find incidents that are Open and assigned to bot
-        // Use IgnoreQueryFilters to see incidents from ALL tenants (RLS is bypassed here)
-        var incidents = await db.Incidents
+        // Tenants has no RLS policy — it's the only catalog readable without a
+        // tenant context. Incidents (and every tenant-scoped table) are hidden
+        // by Postgres RLS until app.tenant_id is set on the session, so the poll
+        // must run per tenant: IgnoreQueryFilters() alone cannot bypass RLS.
+        using var catalogScope = _scopeFactory.CreateScope();
+        var catalogDb = catalogScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var tenantIds = await catalogDb.Tenants
             .IgnoreQueryFilters()
-            .Where(i => i.Status == IncidentStatus.Open && i.AssignedTo == "bot")
-            .OrderBy(i => i.CreatedAt)
-            .Take(_options.MaxConcurrentIncidents)
+            .Where(t => t.IsActive)
+            .Select(t => t.Id)
             .ToListAsync(cancellationToken);
+
+        var incidents = new List<Incident>();
+        foreach (var tenantId in tenantIds)
+        {
+            using var pollScope = _scopeFactory.CreateScope();
+            var pollContext = pollScope.ServiceProvider.GetRequiredService<ITenantContext>();
+            if (pollContext is TenantContext ptc)
+                ptc.SetTenant(tenantId);
+
+            var pollDb = pollScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var remaining = _options.MaxConcurrentIncidents - incidents.Count;
+            if (remaining <= 0)
+                break;
+
+            var tenantIncidents = await pollDb.Incidents
+                .Where(i => i.Status == IncidentStatus.Open && i.AssignedTo == "bot")
+                .OrderBy(i => i.CreatedAt)
+                .Take(remaining)
+                .ToListAsync(cancellationToken);
+            incidents.AddRange(tenantIncidents);
+        }
 
         if (incidents.Count == 0)
             return;

@@ -3,7 +3,9 @@ using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using HiveOps.Application.Interfaces;
 using HiveOps.Domain.Entities;
+using HiveOps.Domain.Interfaces;
 using HiveOps.Infrastructure.AI;
+using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
 
 namespace HiveOps.Api.Services;
@@ -64,52 +66,77 @@ public sealed class LlmTaskRetryHostedService : BackgroundService
 
     private async Task RunSweepAsync(CancellationToken ct)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        var now = DateTimeOffset.UtcNow;
-        var due = await db.LlmPendingTasks
+        // LlmPendingTasks is RLS-protected: without app.tenant_id on the session
+        // Postgres hides every row and IgnoreQueryFilters() cannot help. Tenants
+        // has no RLS, so enumerate tenants first and poll inside each tenant's
+        // scope (tenant context must be set before the first DB use).
+        using var catalogScope = _serviceProvider.CreateScope();
+        var catalogDb = catalogScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var tenantIds = await catalogDb.Tenants
             .IgnoreQueryFilters()
-            .Where(t => t.Status == LlmPendingTask.StatusPending && t.NextAttemptAtUtc <= now)
-            .OrderBy(t => t.NextAttemptAtUtc)
-            .Take(FailoverChatCompletionService.CircuitOpen ? 1 : _batchSize)
+            .Where(t => t.IsActive)
+            .Select(t => t.Id)
             .ToListAsync(ct);
 
-        foreach (var task in due)
+        var now = DateTimeOffset.UtcNow;
+        var budget = FailoverChatCompletionService.CircuitOpen ? 1 : _batchSize;
+        foreach (var tenantId in tenantIds)
         {
-            if (ct.IsCancellationRequested)
+            if (budget <= 0 || ct.IsCancellationRequested)
                 return;
 
-            task.Attempts++;
-            task.UpdatedAtUtc = DateTimeOffset.UtcNow;
-            try
-            {
-                var succeeded = await DispatchAsync(scope.ServiceProvider, task, ct);
-                if (succeeded)
-                {
-                    task.Status = LlmPendingTask.StatusCompleted;
-                    task.CompletedAtUtc = DateTimeOffset.UtcNow;
-                    task.LastError = null;
-                    _logger.LogInformation(
-                        "LLM task {TaskType} ({DedupeKey}) completed for tenant {TenantId} after {Attempts} attempt(s).",
-                        task.TaskType, task.DedupeKey, task.TenantId, task.Attempts);
-                }
-                else
-                {
-                    Reschedule(task, "work not finished yet (LLM still down or output incomplete)");
-                }
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex,
-                    "LLM task {TaskType} ({DedupeKey}) attempt {Attempts} failed for tenant {TenantId}.",
-                    task.TaskType, task.DedupeKey, task.Attempts, task.TenantId);
-                Reschedule(task, ex.Message);
-            }
-        }
+            // Fetch and process inside the same tenant scope so entities stay
+            // tracked by a context whose session already carries app.tenant_id
+            // and downstream services resolve tenant-scoped data correctly.
+            using var tenantScope = _serviceProvider.CreateScope();
+            var tenantContext = tenantScope.ServiceProvider.GetRequiredService<ITenantContext>();
+            if (tenantContext is TenantContext tc)
+                tc.SetTenant(tenantId);
 
-        await db.SaveChangesAsync(ct);
+            var db = tenantScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var due = await db.LlmPendingTasks
+                .Where(t => t.Status == LlmPendingTask.StatusPending && t.NextAttemptAtUtc <= now)
+                .OrderBy(t => t.NextAttemptAtUtc)
+                .Take(budget)
+                .ToListAsync(ct);
+
+            foreach (var task in due)
+            {
+                if (ct.IsCancellationRequested)
+                    return;
+
+                budget--;
+                task.Attempts++;
+                task.UpdatedAtUtc = DateTimeOffset.UtcNow;
+                try
+                {
+                    var succeeded = await DispatchAsync(tenantScope.ServiceProvider, task, ct);
+                    if (succeeded)
+                    {
+                        task.Status = LlmPendingTask.StatusCompleted;
+                        task.CompletedAtUtc = DateTimeOffset.UtcNow;
+                        task.LastError = null;
+                        _logger.LogInformation(
+                            "LLM task {TaskType} ({DedupeKey}) completed for tenant {TenantId} after {Attempts} attempt(s).",
+                            task.TaskType, task.DedupeKey, task.TenantId, task.Attempts);
+                    }
+                    else
+                    {
+                        Reschedule(task, "work not finished yet (LLM still down or output incomplete)");
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "LLM task {TaskType} ({DedupeKey}) attempt {Attempts} failed for tenant {TenantId}.",
+                        task.TaskType, task.DedupeKey, task.Attempts, task.TenantId);
+                    Reschedule(task, ex.Message);
+                }
+            }
+
+            await db.SaveChangesAsync(ct);
+        }
     }
 
     private void Reschedule(LlmPendingTask task, string error)
