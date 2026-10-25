@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HiveOps · Mesa de tickets</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: { extend: { colors: {
+    hive: { dark:'#07080A', card:'#0E1013', border:'rgba(34,211,238,0.15)', amber:'#22d3ee', amberLight:'#67e8f9', amberDark:'#0891b2' }
+  }, fontFamily: { sans:['Inter','system-ui','sans-serif'], display:['Sora','sans-serif'], mono:['JetBrains Mono','monospace'] } } }
+}
+</script>
+<style>
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background:
+    radial-gradient(circle at 82% 8%, rgba(34,211,238,0.11) 0%, transparent 38%),
+    radial-gradient(circle at 12% 45%, rgba(34,211,238,0.07) 0%, transparent 42%),
+    #07080A;
+  min-height: 100vh;
+  color: #FAFAFA;
+}
+.card { background:#0E1013; border:1px solid rgba(34,211,238,0.15); border-radius:14px; }
+.input {
+  width:100%; background:#16191D; border:1px solid rgba(34,211,238,0.15);
+  border-radius:10px; padding:10px 14px; color:#FAFAFA; font-size:14px; outline:none;
+}
+.input:focus { border-color:#22d3ee; }
+.btn {
+  background:#0891b2; color:#fff; border-radius:10px; padding:10px 18px;
+  font-weight:600; font-size:14px; transition:background .15s;
+}
+.btn:hover { background:#22d3ee; color:#07080A; }
+.btn-ghost { background:transparent; border:1px solid rgba(34,211,238,0.3); color:#67e8f9; }
+.btn-ghost:hover { background:rgba(34,211,238,0.08); color:#67e8f9; }
+.badge { font-size:11px; font-weight:600; padding:3px 10px; border-radius:999px; letter-spacing:.04em; }
+.msg-user { background:rgba(34,211,238,0.08); border:1px solid rgba(34,211,238,0.2); }
+.msg-assistant { background:#16191D; border:1px solid rgba(255,255,255,0.06); }
+.tab { padding:8px 16px; border-radius:9px; font-size:13px; font-weight:600; color:#A8A29E; cursor:pointer; }
+.tab.active { background:rgba(34,211,238,0.12); color:#22d3ee; }
+</style>
+</head>
+<body>
+<div class="max-w-2xl mx-auto px-4 py-10">
+
+  <div class="flex items-center gap-3 mb-8">
+    <img src="/hive-mark.svg" alt="HiveOps" class="w-9 h-9" onerror="this.style.display='none'">
+    <div>
+      <h1 class="font-display text-xl font-bold">Mesa de soporte</h1>
+      <p class="text-xs text-stone-400">Crear un ticket o seguir el estado de uno existente</p>
+    </div>
+  </div>
+
+  <div id="no-tenant" class="card p-6 hidden">
+    <p class="text-amber-300 text-sm">Enlace incompleto: falta el identificador de la organización (<code>?tenant=…</code>). Pedile el link del portal a tu proveedor de soporte.</p>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="flex gap-2 mb-6 card p-1.5 w-fit">
+      <button id="tab-create" class="tab active" onclick="showTab('create')">Nuevo ticket</button>
+      <button id="tab-track" class="tab" onclick="showTab('track')">Seguir ticket</button>
+    </div>
+
+    <!-- Crear -->
+    <div id="view-create" class="card p-6 space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <input id="c-name" class="input" placeholder="Tu nombre (opcional)">
+        <input id="c-email" class="input" type="email" placeholder="Tu email (opcional)">
+      </div>
+      <input id="c-title" class="input" placeholder="Resumen del problema *" maxlength="300">
+      <textarea id="c-desc" class="input" rows="5" placeholder="Describí qué está pasando, cuándo empezó y cualquier dato útil (IDs, montos, capturas descritas)…" maxlength="8000"></textarea>
+      <button class="btn" id="btn-create" onclick="createTicket()">Crear ticket</button>
+      <p id="c-error" class="text-red-400 text-sm hidden"></p>
+    </div>
+
+    <!-- Ticket creado -->
+    <div id="view-created" class="card p-6 hidden">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="text-2xl">✓</span>
+        <div>
+          <p class="font-semibold">Ticket creado</p>
+          <p class="text-sm text-stone-400">Guardá estos datos — son la llave para consultar tu ticket.</p>
+        </div>
+      </div>
+      <div class="bg-black/40 rounded-lg p-4 font-mono text-sm space-y-2">
+        <div>Ticket: <span id="created-id" class="text-hive-amberLight font-semibold"></span></div>
+        <div class="break-all">Clave de seguimiento: <span id="created-token" class="text-hive-amberLight"></span></div>
+      </div>
+      <p class="text-xs text-stone-500 mt-3">También podés guardar el link completo: <a id="created-link" class="text-hive-amberLight underline break-all" target="_blank"></a></p>
+      <button class="btn mt-4" onclick="openCreatedTicket()">Ver mi ticket</button>
+    </div>
+
+    <!-- Seguir -->
+    <div id="view-track" class="card p-6 hidden">
+      <div class="grid grid-cols-1 gap-4 mb-4">
+        <input id="t-id" class="input font-mono" placeholder="N° de ticket (ej. TKT-AB3CD2)">
+        <input id="t-token" class="input font-mono" placeholder="Clave de seguimiento">
+      </div>
+      <button class="btn" onclick="loadTicket()">Consultar</button>
+      <p id="t-error" class="text-red-400 text-sm mt-3 hidden"></p>
+
+      <div id="ticket-view" class="hidden mt-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <p class="font-mono text-hive-amberLight font-semibold" id="v-id"></p>
+            <p class="text-sm font-medium mt-1" id="v-title"></p>
+            <p class="text-xs text-stone-500" id="v-dates"></p>
+          </div>
+          <span id="v-status" class="badge"></span>
+        </div>
+
+        <div id="v-resolved" class="hidden mb-4 card p-4" style="border-color:rgba(52,211,153,0.3)">
+          <p class="text-sm text-emerald-300 mb-3">El equipo marcó este ticket como <b>resuelto</b>. ¿Se solucionó tu problema?</p>
+          <div class="flex gap-2">
+            <button class="btn text-xs" onclick="quickComment('Se solucionó, gracias')">Sí, se solucionó</button>
+            <button class="btn btn-ghost text-xs" onclick="quickComment('Sigue fallando, no se solucionó')">No, sigue fallando</button>
+          </div>
+        </div>
+
+        <div id="v-thread" class="space-y-3 mb-4"></div>
+
+        <div class="flex gap-2">
+          <input id="v-comment" class="input" placeholder="Escribir un comentario…" maxlength="4000"
+                 onkeydown="if(event.key==='Enter')postComment()">
+          <button class="btn" onclick="postComment()">Enviar</button>
+        </div>
+        <p class="text-xs text-stone-500 mt-3">Esta página se actualiza sola cada 30 segundos.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const qs = new URLSearchParams(location.search);
+const TENANT = (qs.get('tenant') || '').trim();
+const API = location.origin + '/api/portal/tickets';
+let current = null; // {id, token}
+let refreshTimer = null;
+
+if (!TENANT) {
+  document.getElementById('no-tenant').classList.remove('hidden');
+} else {
+  document.getElementById('app').classList.remove('hidden');
+  const saved = localStorage.getItem('hiveops-ticket-' + TENANT);
+  if (saved) { try { current = JSON.parse(saved); } catch {} }
+  if (current) {
+    document.getElementById('t-id').value = current.id;
+    document.getElementById('t-token').value = current.token;
+    showTab('track');
+    loadTicket();
+  }
+}
+
+function showTab(t) {
+  document.getElementById('tab-create').classList.toggle('active', t === 'create');
+  document.getElementById('tab-track').classList.toggle('active', t === 'track');
+  document.getElementById('view-create').classList.toggle('hidden', t !== 'create');
+  document.getElementById('view-created').classList.toggle('hidden', t !== 'created');
+  document.getElementById('view-track').classList.toggle('hidden', t === 'create' || t === 'created');
+}
+
+async function createTicket() {
+  const err = document.getElementById('c-error');
+  err.classList.add('hidden');
+  const title = document.getElementById('c-title').value.trim();
+  if (!title) { err.textContent = 'Contanos al menos un resumen del problema.'; err.classList.remove('hidden'); return; }
+  const btn = document.getElementById('btn-create');
+  btn.disabled = true; btn.textContent = 'Creando…';
+  try {
+    const res = await fetch(`${API}/${TENANT}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('c-name').value.trim() || null,
+        email: document.getElementById('c-email').value.trim() || null,
+        title,
+        description: document.getElementById('c-desc').value.trim() || null
+      })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `Error ${res.status}`);
+    }
+    const data = await res.json();
+    current = { id: data.ticketId, token: data.trackingToken };
+    localStorage.setItem('hiveops-ticket-' + TENANT, JSON.stringify(current));
+    document.getElementById('created-id').textContent = data.ticketId;
+    document.getElementById('created-token').textContent = data.trackingToken;
+    const link = `${location.origin}/tickets/?tenant=${TENANT}&ticket=${data.ticketId}&token=${data.trackingToken}`;
+    const a = document.getElementById('created-link'); a.href = link; a.textContent = link;
+    showTab('created');
+  } catch (e) {
+    err.textContent = 'No se pudo crear el ticket: ' + e.message;
+    err.classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Crear ticket';
+  }
+}
+
+function openCreatedTicket() {
+  document.getElementById('t-id').value = current.id;
+  document.getElementById('t-token').value = current.token;
+  showTab('track');
+  loadTicket();
+}
+
+const STATUS_STYLE = {
+  Open:            ['Abierto', 'background:rgba(34,211,238,0.15);color:#22d3ee'],
+  InProgress:      ['En curso', 'background:rgba(251,191,36,0.15);color:#fbbf24'],
+  PendingInfo:     ['Esperando tu respuesta', 'background:rgba(167,139,250,0.15);color:#a78bfa'],
+  AwaitingApproval:['Esperando aprobación', 'background:rgba(251,191,36,0.15);color:#fbbf24'],
+  Resolved:        ['Resuelto', 'background:rgba(52,211,153,0.15);color:#34d399'],
+  Closed:          ['Cerrado', 'background:rgba(168,162,158,0.15);color:#a8a29e']
+};
+
+async function loadTicket() {
+  const err = document.getElementById('t-error');
+  err.classList.add('hidden');
+  const id = document.getElementById('t-id').value.trim().toUpperCase();
+  const token = document.getElementById('t-token').value.trim();
+  if (!id || !token) { err.textContent = 'Ingresá el número de ticket y la clave.'; err.classList.remove('hidden'); return; }
+  current = { id, token };
+  localStorage.setItem('hiveops-ticket-' + TENANT, JSON.stringify(current));
+  await refreshTicket();
+}
+
+async function refreshTicket() {
+  if (!current) return;
+  try {
+    const res = await fetch(`${API}/${TENANT}/${encodeURIComponent(current.id)}?token=${encodeURIComponent(current.token)}`);
+    if (!res.ok) throw new Error(res.status === 404 ? 'Ticket o clave incorrectos.' : `Error ${res.status}`);
+    const t = await res.json();
+    renderTicket(t);
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(refreshTicket, 30000);
+  } catch (e) {
+    document.getElementById('ticket-view').classList.add('hidden');
+    const err = document.getElementById('t-error');
+    err.textContent = e.message; err.classList.remove('hidden');
+  }
+}
+
+function renderTicket(t) {
+  document.getElementById('ticket-view').classList.remove('hidden');
+  document.getElementById('v-id').textContent = t.ticketId;
+  document.getElementById('v-title').textContent = t.title;
+  document.getElementById('v-dates').textContent =
+    'Creado ' + new Date(t.createdAt).toLocaleString('es-AR') +
+    ' · actualizado ' + new Date(t.updatedAt).toLocaleString('es-AR');
+  const [label, style] = STATUS_STYLE[t.status] || [t.status, 'background:rgba(168,162,158,0.15);color:#a8a29e'];
+  const badge = document.getElementById('v-status');
+  badge.textContent = label; badge.style.cssText = style;
+  document.getElementById('v-resolved').classList.toggle('hidden', t.status !== 'Resolved');
+  const thread = document.getElementById('v-thread');
+  thread.innerHTML = t.messages.map(m => `
+    <div class="${m.role === 'user' ? 'msg-user' : 'msg-assistant'} rounded-xl p-3">
+      <p class="text-[10px] uppercase tracking-wider ${m.role === 'user' ? 'text-hive-amberLight' : 'text-stone-500'} mb-1">
+        ${m.role === 'user' ? 'Vos' : 'Soporte'} · ${new Date(m.createdAt).toLocaleString('es-AR')}
+      </p>
+      <p class="text-sm whitespace-pre-wrap"></p>
+    </div>`).join('');
+  // set textContent after innerHTML to avoid HTML injection
+  thread.querySelectorAll('.whitespace-pre-wrap').forEach((el, i) => el.textContent = t.messages[i].content);
+}
+
+async function postComment(text) {
+  const input = document.getElementById('v-comment');
+  const content = (typeof text === 'string' ? text : input.value).trim();
+  if (!content || !current) return;
+  try {
+    const res = await fetch(`${API}/${TENANT}/${encodeURIComponent(current.id)}/comments?token=${encodeURIComponent(current.token)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: content })
+    });
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+    input.value = '';
+    await refreshTicket();
+  } catch (e) { alert('No se pudo enviar el comentario: ' + e.message); }
+}
+
+function quickComment(text) { postComment(text); }
+
+// deep link: ?tenant=…&ticket=…&token=…
+if (TENANT && qs.get('ticket') && qs.get('token')) {
+  document.getElementById('t-id').value = qs.get('ticket');
+  document.getElementById('t-token').value = qs.get('token');
+  showTab('track');
+  loadTicket();
+}
+</script>
+</body>
+</html>

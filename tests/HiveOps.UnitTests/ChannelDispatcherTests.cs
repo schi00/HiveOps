@@ -59,7 +59,9 @@ public sealed class ChannelDispatcherTests
 
     private static ChannelDispatcher BuildDispatcher(
         FakeWhatsAppChannel whatsApp, TicketingChannel ticketing, AppDbContext? db = null)
-        => new(whatsApp, ticketing, db ?? BuildDb(Guid.NewGuid()), NullLogger<ChannelDispatcher>.Instance);
+        => new(whatsApp, ticketing, db ?? BuildDb(Guid.NewGuid()),
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build(),
+            NullLogger<ChannelDispatcher>.Instance);
 
     private static AppDbContext BuildDb(Guid tenantId)
     {
@@ -112,7 +114,12 @@ public sealed class ChannelDispatcherTests
     {
         var handler = new StubHttpHandler();
         var config = new Dictionary<string, string?> { ["Ticketing:BaseUrl"] = "https://ticketera.example.com" };
-        var sut = BuildDispatcher(new FakeWhatsAppChannel(), BuildTicketingChannel(config, handler));
+        var sut = new ChannelDispatcher(
+            new FakeWhatsAppChannel(),
+            BuildTicketingChannel(config, handler),
+            BuildDb(Guid.NewGuid()),
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(),
+            NullLogger<ChannelDispatcher>.Instance);
 
         await sut.SendTextAsync(Guid.NewGuid(), "ticketing", "TCK-42", "tu ticket fue actualizado");
 
@@ -166,5 +173,58 @@ public sealed class ChannelDispatcherTests
         var act = () => sut.SendTextAsync(tenantId, "web", "ghost", "hola");
 
         await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task SendTextAsync_HostedTicketing_Persists_To_Conversation()
+    {
+        var tenantId = Guid.NewGuid();
+        var db = BuildDb(tenantId);
+        var conversation = new Conversation
+        {
+            TenantId = tenantId,
+            Channel = "ticketing",
+            ChannelUserId = "TKT-ABC123"
+        };
+        var incident = new Incident
+        {
+            TenantId = tenantId,
+            ConversationId = conversation.Id,
+            Title = "portal ticket",
+            ExternalTicketId = "TKT-ABC123",
+            SourceChannel = "ticketing"
+        };
+        db.Conversations.Add(conversation);
+        db.Incidents.Add(incident);
+        await db.SaveChangesAsync();
+
+        var handler = new StubHttpHandler();
+        var sut = BuildDispatcher(new FakeWhatsAppChannel(), BuildTicketingChannel(new(), handler), db);
+
+        await sut.SendTextAsync(tenantId, "ticketing", "TKT-ABC123", "estado actualizado");
+
+        var message = db.ConversationMessages.Should().ContainSingle().Which;
+        message.Content.Should().Be("estado actualizado");
+        message.IncidentId.Should().Be(incident.Id);
+        handler.Requests.Should().BeEmpty("hosted ticketing has no HTTP transport");
+    }
+
+    [Fact]
+    public async Task SendTextAsync_ExternalTicketing_Still_Uses_Adapter()
+    {
+        var handler = new StubHttpHandler();
+        var config = new Dictionary<string, string?> { ["Ticketing:BaseUrl"] = "https://ticketera.example.com" };
+        var tenantId = Guid.NewGuid();
+
+        var sut = new ChannelDispatcher(
+            new FakeWhatsAppChannel(),
+            BuildTicketingChannel(config, handler),
+            BuildDb(tenantId),
+            new ConfigurationBuilder().AddInMemoryCollection(config).Build(),
+            NullLogger<ChannelDispatcher>.Instance);
+
+        await sut.SendTextAsync(tenantId, "ticketing", "EXT-1", "comentario externo");
+
+        handler.Requests.Should().ContainSingle("an external ticketing BaseUrl keeps using the HTTP adapter");
     }
 }

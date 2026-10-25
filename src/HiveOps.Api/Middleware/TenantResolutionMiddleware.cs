@@ -37,6 +37,9 @@ public sealed class TenantResolutionMiddleware
         // re-fetches the payment/preapproval from the provider before applying it.
         "/api/billing/mercadopago/webhook",
         "/api/billing/stripe/webhook",
+        // Hosted ticket portal: tenant comes from the route GUID, ticket access
+        // is gated by a per-ticket HMAC token minted at creation.
+        "/api/portal",
         // HiveArena validation callbacks authenticate with X-HiveArena-Key in the controller.
         "/api/internal/hivearena"
     ];
