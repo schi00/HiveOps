@@ -598,7 +598,8 @@ try{
 if(!s.tenantId){toast('Selecciona una cuenta primero','warning');return;}
 const cfg=await api('GET','/tenants/'+s.tenantId+'/config');
 const el=id=>document.getElementById(id);
-el('cfg-schema-banner').textContent='Schema v'+(cfg.configurationSchemaVersion ?? '?');
+const sb=el('cfg-schema-banner');
+if(sb)sb.textContent='Schema v'+(cfg.configurationSchemaVersion ?? '?');
 const a=cfg.agent||{};
 cfgAgentFull=a;
 el('cfg-agent-enabled').checked=a.enabled!==false;
