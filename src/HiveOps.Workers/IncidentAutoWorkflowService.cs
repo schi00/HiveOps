@@ -260,6 +260,11 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
         if (incident.Status == IncidentStatus.PendingInfo)
         {
             _logger.LogInformation("Incident {IncidentId} is pending info, skipping", incident.Id);
+            // The triage question lives in FinalUserResponse; for ticket/web
+            // incidents (no live chat reply path) it must be pushed to the
+            // reporter's channel or the case stalls silently forever.
+            if (!string.IsNullOrWhiteSpace(incident.FinalUserResponse))
+                await NotifyChannelProgressAsync(incident, incident.FinalUserResponse, cancellationToken);
             return;
         }
 
