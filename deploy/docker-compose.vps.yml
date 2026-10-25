@@ -88,6 +88,8 @@ services:
       HiveArena__Publisher__HiveArenaBaseUrl: "${HIVEARENA_BASE_URL:-}"
       HiveArena__Publisher__HiveArenaApiKey: "${HIVEARENA_API_KEY:-}"
       HiveArena__Publisher__RequireValidationForAutoDeploy: "${HIVEARENA_REQUIRE_VALIDATION:-true}"
+      # Inbound: must equal HiveArena HiveOpsCallback:SharedSecret (see /opt/hivearena/.env).
+      HiveOps__HiveArenaInbound__SharedSecret: "${HIVEARENA_CALLBACK_SECRET:-}"
       # Mercado Pago — shared HiveCorp account; webhook routing is per-preference.
       MercadoPago__AccessToken: "${MERCADOPAGO_ACCESS_TOKEN:-}"
       MercadoPago__NotificationBaseUrl: "${MP_NOTIFICATION_BASE:-https://api.ops.hivecorp.com.ar}"
