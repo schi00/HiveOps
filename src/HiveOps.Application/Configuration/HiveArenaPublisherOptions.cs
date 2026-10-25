@@ -20,7 +20,11 @@ public sealed class HiveArenaPublisherOptions
 
     public int TimeoutSeconds { get; set; } = 600;
 
-    /// <summary>Optional repo URL echoed into validation requests (Arena checkout stub).</summary>
+    /// <summary>
+    /// Fallback repo URL for validation requests when the tenant has no
+    /// <c>DeployGit.GitRepositoryUrl</c> configured. Tenants without any repo
+    /// run data-only validations in HiveArena.
+    /// </summary>
     public string? RepoUrl { get; set; }
 
     /// <summary>

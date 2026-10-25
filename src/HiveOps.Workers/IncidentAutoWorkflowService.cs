@@ -3599,16 +3599,38 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
 
         try
         {
+            // Repo coordinates and credentials are per-tenant: each tenant validates
+            // against its own deploy-git repo with its own access token. Tenants with
+            // no repo configured run data-only validations (RepoUrl stays null).
+            string? repoUrl = _hiveArenaPublisherOptions.RepoUrl;
+            string? repoAccessToken = null;
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var configs = scope.ServiceProvider.GetRequiredService<ITenantConfigService>();
+                var cfg = await configs.GetConfigurationAsync(incident.TenantId, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(cfg.DeployGit.GitRepositoryUrl))
+                {
+                    repoUrl = cfg.DeployGit.GitRepositoryUrl;
+                    repoAccessToken = await configs.GetDeployGitTokenAsync(incident.TenantId, cancellationToken);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Could not resolve tenant deploy-git config for {TenantId}; using publisher fallback.", incident.TenantId);
+            }
+
             var message = new HiveArenaValidationRequestedMessage(
                 RequestId: Guid.NewGuid(),
                 IncidentId: incident.Id,
                 TenantId: incident.TenantId,
-                RepoUrl: _hiveArenaPublisherOptions.RepoUrl,
+                RepoUrl: repoUrl,
                 BranchName: incident.GitBranch,
                 CommitSha: commitHash,
                 ScenarioId: _hiveArenaPublisherOptions.DefaultScenarioId,
                 Seed: _hiveArenaPublisherOptions.DefaultSeed,
-                TimeoutSeconds: _hiveArenaPublisherOptions.TimeoutSeconds);
+                TimeoutSeconds: _hiveArenaPublisherOptions.TimeoutSeconds,
+                RepoAccessToken: repoAccessToken);
 
             await _hiveArenaValidationPublisher.PublishAsync(message, cancellationToken);
         }

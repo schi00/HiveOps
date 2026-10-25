@@ -12,4 +12,6 @@ public sealed record HiveArenaValidationRequestedMessage(
     string? CommitSha,
     string ScenarioId,
     int Seed,
-    int TimeoutSeconds);
+    int TimeoutSeconds,
+    /// <summary>Per-tenant git credential for private repos (deploy-git access token).</summary>
+    string? RepoAccessToken = null);
