@@ -43,8 +43,12 @@ public sealed class TenantLookupService : ITenantLookupService
         await using var connection = new NpgsqlConnection(MasterConnectionString);
         await connection.OpenAsync(cancellationToken);
 
+        var apiKeyHash = ApiKeyHasher.Compute(apiKey);
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT \"Id\" FROM \"Tenants\" WHERE \"ApiKey\" = @apiKey AND \"IsActive\" = TRUE";
+        // Hash lookup preferred; plaintext fallback keeps keys provisioned
+        // before the ApiKeyHash backfill working during rollout.
+        cmd.CommandText = "SELECT \"Id\" FROM \"Tenants\" WHERE (\"ApiKeyHash\" = @hash OR \"ApiKey\" = @apiKey) AND \"IsActive\" = TRUE";
+        cmd.Parameters.AddWithValue("@hash", apiKeyHash);
         cmd.Parameters.AddWithValue("@apiKey", apiKey);
 
         var result = await cmd.ExecuteScalarAsync(cancellationToken);

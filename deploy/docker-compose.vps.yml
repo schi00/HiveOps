@@ -65,6 +65,29 @@ services:
       SemanticKernel__Providers__0__Endpoint: "https://api.groq.com/openai/v1"
       SemanticKernel__Providers__0__ModelId: "${SK_GROQ_MODEL_ID:-openai/gpt-oss-120b}"
       SemanticKernel__Providers__0__ApiKey: "${GROQ_API_KEY:-}"
+      # Fallback LLM provider slot — inert until SK_FALLBACK_ENABLED=true plus a
+      # key are provided in .env. Keeps a single-provider outage from killing
+      # intake/triage/RCA for every tenant.
+      SemanticKernel__Providers__1__Enabled: "${SK_FALLBACK_ENABLED:-false}"
+      SemanticKernel__Providers__1__Name: "${SK_FALLBACK_NAME:-openai}"
+      SemanticKernel__Providers__1__Endpoint: "${SK_FALLBACK_ENDPOINT:-https://api.openai.com/v1}"
+      SemanticKernel__Providers__1__ModelId: "${SK_FALLBACK_MODEL_ID:-gpt-4o-mini}"
+      SemanticKernel__Providers__1__ApiKey: "${SK_FALLBACK_API_KEY:-}"
+      # Reporter notifications by email — inert until SMTP_* are provided in .env.
+      Email__SmtpHost: "${SMTP_HOST:-}"
+      Email__SmtpPort: "${SMTP_PORT:-587}"
+      Email__EnableSsl: "${SMTP_ENABLE_SSL:-true}"
+      Email__Username: "${SMTP_USERNAME:-}"
+      Email__Password: "${SMTP_PASSWORD:-}"
+      Email__FromAddress: "${SMTP_FROM_ADDRESS:-}"
+      Email__FromName: "${SMTP_FROM_NAME:-HiveOps}"
+      # HiveArena sandbox gate — validation required before any auto-deployed
+      # code fix; with no Arena service configured this parks fixes at
+      # AwaitingApproval instead of deploying unvalidated changes.
+      HiveArena__Publisher__Enabled: "${HIVEARENA_PUBLISHER_ENABLED:-false}"
+      HiveArena__Publisher__HiveArenaBaseUrl: "${HIVEARENA_BASE_URL:-}"
+      HiveArena__Publisher__HiveArenaApiKey: "${HIVEARENA_API_KEY:-}"
+      HiveArena__Publisher__RequireValidationForAutoDeploy: "${HIVEARENA_REQUIRE_VALIDATION:-true}"
       # Mercado Pago — shared HiveCorp account; webhook routing is per-preference.
       MercadoPago__AccessToken: "${MERCADOPAGO_ACCESS_TOKEN:-}"
       MercadoPago__NotificationBaseUrl: "${MP_NOTIFICATION_BASE:-https://api.ops.hivecorp.com.ar}"

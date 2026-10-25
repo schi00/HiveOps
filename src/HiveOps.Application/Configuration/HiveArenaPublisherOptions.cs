@@ -22,4 +22,11 @@ public sealed class HiveArenaPublisherOptions
 
     /// <summary>Optional repo URL echoed into validation requests (Arena checkout stub).</summary>
     public string? RepoUrl { get; set; }
+
+    /// <summary>
+    /// Fail-closed switch: when <c>true</c> and the publisher is disabled
+    /// (Arena not configured), auto-fixes park in <c>AwaitingApproval</c>
+    /// instead of opening a PR and deploying without sandbox validation.
+    /// </summary>
+    public bool RequireValidationForAutoDeploy { get; set; }
 }

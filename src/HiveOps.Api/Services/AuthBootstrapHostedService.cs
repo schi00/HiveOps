@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using HiveOps.Api.Authentication;
 using HiveOps.Api.Utilities;
 using HiveOps.Domain.Entities;
+using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
 
 namespace HiveOps.Api.Services;
@@ -172,6 +173,7 @@ public sealed class AuthBootstrapHostedService : IHostedService
                 Name = options.Name,
                 Industry = options.Industry,
                 ApiKey = options.ApiKey.Trim(),
+                ApiKeyHash = ApiKeyHasher.Compute(options.ApiKey),
                 IsActive = true
             };
             db.Tenants.Add(tenant);
@@ -179,6 +181,7 @@ public sealed class AuthBootstrapHostedService : IHostedService
         else
         {
             tenant.ApiKey = options.ApiKey.Trim();
+            tenant.ApiKeyHash = ApiKeyHasher.Compute(options.ApiKey);
             tenant.Industry = options.Industry;
             tenant.IsActive = true;
         }

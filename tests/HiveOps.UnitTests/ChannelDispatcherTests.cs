@@ -1,8 +1,12 @@
 using System.Net;
 using FluentAssertions;
+using HiveOps.Domain.Entities;
 using HiveOps.Domain.Interfaces;
 using HiveOps.Infrastructure.Messaging;
+using HiveOps.Infrastructure.Multitenancy;
+using HiveOps.Infrastructure.Persistence;
 using HiveOps.Infrastructure.Ticketing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -53,8 +57,19 @@ public sealed class ChannelDispatcherTests
             new ConfigurationBuilder().AddInMemoryCollection(config).Build(),
             NullLogger<TicketingChannel>.Instance);
 
-    private static ChannelDispatcher BuildDispatcher(FakeWhatsAppChannel whatsApp, TicketingChannel ticketing)
-        => new(whatsApp, ticketing, NullLogger<ChannelDispatcher>.Instance);
+    private static ChannelDispatcher BuildDispatcher(
+        FakeWhatsAppChannel whatsApp, TicketingChannel ticketing, AppDbContext? db = null)
+        => new(whatsApp, ticketing, db ?? BuildDb(Guid.NewGuid()), NullLogger<ChannelDispatcher>.Instance);
+
+    private static AppDbContext BuildDb(Guid tenantId)
+    {
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(tenantId);
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        return new AppDbContext(options, tenantContext);
+    }
 
     [Fact]
     public async Task SendTextAsync_WhatsAppChannel_Routes_To_WhatsAppAdapter()
@@ -115,5 +130,41 @@ public sealed class ChannelDispatcherTests
         var act = () => sut.SendTextAsync(Guid.NewGuid(), "whatsapp", "+549", "hola");
 
         await act.Should().NotThrowAsync("channel failures must never break incident processing");
+    }
+
+    [Fact]
+    public async Task SendTextAsync_WebChannel_Persists_Message_Into_Reporter_Conversation()
+    {
+        var tenantId = Guid.NewGuid();
+        var db = BuildDb(tenantId);
+        db.Conversations.Add(new Conversation
+        {
+            TenantId = tenantId,
+            Channel = "web",
+            ChannelUserId = "reporter-1"
+        });
+        await db.SaveChangesAsync();
+
+        var whatsApp = new FakeWhatsAppChannel();
+        var sut = BuildDispatcher(whatsApp, BuildTicketingChannel(new()), db);
+
+        await sut.SendTextAsync(tenantId, "web", "reporter-1", "tu incidente fue actualizado");
+
+        var message = db.ConversationMessages.Should().ContainSingle().Which;
+        message.Role.Should().Be(HiveOps.Domain.Enums.MessageRole.Assistant);
+        message.Content.Should().Be("tu incidente fue actualizado");
+        message.TenantId.Should().Be(tenantId);
+        whatsApp.SentMessages.Should().BeEmpty("web must not fall through to other adapters");
+    }
+
+    [Fact]
+    public async Task SendTextAsync_WebChannel_Without_Conversation_DoesNotThrow()
+    {
+        var tenantId = Guid.NewGuid();
+        var sut = BuildDispatcher(new FakeWhatsAppChannel(), BuildTicketingChannel(new()), BuildDb(tenantId));
+
+        var act = () => sut.SendTextAsync(tenantId, "web", "ghost", "hola");
+
+        await act.Should().NotThrowAsync();
     }
 }

@@ -371,17 +371,31 @@ public sealed class TargetDatabaseDiagnosticService : ITargetDatabaseDiagnosticS
         return columns;
     }
 
+    // Tables/columns that should never reach the LLM context: platform-auth and
+    // credential-shaped artifacts reveal where secrets live even without rows.
+    private static readonly Regex SensitiveTableRegex = new(
+        @"^(appusers|tenants|credentials|secrets|apikeys|api_keys|__efmigrationshistory)$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex SensitiveColumnRegex = new(
+        @"password|passwd|pwd|secret|token|credential|apikey|api_key|private_?key|hash$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static string FormatSchemaDdl(
         List<(string Schema, string Name)> tables, List<ColumnInfo> columns)
     {
         var sb = new StringBuilder();
         foreach (var table in tables)
         {
+            if (SensitiveTableRegex.IsMatch(table.Name))
+                continue;
+
             sb.Append("TABLE ").Append(table.Schema).Append('.').Append(table.Name).Append(" (");
 
             var first = true;
             foreach (var col in columns.Where(c =>
-                         c.Schema == table.Schema && c.Table == table.Name))
+                         c.Schema == table.Schema && c.Table == table.Name
+                         && !SensitiveColumnRegex.IsMatch(c.Name)))
             {
                 if (!first)
                     sb.Append(", ");

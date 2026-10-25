@@ -14,6 +14,8 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.WhatsAppNumber).HasMaxLength(30).IsRequired(false);
         builder.Property(t => t.ApiKey).HasMaxLength(128).IsRequired();
         builder.HasIndex(t => t.ApiKey).IsUnique();
+        builder.Property(t => t.ApiKeyHash).HasMaxLength(128).IsRequired(false);
+        builder.HasIndex(t => t.ApiKeyHash);
         builder.HasIndex(t => t.WhatsAppNumber).IsUnique().HasFilter("[WhatsAppNumber] IS NOT NULL");
         builder.Property(t => t.ConfigJson).HasColumnType("text");
 

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using HiveOps.Api.Authentication;
 using HiveOps.Domain.Entities;
+using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.Persistence;
 using HiveOps.Application.Interfaces;
 using Microsoft.AspNetCore.RateLimiting;
@@ -102,11 +103,13 @@ public sealed class OnboardingController : ControllerBase
         if (await _db.AppUsers.AsNoTracking().AnyAsync(u => u.Username == username || u.Email == email, ct))
             return Conflict("Username or email already exists.");
 
+        var apiKey = GenerateApiKey();
         var tenant = new Tenant
         {
             Name = company,
             IsActive = false,
-            ApiKey = GenerateApiKey(),
+            ApiKey = apiKey,
+            ApiKeyHash = ApiKeyHasher.Compute(apiKey),
             Plan = PlanTier.Starter,
             CreatedAt = DateTimeOffset.UtcNow
         };

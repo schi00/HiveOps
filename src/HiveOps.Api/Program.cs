@@ -18,6 +18,7 @@ using HiveOps.Application.Interfaces;
 using HiveOps.Application.Services;
 using HiveOps.Domain.Models;
 using HiveOps.Infrastructure;
+using HiveOps.Infrastructure.Multitenancy;
 using HiveOps.Infrastructure.AI;
 using HiveOps.Infrastructure.ApiDrift;
 using HiveOps.Infrastructure.Services;
@@ -222,11 +223,13 @@ builder.Services.AddAuthentication("SmartAuth")
                     {
                         // JIT provisioning: first HIVE sign-in materializes the
                         // organization here with the same id as the account org.
+                        var jitApiKey = $"tenant-{Guid.NewGuid():N}";
                         tenant = new HiveOps.Domain.Entities.Tenant
                         {
                             Id = orgId,
                             Name = string.IsNullOrWhiteSpace(orgName) ? $"org-{orgId:N}" : orgName,
-                            ApiKey = $"tenant-{Guid.NewGuid():N}",
+                            ApiKey = jitApiKey,
+                            ApiKeyHash = ApiKeyHasher.Compute(jitApiKey),
                             IsActive = true,
                             Plan = HiveOps.Domain.Entities.PlanTier.Starter
                         };

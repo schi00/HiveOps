@@ -228,6 +228,7 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing incident {IncidentId}", incident.Id);
+                await TryTripWorkflowCircuitBreakerAsync(incident.Id, ex, cancellationToken);
             }
             finally
             {
@@ -330,6 +331,65 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
         }
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Circuit breaker for deterministic failures: an incident that errors out
+    /// stays Open+bot and would be retried every poll cycle forever, spamming
+    /// logs and re-running diagnostics. After <see cref="MaxWorkflowErrors"/>
+    /// failures it is handed to an engineer and leaves the bot queue.
+    /// </summary>
+    private const int MaxWorkflowErrors = 5;
+
+    private async Task TryTripWorkflowCircuitBreakerAsync(Guid incidentId, Exception error, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var incident = await db.Incidents.FirstOrDefaultAsync(i => i.Id == incidentId, ct);
+            if (incident is null)
+                return;
+
+            var priorErrors = await db.IncidentAuditEntries
+                .CountAsync(e => e.IncidentId == incidentId && e.EventType == "WorkflowError", ct);
+
+            await AppendAuditAsync(incident, "WorkflowError", new
+            {
+                attempt = priorErrors + 1,
+                error = error.Message.Length > 500 ? error.Message[..500] : error.Message
+            }, ct);
+
+            if (priorErrors + 1 < MaxWorkflowErrors)
+                return;
+
+            incident.AssignedTo = "engineer";
+            incident.RequiresHumanApproval = true;
+            incident.ResolutionNotes =
+                $"El flujo automático falló {MaxWorkflowErrors} veces de forma consecutiva " +
+                $"(último error: {error.Message[..Math.Min(error.Message.Length, 200)]}). " +
+                "Se retiró de la cola del bot y requiere atención manual.";
+            incident.UpdatedAt = DateTimeOffset.UtcNow;
+
+            await AppendAuditAsync(incident, "CircuitBreakerTripped", new
+            {
+                attempts = priorErrors + 1
+            }, ct);
+
+            await _messageHistory.AppendMessageToIncidentAsync(
+                incident.Id,
+                MessageRole.Assistant,
+                $"El procesamiento automático falló {MaxWorkflowErrors} veces. Se escala a un ingeniero para revisión manual.",
+                "IncidentAutoWorkflow",
+                ct);
+
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception breakerEx) when (breakerEx is not OperationCanceledException)
+        {
+            _logger.LogWarning(breakerEx, "Circuit breaker bookkeeping failed for incident {IncidentId}", incidentId);
+        }
     }
 
     private async Task ExecuteDiagnosticsAsync(Incident incident, AppDbContext db, CancellationToken cancellationToken)
@@ -1250,6 +1310,31 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             {
                 gate = "HiveArena",
                 status = "Pending"
+            }, cancellationToken);
+            return;
+        }
+
+        // Fail-closed: Arena validation is required for auto-deploy but the
+        // publisher is not configured here — park the fix for a human instead
+        // of deploying an unvalidated change.
+        if (_hiveArenaPublisherOptions.RequireValidationForAutoDeploy)
+        {
+            incident.ArenaValidationStatus = "Unavailable";
+            incident.Status = IncidentStatus.AwaitingApproval;
+            incident.RequiresHumanApproval = true;
+            incident.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(cancellationToken);
+
+            await _messageHistory.AppendMessageToIncidentAsync(
+                incident.Id,
+                MessageRole.Assistant,
+                "El fix quedó propuesto pero HiveArena no está configurado en este entorno. Se requiere aprobación manual para el pull request y el despliegue.",
+                "IncidentAutoWorkflow",
+                cancellationToken);
+            await AppendAuditAsync(incident, "Verification", new
+            {
+                gate = "HiveArena",
+                status = "Unavailable"
             }, cancellationToken);
             return;
         }
@@ -3347,8 +3432,11 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
                 - Una sola sentencia o sentencias separadas por ';' cada una
                   UPDATE/DELETE con WHERE específico (nunca WHERE 1=1 ni vacío).
                 - Usá únicamente tablas y columnas del esquema provisto.
-                - Dialecto PostgreSQL: LIMIT en lugar de TOP, now() en lugar de
-                  GETDATE(), identificadores entre "comillas dobles" si hace falta.
+                - Dialecto PostgreSQL: LIMIT en lugar de TOP, now() en lugar de GETDATE().
+                - SIEMPRE citá los identificadores entre "comillas dobles" exactamente
+                  como aparecen en el esquema (ej.: "public"."Orders", "PaymentStatus").
+                  El esquema usa PascalCase y los nombres son case-sensitive:
+                  escribir orders u Orders sin comillas rompe la consulta.
                 - No uses alias en el target del UPDATE/DELETE: escribí
                   UPDATE public.tabla SET ... WHERE ..., nunca UPDATE alias SET ... FROM.
                 - No uses DROP, TRUNCATE, ALTER ni CREATE TABLE AS.

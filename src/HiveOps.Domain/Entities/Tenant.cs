@@ -7,6 +7,9 @@ public sealed class Tenant
     public string? Industry { get; set; }
     public string? WhatsAppNumber { get; set; }
     public string ApiKey { get; set; } = string.Empty;
+    /// <summary>SHA-256 of <see cref="ApiKey"/> — used for tenant lookup so the
+    /// plaintext key is never needed on the read path.</summary>
+    public string? ApiKeyHash { get; set; }
     public bool IsActive { get; set; } = true;
     public string? ConfigJson { get; set; }
     public string? EncryptedConnectionString { get; set; }
