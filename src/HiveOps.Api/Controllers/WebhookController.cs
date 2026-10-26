@@ -392,9 +392,9 @@ public sealed class WebhookController : ControllerBase
                 return await HandleTicketCommentAsync(tenantId, payload, ct);
             default:
                 _logger.LogInformation(
-                    "Ticketing webhook event '{EventType}' accepted as no-op. ExternalTicketId={ExternalTicketId}",
+                    "Ticketing webhook event '{EventType}' ignored as unsupported. ExternalTicketId={ExternalTicketId}",
                     eventType, payload.ExternalTicketId);
-                return Ok(new { received = true });
+                return Ok(new { received = true, handled = false, reason = $"unsupported eventType '{eventType}'" });
         }
     }
 

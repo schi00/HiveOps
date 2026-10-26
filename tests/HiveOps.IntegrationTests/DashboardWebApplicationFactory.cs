@@ -58,6 +58,8 @@ public sealed class DashboardWebApplicationFactory : WebApplicationFactory<Progr
             services.AddSingleton<IConversationStateManager, InMemoryConversationStateManager>();
             services.RemoveAll(typeof(IGitService));
             services.AddSingleton<IGitService, FakeGitService>();
+            services.RemoveAll(typeof(IDeploymentService));
+            services.AddSingleton<IDeploymentService, FakeDeploymentService>();
             services.RemoveAll(typeof(ITenantLookupService));
             services.AddScoped<ITenantLookupService, FakeTenantLookupService>();
             services.RemoveAll(typeof(IDynamicConnectionStringResolver));
@@ -348,6 +350,20 @@ internal sealed class FakeGitService : IGitService
     public Task<string> MergePullRequestAsync(Guid _, string b, CancellationToken ct = default) => Task.FromResult($"MERGED:{b}");
     public Task<IReadOnlyList<GitCommitEvidence>> GetRecentCommitsForFilesAsync(Guid _, IReadOnlyList<string> f, int max = 5, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<GitCommitEvidence>>(Array.Empty<GitCommitEvidence>());
+}
+
+internal sealed class FakeDeploymentService : IDeploymentService
+{
+    public Task<string> TriggerDeployAsync(string branchName, string commitHash, CancellationToken ct = default)
+        => Task.FromResult($"DEPLOY:{branchName}");
+    public Task<string> GetDeployStatusAsync(string deployId, CancellationToken ct = default)
+        => Task.FromResult("success");
+    public Task<bool> IsPipelineHealthyAsync(CancellationToken ct = default)
+        => Task.FromResult(true);
+    public Task<string> OnMergeDeployedAsync(string branchName, string commitHash, CancellationToken ct = default)
+        => Task.FromResult($"DEPLOY:{branchName}");
+    public Task<string?> CreatePullRequestAsync(Guid tenantId, string branchName, string title, string body, CancellationToken ct = default)
+        => Task.FromResult<string?>("local-pr://test");
 }
 
 internal sealed class FakeDynamicConnectionStringResolver : IDynamicConnectionStringResolver

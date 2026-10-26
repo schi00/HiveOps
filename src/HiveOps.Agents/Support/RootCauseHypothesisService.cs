@@ -454,8 +454,14 @@ public sealed class RootCauseHypothesisService : IRootCauseHypothesisService
             - recommendedTrack must be exactly one of: "Playbook" | "DatabaseFix" | "CodeFix" | "Escalate".
               Use "Escalate" when the evidence is insufficient or the blast radius is unclear.
             - matchedPlaybookCode: the code of a known operational playbook that resolves this class of problem, or null.
-            - verificationSqlQuery: a READ-ONLY T-SQL SELECT that returns the ANOMALOUS rows caused by the problem.
+            - verificationSqlQuery: a READ-ONLY SELECT that returns the ANOMALOUS rows caused by the problem.
+              The tenant database runs on PostgreSQL — use PostgreSQL syntax (LIMIT, ~ regex, now()).
               Convention: it MUST return 0 rows once the problem is fixed. Use only tables/columns from the schema above, or null if no reliable verification query exists.
+              Sanity-check the query against the CONCRETE values in the incident report: if the report mentions a specific value
+              (a quantity, an order id, a short number), the query MUST match that exact case — do not add thresholds the report
+              does not imply (e.g. do not require 2+ digits when the reported value has one). Prefer verifying the persisted
+              effect (the stored row/column that is wrong) over pattern-matching raw user text, which also matches false
+              positives like prices.
             - confidence: 0.0 to 1.0.
 
             Respond ONLY with valid JSON (no markdown fences):

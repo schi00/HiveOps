@@ -94,7 +94,7 @@ public sealed class SupportDashboardChannelNotificationTests : IClassFixture<Das
         var approve = await client.PostAsync($"/api/support/merge-queue/{incident.Id}/approve", null);
 
         // Assert
-        approve.StatusCode.Should().Be(HttpStatusCode.OK);
+        approve.StatusCode.Should().Be(HttpStatusCode.OK, await approve.Content.ReadAsStringAsync());
         var shortId = incident.Id.ToString("N")[..8];
         GetFakeChannel().SentMessages.Should().Contain(m =>
             m.UserId == AlphaChannelUserId

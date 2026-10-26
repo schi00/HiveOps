@@ -66,6 +66,12 @@ public sealed class IncidentAnalysisEngine
             - The platform discovers the database schema by itself via INFORMATION_SCHEMA. Do NOT ask in missingInfo which database engine, tables or columns are used — suggestedDiagnostics may rely on schema inspection being available.
             - Only put items in missingInfo that the reporting USER must provide (e.g., an order id, a screenshot, steps to reproduce). When in doubt, leave missingInfo empty.
             - If the incident is critical (data loss, security breach, widespread outage), set requiresEscalation=true immediately.
+            - In technicalNote, when the defect looks like a user-provided value lost along the way (e.g. a quantity or option
+              that defaults to a hardcoded value), trace the FULL data path before recommending a fix: user message →
+              conversation state → tool arguments → plugin/service. Recommendations must target the layer where the value is
+              actually captured or dropped (e.g. parsing the user message and persisting it into state), not merely the line
+              where the default is applied. Do not suggest helper APIs that only inspect tool arguments when the value is
+              said in free text across turns.
 
             CATEGORY must be one of: CodeBug, DbCorruption, ConfigError, Performance, Security, Other.
             - DbCorruption = wrong or corrupted VALUES stored in the application database (wrong prices, totals, statuses, duplicated or missing rows). Remediated with a governed data UPDATE.

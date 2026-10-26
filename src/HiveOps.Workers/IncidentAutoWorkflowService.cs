@@ -25,6 +25,7 @@ using HiveOps.Infrastructure.Persistence;
 using HiveOps.Infrastructure.Services;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Security;
@@ -3282,7 +3283,7 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             history.AddSystemMessage(engineeringPrompt.SystemPrompt);
             history.AddUserMessage(engineeringPrompt.UserPrompt);
 
-            PromptExecutionSettings execSettings;
+            OpenAIPromptExecutionSettings execSettings;
             using (var llmScope = _scopeFactory.CreateScope())
             {
                 var tenantConfigs = llmScope.ServiceProvider.GetRequiredService<ITenantConfigService>();
@@ -3291,16 +3292,13 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
                     incident.TenantId, tenantConfigs, deploymentOpts, cancellationToken);
             }
 
-            var response = await chat.GetChatMessageContentAsync(
-                history, execSettings, cancellationToken: cancellationToken);
-            var fixProposal = response.Content ?? string.Empty;
+            // Engineering output needs real headroom: reasoning models spend a
+            // large share of MaxTokens on reasoning, so the default budget
+            // truncates diffs mid-hunk and the broken fragment gets persisted.
+            execSettings.MaxTokens = Math.Max(execSettings.MaxTokens ?? 0, 12000);
 
-            if (string.IsNullOrWhiteSpace(fixProposal))
-            {
-                throw new InvalidOperationException("LLM failed to generate code fix proposal");
-            }
-
-            return fixProposal;
+            return await GenerateEngineeringProposalAsync(
+                chat, history, execSettings, incident.Id, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -3309,6 +3307,55 @@ public sealed class IncidentAutoWorkflowService : BackgroundService
             return $"Manual intervention required for incident {incident.Id}: {incident.Description}";
         }
     }
+
+    /// <summary>
+    /// Invokes the engineering prompt and guards against truncated or malformed
+    /// proposals (finish_reason=length, or a response whose [PRODUCTION_PATCH]
+    /// section yields no parseable file changes). Retries once with a doubled
+    /// token budget; if still incomplete, the stored proposal is prefixed with
+    /// [INCOMPLETE_PROPOSAL] so nobody mistakes a broken fragment for an
+    /// applicable patch.
+    /// </summary>
+    private async Task<string> GenerateEngineeringProposalAsync(
+        IChatCompletionService chat,
+        ChatHistory history,
+        OpenAIPromptExecutionSettings execSettings,
+        Guid incidentId,
+        CancellationToken cancellationToken)
+    {
+        string? lastProposal = null;
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            var response = await chat.GetChatMessageContentAsync(
+                history, execSettings, cancellationToken: cancellationToken);
+            lastProposal = response.Content ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(lastProposal))
+                continue;
+
+            var truncated = IsTokenTruncated(response);
+            var noChanges = CodePatchAndTestGenerator.Parse(lastProposal).ProductionChanges.Count == 0;
+            if (!truncated && !noChanges)
+                return lastProposal;
+
+            _logger.LogWarning(
+                "Code-fix proposal for incident {IncidentId} {Reason} (attempt {Attempt}/2); retrying with a larger token budget.",
+                incidentId,
+                truncated ? "hit the output token limit" : "yielded no parseable file changes",
+                attempt);
+            execSettings.MaxTokens = Math.Min((execSettings.MaxTokens ?? 12000) * 2, 32000);
+        }
+
+        if (string.IsNullOrWhiteSpace(lastProposal))
+            throw new InvalidOperationException("LLM failed to generate code fix proposal");
+
+        return "[INCOMPLETE_PROPOSAL — LLM output was truncated or contained no parseable patch; regenerate before applying.]\n"
+            + lastProposal;
+    }
+
+    private static bool IsTokenTruncated(ChatMessageContent response)
+        => response.Metadata is not null
+            && response.Metadata.TryGetValue("FinishReason", out var reason)
+            && string.Equals(reason?.ToString(), "length", StringComparison.OrdinalIgnoreCase);
 
     private async Task<string> GenerateDatabaseFixProposalAsync(Incident incident, string? feedbackError, CancellationToken cancellationToken)
     {
